@@ -1,0 +1,18 @@
+# RaidPlans — Caddy reverse proxy + automatic TLS (plan §14).
+# Requires TCP 80/443 open in BOTH the OCI VCN security list AND firewalld,
+# or ACME/Let's Encrypt cannot complete.
+
+raidplans.mamzer.dev {
+	encode gzip
+
+	# App API, tRPC, and public share/OG routes are served by the Node service.
+	reverse_proxy /api/* localhost:4000
+	reverse_proxy /trpc/* localhost:4000
+	reverse_proxy /p/* localhost:4000
+
+	# Everything else is the built SPA. `try_files` gives client-side routing
+	# (deep links like /plan/:id/edit) a working refresh.
+	root * /srv/web
+	try_files {path} /index.html
+	file_server
+}

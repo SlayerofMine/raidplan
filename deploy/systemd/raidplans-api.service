@@ -1,0 +1,28 @@
+[Unit]
+Description=RaidPlans API (Hono / Node)
+Documentation=https://raidplans.mamzer.dev
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=raidplans
+Group=raidplans
+WorkingDirectory=/srv/raidplans
+# Secrets & config (SQLite path, Discord OAuth, session secret) — chmod 600.
+EnvironmentFile=/etc/raidplans/env
+ExecStart=/usr/bin/node /srv/raidplans/apps/api/dist/server.js
+Restart=on-failure
+RestartSec=2
+
+# Hardening (SELinux stays enforcing on Oracle Linux 10 — plan §14).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# SQLite DB + uploads live here; StateDirectory creates /var/lib/raidplans.
+StateDirectory=raidplans
+ReadWritePaths=/var/lib/raidplans
+
+[Install]
+WantedBy=multi-user.target

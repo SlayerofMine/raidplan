@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+coverage/
+pnpm-lock.yaml
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# The implementation plan is the source-of-truth spec — keep it verbatim.
+IMPLEMENTATION_PLAN.md
