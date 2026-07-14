@@ -16,9 +16,14 @@ export function RightPanel() {
         Properties
       </h2>
       {!object ? (
-        <p className="px-3 text-sm text-neutral-500">No selection.</p>
+        <p data-testid="no-selection" className="px-3 text-sm text-neutral-500">
+          No selection.
+        </p>
       ) : (
-        <dl className="grid grid-cols-2 gap-x-2 gap-y-1 px-3 text-sm">
+        <dl
+          data-testid="properties"
+          className="grid grid-cols-2 gap-x-2 gap-y-1 px-3 text-sm"
+        >
           <dt className="text-neutral-500">Id</dt>
           <dd className="truncate text-neutral-300" title={selectedId ?? ""}>
             {selectedId}
@@ -26,11 +31,11 @@ export function RightPanel() {
           <dt className="text-neutral-500">Icon</dt>
           <dd className="text-neutral-300">{object.iconId ?? "—"}</dd>
           <dt className="text-neutral-500">X</dt>
-          <dd className="tabular-nums text-neutral-300">
+          <dd data-testid="prop-x" className="tabular-nums text-neutral-300">
             {Math.round(object.base.x)}
           </dd>
           <dt className="text-neutral-500">Y</dt>
-          <dd className="tabular-nums text-neutral-300">
+          <dd data-testid="prop-y" className="tabular-nums text-neutral-300">
             {Math.round(object.base.y)}
           </dd>
         </dl>
