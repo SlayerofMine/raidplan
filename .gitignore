@@ -9,6 +9,9 @@ build/
 
 # Test / coverage
 coverage/
+test-results/
+playwright-report/
+.playwright/
 
 # Local env & secrets (never commit — see IMPLEMENTATION_PLAN.md §14)
 .env
