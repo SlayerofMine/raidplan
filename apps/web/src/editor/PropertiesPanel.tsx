@@ -1,4 +1,6 @@
+import { useShallow } from "zustand/react/shallow";
 import { useEditorStore } from "../store/editorStore";
+import { selectObjectState } from "../store/selectors";
 
 /** Round for display without fighting the user mid-edit. */
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -13,6 +15,18 @@ export function PropertiesPanel() {
   const object = useEditorStore((s) =>
     s.selectedIds.length === 1 ? s.objects[s.selectedIds[0]!] : undefined,
   );
+  /**
+   * Show what's on the canvas — the base with the current step's overrides
+   * applied — not the raw base. Editing a value writes it back to whichever of
+   * the two the current step implies (see `writeOverridable`).
+   */
+  const state = useEditorStore(
+    useShallow((s) =>
+      s.selectedIds.length === 1
+        ? selectObjectState(s, s.selectedIds[0]!)
+        : undefined,
+    ),
+  );
   const updateObject = useEditorStore((s) => s.updateObject);
   const setLocked = useEditorStore((s) => s.setLocked);
   const bringForward = useEditorStore((s) => s.bringForward);
@@ -21,7 +35,7 @@ export function PropertiesPanel() {
   const sendToBack = useEditorStore((s) => s.sendToBack);
 
   return (
-    <aside className="flex h-full flex-col overflow-y-auto border-l border-panelborder bg-panel">
+    <section className="flex flex-col">
       <h2 className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
         Properties
       </h2>
@@ -41,39 +55,39 @@ export function PropertiesPanel() {
         </p>
       )}
 
-      {object && (
+      {object && state && (
         <div data-testid="properties" className="flex flex-col gap-2 px-3 pb-4">
           <NumberField
             label="X"
             testId="prop-x"
-            value={round(object.base.x)}
+            value={round(state.x)}
             onChange={(x) => updateObject(object.id, { x })}
           />
           <NumberField
             label="Y"
             testId="prop-y"
-            value={round(object.base.y)}
+            value={round(state.y)}
             onChange={(y) => updateObject(object.id, { y })}
           />
           <NumberField
             label="Width"
             testId="prop-w"
             min={1}
-            value={round(object.base.w)}
+            value={round(state.w)}
             onChange={(w) => updateObject(object.id, { w })}
           />
           <NumberField
             label="Height"
             testId="prop-h"
             min={0}
-            value={round(object.base.h)}
+            value={round(state.h)}
             onChange={(h) => updateObject(object.id, { h })}
           />
           <NumberField
             label="Rotation"
             testId="prop-rotation"
             step={15}
-            value={round(object.base.rotation)}
+            value={round(state.rotation)}
             onChange={(rotation) => updateObject(object.id, { rotation })}
           />
           <NumberField
@@ -82,7 +96,7 @@ export function PropertiesPanel() {
             step={0.1}
             min={0}
             max={1}
-            value={round(object.base.opacity)}
+            value={round(state.opacity)}
             // Opacity is normalised 0..1 by the shared schema — clamp on input.
             onChange={(opacity) =>
               updateObject(object.id, {
@@ -122,7 +136,7 @@ export function PropertiesPanel() {
             <input
               type="checkbox"
               data-testid="prop-visible"
-              checked={object.base.visible}
+              checked={state.visible}
               onChange={(e) =>
                 updateObject(object.id, { visible: e.target.checked })
               }
@@ -166,7 +180,7 @@ export function PropertiesPanel() {
           </div>
         </div>
       )}
-    </aside>
+    </section>
   );
 }
 

@@ -1,3 +1,4 @@
+import { AnimationPanel } from "./AnimationPanel";
 import { CanvasStage } from "./canvas/CanvasStage";
 import { IconPalette } from "./IconPalette";
 import { PropertiesPanel } from "./PropertiesPanel";
@@ -37,8 +38,12 @@ export function EditorLayout() {
       <div style={{ gridArea: "canvas" }} className="min-h-0">
         <CanvasStage />
       </div>
-      <div style={{ gridArea: "props" }} className="min-h-0">
+      <div
+        style={{ gridArea: "props" }}
+        className="flex min-h-0 flex-col overflow-y-auto border-l border-panelborder bg-panel"
+      >
         <PropertiesPanel />
+        <AnimationPanel />
       </div>
       <div style={{ gridArea: "steps" }}>
         <StepStrip />

@@ -7,10 +7,14 @@ import { HomePage } from "./routes/HomePage";
 const EditorPage = lazy(() =>
   import("./routes/EditorPage").then((m) => ({ default: m.EditorPage })),
 );
+const ViewerPage = lazy(() =>
+  import("./routes/ViewerPage").then((m) => ({ default: m.ViewerPage })),
+);
 
 /**
- * App routes (plan §3): landing, the editor, and — later — the public viewer
- * `/p/:slug` (Phase 3.6 / 4.6). Unknown paths fall back to the landing page.
+ * App routes (plan §3): landing, the editor, and the public viewer `/p/:slug`
+ * (served from the local plan until Phase 4.6 adds sharing). Unknown paths fall
+ * back to the landing page.
  */
 export function App() {
   return (
@@ -21,6 +25,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/plan/:id/edit" element={<EditorPage />} />
+          <Route path="/p/:slug" element={<ViewerPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

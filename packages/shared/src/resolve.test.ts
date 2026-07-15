@@ -7,6 +7,7 @@ import {
 } from "./plan.js";
 import {
   baseState,
+  resolveObjectState,
   resolveSettledState,
   resolveStepStates,
 } from "./resolve.js";
@@ -59,6 +60,59 @@ describe("baseState", () => {
       opacity: 0.5,
       visible: true,
     });
+  });
+});
+
+describe("resolveObjectState", () => {
+  it("returns the base state before any step", () => {
+    const o = obj("a", { x: 5 });
+    expect(resolveObjectState(o, [step("s0", { a: { x: 999 } })], -1)).toEqual(
+      baseState(o),
+    );
+  });
+
+  it("applies overrides up to and including the given step", () => {
+    const o = obj("a");
+    const steps = [
+      step("s0", { a: { x: 100 } }),
+      step("s1", { a: { y: 200 } }),
+      step("s2", { a: { x: 300 } }),
+    ];
+    expect(resolveObjectState(o, steps, 0)).toMatchObject({ x: 100, y: 0 });
+    expect(resolveObjectState(o, steps, 1)).toMatchObject({ x: 100, y: 200 });
+    expect(resolveObjectState(o, steps, 2)).toMatchObject({ x: 300, y: 200 });
+  });
+
+  it("ignores steps that don't touch the object", () => {
+    const o = obj("a", { x: 7 });
+    expect(resolveObjectState(o, [step("s0", { other: { x: 1 } })], 0)).toEqual(
+      baseState(o),
+    );
+  });
+
+  it("clamps an over-large step index", () => {
+    const o = obj("a");
+    const steps = [step("s0", { a: { x: 100 } })];
+    expect(resolveObjectState(o, steps, 999)).toEqual(
+      resolveObjectState(o, steps, 0),
+    );
+  });
+
+  it("agrees with resolveSettledState for the same object", () => {
+    const p = plan(
+      [obj("a", { x: 1 }), obj("b")],
+      [step("s0", { a: { x: 100 } }), step("s1", { a: { opacity: 0.5 } })],
+    );
+    expect(resolveObjectState(p.objects[0]!, p.steps, 1)).toEqual(
+      resolveSettledState(p, 1).a,
+    );
+  });
+
+  it("does not mutate the object", () => {
+    const o = obj("a", { x: 1 });
+    const snapshot = structuredClone(o);
+    resolveObjectState(o, [step("s0", { a: { x: 100 } })], 0);
+    expect(o).toEqual(snapshot);
   });
 });
 

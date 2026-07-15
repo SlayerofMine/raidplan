@@ -16,6 +16,7 @@
   "dependencies": {
     "@raidplan/shared": "workspace:*",
     "@tanstack/react-virtual": "^3.11.2",
+    "gsap": "^3.12.5",
     "immer": "^10.1.1",
     "konva": "^9.3.16",
     "react": "^18.3.1",

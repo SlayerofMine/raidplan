@@ -2,16 +2,22 @@ import { create } from "zustand";
 import { temporal } from "zundo";
 import { shallow } from "zustand/shallow";
 import { immer } from "zustand/middleware/immer";
-import type {
-  Background,
-  ObjectBase,
-  ObjectType,
-  Plan,
-  PlanObject,
-  ShapeKind,
+import {
+  resolveObjectState,
+  type Anim,
+  type Background,
+  type ObjectBase,
+  type ObjectState,
+  type ObjectType,
+  type Plan,
+  type PlanObject,
+  type ShapeKind,
+  type Step,
+  type StepOverride,
 } from "@raidplan/shared";
 import { DEFAULT_BACKGROUND } from "../assets/backgrounds";
 import { getIconById } from "../assets/icons";
+import { nextAnimId, nextStepId } from "./ids";
 import {
   fitView,
   screenToNative,
@@ -41,6 +47,12 @@ export interface EditorState extends PlanDoc {
   gridSize: number;
   /** In-app clipboard for copy/paste — never persisted or undone. */
   clipboard: PlanObject[];
+  /**
+   * Which "slide" is being edited: `BASE_STEP_INDEX` (-1) is the starting
+   * layout (writes land on `object.base`); `0..steps.length-1` is a step
+   * (writes land in that step's `overrides`). Ephemeral, like the selection.
+   */
+  currentStepIndex: number;
 
   // --- creation ---
   addIcon: (iconId: string, native?: Point) => string;
@@ -71,6 +83,23 @@ export interface EditorState extends PlanDoc {
   selectAll: () => void;
   clearSelection: () => void;
 
+  // --- steps (plan §3.2) ---
+  addStep: () => string;
+  duplicateStep: (index: number) => void;
+  deleteStep: (index: number) => void;
+  moveStep: (from: number, to: number) => void;
+  selectStep: (index: number) => void;
+  setStepName: (index: number, name: string) => void;
+
+  // --- animations (plan §3.4) ---
+  addAnimation: (stepIndex: number, objectId: string) => string | undefined;
+  updateAnimation: (
+    stepIndex: number,
+    animId: string,
+    patch: Partial<Omit<Anim, "id">>,
+  ) => void;
+  deleteAnimation: (stepIndex: number, animId: string) => void;
+
   // --- document ---
   setTitle: (title: string) => void;
   setBackground: (background: Background) => void;
@@ -89,6 +118,61 @@ export interface EditorState extends PlanDoc {
 const INITIAL_VIEW: View = { scale: 1, x: 0, y: 0 };
 const INITIAL_STAGE_SIZE: Size = { width: 0, height: 0 };
 
+/** `currentStepIndex` for "the starting layout", before any step runs. */
+export const BASE_STEP_INDEX = -1;
+
+/**
+ * The properties a step can override (they match `StepOverrideSchema`). Anything
+ * else — tint, label, z — is step-independent and always lives on the base.
+ */
+const OVERRIDABLE_KEYS = [
+  "x",
+  "y",
+  "w",
+  "h",
+  "rotation",
+  "opacity",
+  "visible",
+] as const satisfies readonly (keyof StepOverride)[];
+
+/** Split a property patch into the step-overridable part and the base-only part. */
+function splitPatch(patch: Partial<ObjectBase>): {
+  override: StepOverride;
+  baseOnly: Partial<ObjectBase>;
+} {
+  const override: Record<string, unknown> = {};
+  const baseOnly: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if ((OVERRIDABLE_KEYS as readonly string[]).includes(key)) {
+      override[key] = value;
+    } else {
+      baseOnly[key] = value;
+    }
+  }
+  return { override, baseOnly };
+}
+
+/**
+ * Write transform-ish properties to wherever the current step says they belong:
+ * the base layout, or the current step's overrides. This is the single choke
+ * point that makes "the editor edits the end state" true (plan §5).
+ */
+function writeOverridable(
+  s: EditorState,
+  id: string,
+  override: StepOverride,
+): void {
+  if (Object.keys(override).length === 0) return;
+  if (s.currentStepIndex === BASE_STEP_INDEX) {
+    const object = s.objects[id];
+    if (object) Object.assign(object.base, override);
+    return;
+  }
+  const step = s.steps[s.currentStepIndex];
+  if (!step) return;
+  step.overrides[id] = { ...step.overrides[id], ...override };
+}
+
 /** Keep `base.z` aligned with the id order after any structural change. */
 function reindexZ(s: {
   objects: Record<string, PlanObject>;
@@ -106,25 +190,33 @@ const CLONE_OFFSET = 20;
 /**
  * Copy an object under a fresh id, nudged by `CLONE_OFFSET`. Shared by
  * duplicate and paste so both produce identical results.
+ *
+ * `appearance` is the source's *resolved* state on the current step, so a copy
+ * lands where the original visibly is rather than at its base — the two differ
+ * as soon as a step overrides the original.
  */
-function cloneObject(source: PlanObject, z: number): PlanObject {
+function cloneObject(
+  source: PlanObject,
+  z: number,
+  appearance: ObjectState,
+): PlanObject {
   const clone = createObject({
     type: source.type,
     center: {
-      x: source.base.x + source.base.w / 2 + CLONE_OFFSET,
-      y: source.base.y + source.base.h / 2 + CLONE_OFFSET,
+      x: appearance.x + appearance.w / 2 + CLONE_OFFSET,
+      y: appearance.y + appearance.h / 2 + CLONE_OFFSET,
     },
     z,
-    size: { w: source.base.w, h: source.base.h },
+    size: { w: appearance.w, h: appearance.h },
     ...(source.iconId ? { iconId: source.iconId } : {}),
     ...(source.shape ? { shape: source.shape } : {}),
     ...(source.base.tint ? { tint: source.base.tint } : {}),
     ...(source.base.label ? { label: source.base.label } : {}),
   });
   // Carry over the properties the factory doesn't take.
-  clone.base.rotation = source.base.rotation;
-  clone.base.opacity = source.base.opacity;
-  clone.base.visible = source.base.visible;
+  clone.base.rotation = appearance.rotation;
+  clone.base.opacity = appearance.opacity;
+  clone.base.visible = appearance.visible;
   return clone;
 }
 
@@ -156,6 +248,7 @@ export const useEditorStore = create<EditorState>()(
       snapEnabled: false,
       gridSize: DEFAULT_GRID_SIZE,
       clipboard: [],
+      currentStepIndex: BASE_STEP_INDEX,
 
       addIcon: (iconId, native) => {
         const state = get();
@@ -196,7 +289,12 @@ export const useEditorStore = create<EditorState>()(
         set((s) => {
           const object = s.objects[id];
           if (!object) return;
-          Object.assign(object.base, patch);
+          const { override, baseOnly } = splitPatch(patch);
+          // tint/label/z are step-independent; transforms follow the step.
+          if (Object.keys(baseOnly).length > 0) {
+            Object.assign(object.base, baseOnly);
+          }
+          writeOverridable(s, id, override);
         }),
 
       moveObject: (id, x, y) =>
@@ -204,8 +302,10 @@ export const useEditorStore = create<EditorState>()(
           const object = s.objects[id];
           if (!object || object.locked) return;
           const grid = s.snapEnabled ? s.gridSize : 0;
-          object.base.x = snapValue(x, grid);
-          object.base.y = snapValue(y, grid);
+          writeOverridable(s, id, {
+            x: snapValue(x, grid),
+            y: snapValue(y, grid),
+          });
         }),
 
       nudgeSelected: (dx, dy, big = false) =>
@@ -214,8 +314,17 @@ export const useEditorStore = create<EditorState>()(
           for (const id of s.selectedIds) {
             const object = s.objects[id];
             if (!object || object.locked) continue;
-            object.base.x += dx * step;
-            object.base.y += dy * step;
+            // Nudge from where the object *currently appears*, which on a step
+            // is its resolved position, not its base.
+            const current = resolveObjectState(
+              object,
+              s.steps,
+              s.currentStepIndex,
+            );
+            writeOverridable(s, id, {
+              x: current.x + dx * step,
+              y: current.y + dy * step,
+            });
           }
         }),
 
@@ -232,6 +341,15 @@ export const useEditorStore = create<EditorState>()(
           for (const id of doomed) delete s.objects[id];
           s.objectIds = s.objectIds.filter((id) => !doomed.has(id));
           s.selectedIds = s.selectedIds.filter((id) => !doomed.has(id));
+          // Don't leave steps referencing an object that no longer exists.
+          // Resolution tolerates stale overrides, but they'd resurrect on undo
+          // and bloat every save.
+          for (const step of s.steps) {
+            for (const id of doomed) delete step.overrides[id];
+            step.animations = step.animations.filter(
+              (a) => !doomed.has(a.objectId),
+            );
+          }
           reindexZ(s);
         }),
 
@@ -263,9 +381,14 @@ export const useEditorStore = create<EditorState>()(
 
       addClones: (sources) => {
         if (sources.length === 0) return [];
-        const startZ = get().objectIds.length;
+        const { objectIds, steps, currentStepIndex } = get();
+        const startZ = objectIds.length;
         const clones = sources.map((source, i) =>
-          cloneObject(source, startZ + i),
+          cloneObject(
+            source,
+            startZ + i,
+            resolveObjectState(source, steps, currentStepIndex),
+          ),
         );
         set((s) => {
           for (const clone of clones) {
@@ -319,6 +442,109 @@ export const useEditorStore = create<EditorState>()(
           s.selectedIds = [];
         }),
 
+      addStep: () => {
+        const step: Step = {
+          id: nextStepId(),
+          name: `Step ${get().steps.length + 1}`,
+          overrides: {},
+          animations: [],
+        };
+        set((s) => {
+          s.steps.push(step);
+          s.currentStepIndex = s.steps.length - 1;
+        });
+        return step.id;
+      },
+
+      duplicateStep: (index) => {
+        // Read through `get()`, never from the immer draft: drafts are Proxies
+        // and `structuredClone` throws on them.
+        const source = get().steps[index];
+        if (!source) return;
+        const copy: Step = {
+          id: nextStepId(),
+          name: `${source.name ?? `Step ${index + 1}`} copy`,
+          overrides: structuredClone(source.overrides),
+          // Animations are copied, but each needs its own identity.
+          animations: source.animations.map((a) => ({
+            ...structuredClone(a),
+            id: nextAnimId(),
+          })),
+          ...(source.autoAdvanceMs !== undefined
+            ? { autoAdvanceMs: source.autoAdvanceMs }
+            : {}),
+        };
+        set((s) => {
+          s.steps.splice(index + 1, 0, copy);
+          s.currentStepIndex = index + 1;
+        });
+      },
+
+      deleteStep: (index) =>
+        set((s) => {
+          if (!s.steps[index]) return;
+          s.steps.splice(index, 1);
+          // Stay in range; fall back to the base layout when the last step goes.
+          s.currentStepIndex = Math.min(s.currentStepIndex, s.steps.length - 1);
+        }),
+
+      moveStep: (from, to) =>
+        set((s) => {
+          if (!s.steps[from] || to < 0 || to >= s.steps.length) return;
+          const [moved] = s.steps.splice(from, 1);
+          if (!moved) return;
+          s.steps.splice(to, 0, moved);
+          s.currentStepIndex = to;
+        }),
+
+      selectStep: (index) =>
+        set((s) => {
+          s.currentStepIndex = Math.max(
+            BASE_STEP_INDEX,
+            Math.min(index, s.steps.length - 1),
+          );
+        }),
+
+      setStepName: (index, name) =>
+        set((s) => {
+          const step = s.steps[index];
+          if (step) step.name = name;
+        }),
+
+      addAnimation: (stepIndex, objectId) => {
+        const { steps, objects } = get();
+        if (!steps[stepIndex] || !objects[objectId]) return undefined;
+        const anim: Anim = {
+          id: nextAnimId(),
+          objectId,
+          kind: "motion",
+          effect: "move",
+          trigger: "onEnter",
+          delayMs: 0,
+          durationMs: 500,
+          easing: "power2.out",
+        };
+        set((s) => {
+          s.steps[stepIndex]?.animations.push(anim);
+        });
+        return anim.id;
+      },
+
+      updateAnimation: (stepIndex, animId, patch) =>
+        set((s) => {
+          const anim = s.steps[stepIndex]?.animations.find(
+            (a) => a.id === animId,
+          );
+          if (anim) Object.assign(anim, patch);
+        }),
+
+      deleteAnimation: (stepIndex, animId) =>
+        set((s) => {
+          const step = s.steps[stepIndex];
+          if (!step) return;
+          step.animations = step.animations.filter((a) => a.id !== animId);
+        }),
+
       setTitle: (title) =>
         set((s) => {
           s.title = title;
@@ -339,6 +565,7 @@ export const useEditorStore = create<EditorState>()(
           s.objectIds = doc.objectIds;
           s.steps = doc.steps;
           s.selectedIds = [];
+          s.currentStepIndex = BASE_STEP_INDEX;
         }),
 
       getPlan: () => toPlan(get()),
@@ -353,6 +580,7 @@ export const useEditorStore = create<EditorState>()(
           s.steps = [];
           s.view = INITIAL_VIEW;
           s.clipboard = [];
+          s.currentStepIndex = BASE_STEP_INDEX;
         }),
 
       setView: (view) =>

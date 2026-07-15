@@ -10,9 +10,11 @@ import {
   Wedge,
 } from "react-konva";
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
+import { useShallow } from "zustand/react/shallow";
 import type { ObjectType, ShapeKind } from "@raidplan/shared";
 import { getIconById } from "../../assets/icons";
 import { useEditorStore } from "../../store/editorStore";
+import { selectObjectState } from "../../store/selectors";
 import { labelLayout, LABEL_COLOUR, LABEL_FONT_SIZE } from "./objectLabel";
 import { useImageElement } from "./useImageElement";
 
@@ -37,6 +39,11 @@ export const ObjectNode = memo(function ObjectNode({
   draggable: boolean;
 }) {
   const object = useEditorStore((s) => s.objects[objectId]);
+  // What to draw = base + the current step's overrides (plan §5). `useShallow`
+  // is required: the selector builds a fresh state object every call.
+  const state = useEditorStore(
+    useShallow((s) => selectObjectState(s, objectId)),
+  );
   const isSelected = useEditorStore((s) => s.selectedIds.includes(objectId));
   const select = useEditorStore((s) => s.select);
   const toggleSelect = useEditorStore((s) => s.toggleSelect);
@@ -51,8 +58,10 @@ export const ObjectNode = memo(function ObjectNode({
     others: { node: KonvaNode; x: number; y: number }[];
   } | null>(null);
 
-  if (!object || !object.base.visible) return null;
-  const { x, y, w, h, rotation, opacity, tint, label } = object.base;
+  if (!object || !state || !state.visible) return null;
+  // Transforms come from the resolved step state; tint/label are step-independent.
+  const { x, y, w, h, rotation, opacity } = state;
+  const { tint, label } = object.base;
   const colour = tint ?? DEFAULT_TINT;
 
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {

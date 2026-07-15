@@ -1,4 +1,4 @@
-import type { Plan, PlanObject, StepOverride } from "./plan.js";
+import type { Plan, PlanObject, Step, StepOverride } from "./plan.js";
 
 /**
  * State resolution (plan §5 "State resolution" / §7 playback).
@@ -55,13 +55,37 @@ function applyOverride(
 }
 
 /**
+ * Resolve **one** object's settled state after applying steps `0..stepIndex`
+ * (inclusive). Pass `stepIndex = -1` for the base state.
+ *
+ * This is the primitive the whole model rests on. It takes the steps array
+ * rather than a `Plan` so callers holding objects in a normalized map (the
+ * editor store) can resolve a single object without rebuilding a `Plan` or
+ * resolving all 50 of them — which keeps per-object store subscriptions cheap
+ * (plan §8.2). `stepIndex` is clamped, so asking for "the final state" with a
+ * large index is safe.
+ */
+export function resolveObjectState(
+  object: PlanObject,
+  steps: readonly Step[],
+  stepIndex: number,
+): ObjectState {
+  let state = baseState(object);
+  const lastStep = Math.min(stepIndex, steps.length - 1);
+  for (let i = 0; i <= lastStep; i++) {
+    const override = steps[i]?.overrides[object.id];
+    if (override) state = applyOverride(state, override);
+  }
+  return state;
+}
+
+/**
  * Resolve the settled state of every object after applying steps `0..stepIndex`
  * (inclusive). Pass `stepIndex = -1` for the base state.
  *
- * `stepIndex` is clamped to the available steps, so callers can freely ask for
- * "the final settled state" with a large index. Overrides that reference an
- * object id which no longer exists (e.g. a deleted object) are ignored rather
- * than throwing — a stale override must never break playback.
+ * Overrides that reference an object id which no longer exists (e.g. a deleted
+ * object) are ignored rather than throwing — a stale override must never break
+ * playback.
  */
 export function resolveSettledState(
   plan: Plan,
@@ -69,19 +93,8 @@ export function resolveSettledState(
 ): ResolvedStates {
   const states: ResolvedStates = {};
   for (const object of plan.objects) {
-    states[object.id] = baseState(object);
+    states[object.id] = resolveObjectState(object, plan.steps, stepIndex);
   }
-
-  const lastStep = Math.min(stepIndex, plan.steps.length - 1);
-  for (let i = 0; i <= lastStep; i++) {
-    const step = plan.steps[i];
-    if (!step) continue;
-    for (const [objectId, override] of Object.entries(step.overrides)) {
-      const current = states[objectId];
-      if (current) states[objectId] = applyOverride(current, override);
-    }
-  }
-
   return states;
 }
 

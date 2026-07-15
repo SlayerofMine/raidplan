@@ -1,4 +1,5 @@
 import { useRef, type ChangeEvent } from "react";
+import { Link } from "react-router-dom";
 import { BACKGROUNDS, toBackground } from "../assets/backgrounds";
 import { clearHistory, useEditorStore } from "../store/editorStore";
 import { useTemporal } from "../store/useTemporal";
@@ -139,6 +140,13 @@ export function Toolbar() {
 
       <Divider />
 
+      <Link
+        to="/p/local"
+        data-testid="open-viewer"
+        className="rounded border border-panelborder px-2 py-1 text-sm hover:border-accent"
+      >
+        Play
+      </Link>
       <Btn onClick={() => downloadPlan(getPlan())} label="Export" />
       <Btn onClick={() => fileInput.current?.click()} label="Import" />
       <input

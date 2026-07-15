@@ -1,5 +1,6 @@
 import type { ObjectType, PlanObject, ShapeKind } from "@raidplan/shared";
 import type { Point } from "../editor/canvas/coords";
+import { nextObjectId } from "./ids";
 
 /** Default on-canvas footprints (native px) per primitive. */
 export const DEFAULT_ICON_SIZE = 64;
@@ -7,16 +8,10 @@ const DEFAULT_SIZES: Record<string, { w: number; h: number }> = {
   token: { w: DEFAULT_ICON_SIZE, h: DEFAULT_ICON_SIZE },
   text: { w: 200, h: 40 },
   shape: { w: 160, h: 160 },
-  arrow: { w: 200, h: 0 },
+  // The arrow draws along the middle of its box; the box must have real height
+  // or the Transformer's bounding box is degenerate and can't be grabbed.
+  arrow: { w: 200, h: 24 },
 };
-
-let counter = 0;
-
-/** Process-unique object id. Not persisted-stable — ids only need uniqueness. */
-export function nextObjectId(): string {
-  counter += 1;
-  return `obj_${Date.now().toString(36)}_${counter}`;
-}
 
 interface CreateParams {
   type: ObjectType;
