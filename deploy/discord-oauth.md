@@ -58,8 +58,16 @@ answered — "is this person on our server?" — so we ask Discord exactly that,
 It also returns their **role ids** on that server, which is what lets Discord
 roles drive RaidPlans' owner/editor/viewer without a second lookup.
 
-We deliberately **don't** request `email`: nothing in the schema stores one, and
-every extra scope is another consent prompt and another thing to leak.
+We deliberately **don't** request `email`. A member's address is none of our
+business for a raid planner, and every extra scope is another consent prompt and
+another thing to leak.
+
+better-auth's user model requires an email regardless, so RaidPlans stores a
+synthetic one — `discord-<id>@raidplans.invalid`, always with
+`emailVerified: false`. `.invalid` is reserved by RFC 2606 precisely for
+addresses guaranteed never to resolve, so it can never reach a real inbox.
+**Never send mail to these**: if RaidPlans ever needs to email people, add the
+`email` scope rather than making that address look more real.
 
 There's nothing to select in the portal — the app requests these at login. (The
 portal's _URL Generator_ is only a convenience for hand-testing.) And still **no
@@ -87,13 +95,15 @@ the default role.
 
 ## 6. Session secret → `SESSION_SECRET`
 
-Signs session cookies. Generate a fresh one — never reuse it between
-environments, and never commit it:
+Signs session cookies. Must be **at least 32 characters** — the API refuses to
+start below that, rather than leaving better-auth to emit a runtime warning
+nobody reads. Generate a fresh one per environment, and never commit it:
 
 ```bash
 openssl rand -base64 32
 ```
 
+`openssl rand -base64 32` gives 44 characters, comfortably over the floor.
 Rotating it invalidates everyone's sessions (that's the point, if it ever leaks).
 
 ## 7. Fill in the env

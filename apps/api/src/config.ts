@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ROLES, type Role } from "./db/schema.js";
 
 /**
  * Environment configuration (plan §14 "Config/secrets": `/etc/raidplans/env`).
@@ -22,12 +23,37 @@ const ConfigSchema = z.object({
   DISCORD_CLIENT_ID: z.string().min(1).optional(),
   DISCORD_CLIENT_SECRET: z.string().min(1).optional(),
   DISCORD_GUILD_ID: z.string().min(1).optional(),
-  SESSION_SECRET: z.string().min(16).optional(),
+  // 32 is better-auth's own floor for adequate entropy; `openssl rand -base64
+  // 32` yields 44 chars. Enforce it here so a weak secret fails at boot rather
+  // than as a runtime warning nobody reads.
+  SESSION_SECRET: z.string().min(32).optional(),
+
+  // Optional Discord role → RaidPlans role mapping (comma-separated role ids).
+  // Unset means every member of the server gets DISCORD_DEFAULT_ROLE.
+  DISCORD_OWNER_ROLE_IDS: z.string().default(""),
+  DISCORD_EDITOR_ROLE_IDS: z.string().default(""),
+  DISCORD_DEFAULT_ROLE: z.enum(ROLES).default("viewer"),
 });
+
+/** Split a comma-separated env list, tolerating spaces and empties. */
+function idList(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** How Discord roles map onto RaidPlans roles (plan §10). */
+export interface RoleMapping {
+  ownerRoleIds: string[];
+  editorRoleIds: string[];
+  defaultRole: Role;
+}
 
 export type Config = z.infer<typeof ConfigSchema> & {
   /** True when Discord OAuth is fully configured. */
   authEnabled: boolean;
+  roleMapping: RoleMapping;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -54,5 +80,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     );
   }
 
-  return { ...config, authEnabled };
+  return {
+    ...config,
+    authEnabled,
+    roleMapping: {
+      ownerRoleIds: idList(config.DISCORD_OWNER_ROLE_IDS),
+      editorRoleIds: idList(config.DISCORD_EDITOR_ROLE_IDS),
+      defaultRole: config.DISCORD_DEFAULT_ROLE,
+    },
+  };
 }

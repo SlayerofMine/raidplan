@@ -6,7 +6,7 @@ import { defineConfig } from "drizzle-kit";
  * separate migration step to forget (plan §14 "Updates").
  */
 export default defineConfig({
-  schema: "./src/db/schema.ts",
+  schema: ["./src/db/schema.ts", "./src/db/authSchema.ts"],
   out: "./drizzle",
   dialect: "sqlite",
   dbCredentials: {

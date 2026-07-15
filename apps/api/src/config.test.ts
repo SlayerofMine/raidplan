@@ -4,7 +4,7 @@ import { loadConfig } from "./config.js";
 const AUTH = {
   DISCORD_CLIENT_ID: "id",
   DISCORD_CLIENT_SECRET: "secret",
-  SESSION_SECRET: "a-long-enough-session-secret",
+  SESSION_SECRET: "test-session-secret-at-least-32-chars-long",
 };
 
 describe("loadConfig", () => {
@@ -33,6 +33,22 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ SESSION_SECRET: "short" })).toThrow(
       /SESSION_SECRET/,
     );
+  });
+
+  it("enforces better-auth's 32-char entropy floor at boot", () => {
+    // better-auth only *warns* about a weak secret at runtime; a warning in a
+    // log nobody reads is not a control. 31 chars must fail outright.
+    expect(() => loadConfig({ SESSION_SECRET: "x".repeat(31) })).toThrow(
+      /SESSION_SECRET/,
+    );
+    expect(() => loadConfig({ SESSION_SECRET: "x".repeat(32) })).not.toThrow();
+  });
+
+  it("accepts what `openssl rand -base64 32` produces", () => {
+    // 32 random bytes → 44 base64 chars; the value the runbook tells you to use.
+    expect(() =>
+      loadConfig({ SESSION_SECRET: "A".repeat(43) + "=" }),
+    ).not.toThrow();
   });
 
   it("reports authEnabled only when Discord is fully configured", () => {

@@ -3,7 +3,11 @@ import {
   drizzle,
   type BetterSQLite3Database,
 } from "drizzle-orm/better-sqlite3";
-import * as schema from "./schema.js";
+import * as domainSchema from "./schema.js";
+import * as authSchema from "./authSchema.js";
+
+/** Domain tables plus better-auth's own (see `authSchema.ts` for why both). */
+const schema = { ...domainSchema, ...authSchema };
 
 export type Db = BetterSQLite3Database<typeof schema>;
 
