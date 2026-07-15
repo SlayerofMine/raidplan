@@ -12,7 +12,9 @@ const ConfigSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
-  BASE_URL: z.string().url().default("http://localhost:4000"),
+  // zod 4 moved string formats to the top level; `z.string().url()` still
+  // works but is deprecated.
+  BASE_URL: z.url().default("http://localhost:4000"),
   DATABASE_PATH: z.string().min(1).default("./data/app.db"),
 
   // Auth (plan §10). Optional so the API can boot for local canvas work
