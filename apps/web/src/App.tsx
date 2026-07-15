@@ -25,7 +25,14 @@ export function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/plan/:id/edit" element={<EditorPage />} />
-          <Route path="/p/:slug" element={<ViewerPage />} />
+          {/*
+            The viewer lives at /view/:slug, not /p/:slug: `/p/*` is the public
+            *share link*, served by the API so Discord's crawler gets real Open
+            Graph meta (it doesn't run JS, so the SPA shell would unfurl as
+            nothing). Caddy proxies /p/* to the API in production; that page
+            then hands humans on to this route.
+          */}
+          <Route path="/view/:slug" element={<ViewerPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

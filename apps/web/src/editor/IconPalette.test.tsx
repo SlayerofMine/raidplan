@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ICONS } from "../assets/icons";
+import { ICONS } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
 import { IconPalette } from "./IconPalette";
 

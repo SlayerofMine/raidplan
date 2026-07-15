@@ -1,7 +1,7 @@
 import { useEffect, useMemo, type RefObject } from "react";
 import { Layer, Image as KonvaImage, Stage } from "react-konva";
 import type { Stage as StageNode } from "konva/lib/Stage";
-import { getBackgroundSrc } from "../assets/backgrounds";
+import { getBackgroundSrc } from "@raidplan/shared";
 import { fitView } from "../editor/canvas/coords";
 import { ObjectNode } from "../editor/canvas/ObjectNode";
 import { useContainerSize } from "../editor/canvas/useContainerSize";

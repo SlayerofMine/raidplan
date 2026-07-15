@@ -1,6 +1,6 @@
 import { useRef, type ChangeEvent } from "react";
 import { Link } from "react-router-dom";
-import { BACKGROUNDS, toBackground } from "../assets/backgrounds";
+import { BACKGROUNDS, toBackground } from "@raidplan/shared";
 import { clearHistory, useEditorStore } from "../store/editorStore";
 import { useTemporal } from "../store/useTemporal";
 import { SCALE_MAX, SCALE_MIN } from "./canvas/coords";
@@ -141,7 +141,7 @@ export function Toolbar({ status }: { status?: React.ReactNode }) {
       <Divider />
 
       <Link
-        to="/p/local"
+        to="/view/local"
         data-testid="open-viewer"
         className="rounded border border-panelborder px-2 py-1 text-sm hover:border-accent"
       >

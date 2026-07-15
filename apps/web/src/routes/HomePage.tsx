@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { loginUrl, logoutUrl, useSession } from "../api/useSession";
-import { DEFAULT_BACKGROUND } from "../assets/backgrounds";
+import { DEFAULT_BACKGROUND } from "@raidplan/shared";
 import { LOCAL_PLAN_ID } from "../editor/planScope";
 
 interface PlanSummary {

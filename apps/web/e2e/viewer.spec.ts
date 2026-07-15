@@ -29,7 +29,7 @@ test.describe("viewer", () => {
     await buildPlan(page, 3, 3);
 
     await page.getByTestId("open-viewer").click();
-    await expect(page).toHaveURL(/\/p\/local$/);
+    await expect(page).toHaveURL(/\/view\/local$/);
     await expect(page.getByTestId("viewer-canvas")).toBeVisible();
     await expect(page.getByTestId("viewer-step")).toContainText("1 / 3");
 

@@ -1,39 +1,71 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import type { Stage as StageNode } from "konva/lib/Stage";
+import { api } from "../api/client";
 import { useFps } from "../anim/useFps";
 import { usePlayback } from "../anim/usePlayback";
 import { isEditableTarget } from "../editor/isEditableTarget";
+import { isLocalPlan, LOCAL_PLAN_ID } from "../editor/planScope";
 import { clearHistory, useEditorStore } from "../store/editorStore";
 import { loadPlan } from "../store/persistence";
 import { PlaybackControls } from "../viewer/PlaybackControls";
 import { ViewerStage } from "../viewer/ViewerStage";
 
+type LoadState = "loading" | "ready" | "missing";
+
 /**
- * `/p/:slug` — read-only playback (plan §3.6). Until the backend lands
- * (Phase 4.6) the only plan is the locally-saved one, so the slug is accepted
- * but not yet resolved against a server.
+ * `/view/:slug` — read-only playback (plan §3.6 / §4.6).
+ *
+ * The reserved `local` slug plays the offline plan from this browser; any other
+ * slug is fetched from the server, which enforces visibility: `unlisted` and
+ * `public` need no account, `private` needs guild membership (plan §10). A slug
+ * you may not see is indistinguishable from one that doesn't exist.
+ *
+ * The shareable URL is `/p/:slug` — the API serves that with Open Graph meta
+ * for Discord and forwards people here.
  */
 export function ViewerPage() {
+  const { slug = LOCAL_PLAN_ID } = useParams<{ slug: string }>();
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<StageNode>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [load, setLoad] = useState<LoadState>("loading");
 
   const title = useEditorStore((s) => s.title);
   const steps = useEditorStore((s) => s.steps);
   const playback = usePlayback(stageRef);
-  // Only measured while something is actually moving (plan §3.7).
   const fps = useFps(playback.isPlaying);
 
-  // Load the saved plan once, before playback builds its first timeline.
+  // Load once, before playback builds its first timeline.
   useEffect(() => {
-    const saved = loadPlan();
-    if (saved) {
-      useEditorStore.getState().loadPlan(saved);
-      clearHistory();
+    let cancelled = false;
+
+    if (isLocalPlan(slug)) {
+      const saved = loadPlan();
+      if (saved) {
+        useEditorStore.getState().loadPlan(saved);
+        clearHistory();
+      }
+      setLoad(saved ? "ready" : "missing");
+      return;
     }
-    setLoaded(true);
-  }, []);
+
+    setLoad("loading");
+    api.plan.getBySlug
+      .query({ slug })
+      .then((plan) => {
+        if (cancelled) return;
+        useEditorStore.getState().loadPlan(plan.doc);
+        clearHistory();
+        setLoad("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setLoad("missing");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
   // Keyboard transport: ←/→ steps, space play/pause (plan §7).
   useEffect(() => {
@@ -67,7 +99,7 @@ export function ViewerPage() {
     >
       <header className="flex items-center gap-2 border-b border-panelborder bg-panel px-3 py-2">
         <span className="font-semibold" data-testid="viewer-title">
-          {title}
+          {load === "missing" ? "Not found" : title}
         </span>
         {playback.isPlaying && (
           <span
@@ -78,16 +110,22 @@ export function ViewerPage() {
             {fps} fps
           </span>
         )}
-        <Link
-          to="/plan/local/edit"
-          className="ml-auto text-sm text-neutral-400 hover:text-accent"
-        >
-          Edit
-        </Link>
+        {isLocalPlan(slug) && (
+          <Link
+            to={`/plan/${LOCAL_PLAN_ID}/edit`}
+            className="ml-auto text-sm text-neutral-400 hover:text-accent"
+          >
+            Edit
+          </Link>
+        )}
       </header>
 
       <main className="min-h-0 flex-1">
-        {loaded && steps.length === 0 ? (
+        {load === "missing" ? (
+          <p data-testid="viewer-missing" className="p-8 text-neutral-500">
+            This plan doesn&apos;t exist, or isn&apos;t shared with you.
+          </p>
+        ) : load === "ready" && steps.length === 0 ? (
           <p data-testid="viewer-empty" className="p-8 text-neutral-500">
             This plan has no steps yet. Add some in the editor.
           </p>

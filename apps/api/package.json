@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "RaidPlans backend — Hono server, tRPC router, SQLite persistence, Discord auth.",
+  "description": "RaidPlans backend \u2014 Hono server, tRPC router, SQLite persistence, Discord auth.",
   "exports": {
     "./trpc": "./src/trpc/appRouter.ts"
   },
@@ -27,7 +27,8 @@
     "drizzle-orm": "^0.45.2",
     "hono": "^4.6.14",
     "pino": "^9.5.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@resvg/resvg-js": "^2.6.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

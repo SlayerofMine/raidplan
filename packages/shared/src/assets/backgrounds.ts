@@ -1,5 +1,5 @@
-import type { Background } from "@raidplan/shared";
-import { svgToDataUri } from "./svg";
+import type { Background } from "../plan.js";
+import { svgToDataUri } from "./svg.js";
 
 /**
  * The bundled map set (plan §2.9 map/raid selector). All original artwork —

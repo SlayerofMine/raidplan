@@ -1,0 +1,155 @@
+import { Hono } from "hono";
+import type { Plan } from "@raidplan/shared";
+import { canView } from "../auth/access.js";
+import type { Config } from "../config.js";
+import type { Db } from "../db/client.js";
+import { findPlanRowBySlug, getPlanWithDoc, toAcl } from "../plans/planRepo.js";
+import { isValidSlug } from "../plans/slug.js";
+import { escapeXml } from "./renderPlanSvg.js";
+import { renderOgImage } from "./renderOgImage.js";
+
+/**
+ * The public share surface (plan §9 "Plain Hono routes", §4.6/§4.7).
+ *
+ * `GET /p/:slug` exists as a *server* route because Discord's crawler doesn't
+ * run JavaScript: fetching the SPA's index.html would show it an empty
+ * `<div id="root">` and produce a bare link. So we answer crawlers with real
+ * Open Graph meta, and hand real browsers straight on to the app.
+ */
+export interface ShareDeps {
+  db: Db;
+  config: Config;
+  /** Resolve the caller, so a private plan isn't unfurled to strangers. */
+  getUserId?: (req: Request) => Promise<string | null> | string | null;
+  viewerFor: (
+    db: Db,
+    userId: string,
+  ) => { userId: string; roles: Record<string, "viewer" | "editor" | "owner"> };
+}
+
+/** How long a preview may be cached. Long enough to help, short enough to refresh. */
+const OG_CACHE_SECONDS = 300;
+
+export function createShareRoutes({
+  db,
+  config,
+  getUserId,
+  viewerFor,
+}: ShareDeps) {
+  const app = new Hono();
+
+  /** Load a plan by slug, applying the access rules. */
+  const loadShared = async (
+    slug: string,
+    req: Request,
+  ): Promise<Plan | null> => {
+    if (!isValidSlug(slug)) return null;
+    const row = findPlanRowBySlug(db, slug);
+    if (!row) return null;
+
+    const userId = getUserId ? await getUserId(req) : null;
+    const viewer = userId ? viewerFor(db, userId) : null;
+    // `unlisted`/`public` need no session; `private` does (plan §10).
+    if (!canView(toAcl(row), viewer)) return null;
+
+    return getPlanWithDoc(db, row.id)?.doc ?? null;
+  };
+
+  app.get("/p/:slug/og.png", async (c) => {
+    const plan = await loadShared(c.req.param("slug"), c.req.raw);
+    if (!plan) return c.text("Not found", 404);
+
+    // "Step 1" is index 0; a plan with no steps previews its base layout.
+    const png = renderOgImage(plan, plan.steps.length > 0 ? 0 : -1);
+    return c.body(new Uint8Array(png), 200, {
+      "content-type": "image/png",
+      "cache-control": `public, max-age=${OG_CACHE_SECONDS}`,
+    });
+  });
+
+  app.get("/p/:slug", async (c) => {
+    const slug = c.req.param("slug");
+    const plan = await loadShared(slug, c.req.raw);
+    if (!plan) return c.html(notFoundHtml(), 404);
+
+    return c.html(sharePageHtml(plan, slug, config.BASE_URL), 200, {
+      // Never let a proxy serve one guild's private plan to another visitor.
+      "cache-control": "private, no-cache",
+    });
+  });
+
+  return app;
+}
+
+/** A one-line summary for the unfurl card. */
+export function planDescription(plan: Plan): string {
+  const steps = plan.steps.length;
+  const objects = plan.objects.length;
+  const parts = [
+    `${steps} ${steps === 1 ? "step" : "steps"}`,
+    `${objects} ${objects === 1 ? "object" : "objects"}`,
+  ];
+  if (plan.raid) parts.unshift(plan.raid);
+  return parts.join(" · ");
+}
+
+/**
+ * The share page: Open Graph meta for crawlers, and a redirect into the SPA for
+ * humans.
+ *
+ * The redirect is client-side rather than a 302 so the crawler still parses the
+ * meta tags — a 302 would send Discord to the SPA shell, which tells it nothing.
+ */
+export function sharePageHtml(
+  plan: Plan,
+  slug: string,
+  baseUrl: string,
+): string {
+  const url = `${baseUrl}/p/${slug}`;
+  const title = escapeHtml(plan.title || "RaidPlans");
+  const description = escapeHtml(planDescription(plan));
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>${title} — RaidPlans</title>
+    <meta name="description" content="${description}" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="RaidPlans" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${escapeHtml(url)}" />
+    <meta property="og:image" content="${escapeHtml(`${url}/og.png`)}" />
+    <meta property="og:image:type" content="image/png" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${title}" />
+    <meta name="twitter:description" content="${description}" />
+    <meta name="twitter:image" content="${escapeHtml(`${url}/og.png`)}" />
+
+    <meta name="theme-color" content="#0b0d12" />
+    <!-- Humans get the app; crawlers stop at the meta above. -->
+    <script>window.location.replace(${JSON.stringify(`/view/${slug}`)});</script>
+  </head>
+  <body style="margin:0;background:#0b0d12;color:#e6e6e6;font-family:system-ui,sans-serif">
+    <p style="padding:2rem">
+      <a href="/view/${escapeHtml(slug)}" style="color:#4f9dff">Open ${title} →</a>
+    </p>
+  </body>
+</html>`;
+}
+
+function notFoundHtml(): string {
+  return `<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Not found — RaidPlans</title></head>
+  <body style="margin:0;background:#0b0d12;color:#e6e6e6;font-family:system-ui,sans-serif">
+    <p style="padding:2rem">This plan doesn't exist, or isn't shared with you.</p>
+  </body>
+</html>`;
+}
+
+/** Escape for an HTML attribute or text node. Reuses the SVG/XML escaper. */
+const escapeHtml = escapeXml;

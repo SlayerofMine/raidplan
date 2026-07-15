@@ -6,6 +6,7 @@ import { createAuth, type Auth } from "./auth/auth.js";
 import { viewerFor } from "./auth/session.js";
 import type { Viewer } from "./auth/access.js";
 import type { Fetch } from "./auth/discordIdentity.js";
+import { createShareRoutes } from "./og/shareRoutes.js";
 import { appRouter } from "./trpc/appRouter.js";
 
 export interface AppDeps {
@@ -116,6 +117,13 @@ export function createApp({ db, config, getUserId, fetchImpl }: AppDeps) {
       const session = await auth.api.getSession({ headers: req.headers });
       return session?.user.id ?? null;
     });
+
+  // Public share links: server-rendered so Discord's crawler gets real Open
+  // Graph meta (plan §4.6/§4.7). Caddy proxies /p/* here in production.
+  app.route(
+    "/",
+    createShareRoutes({ db, config, getUserId: resolveUserId, viewerFor }),
+  );
 
   app.use(
     "/trpc/*",

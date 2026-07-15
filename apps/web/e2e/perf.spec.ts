@@ -86,7 +86,7 @@ test(`a ${STEPS}-step, ${OBJECTS}-object plan plays smoothly`, async ({
   page,
 }) => {
   await seed(page);
-  await page.goto("/p/local");
+  await page.goto("/view/local");
 
   await expect(page.getByTestId("viewer-step")).toContainText(`1 / ${STEPS}`);
 
@@ -106,7 +106,7 @@ test(`every step of the ${OBJECTS}-object plan is navigable`, async ({
   page,
 }) => {
   await seed(page);
-  await page.goto("/p/local");
+  await page.goto("/view/local");
 
   for (let s = 2; s <= STEPS; s++) {
     await page.getByRole("button", { name: "Next step" }).click();

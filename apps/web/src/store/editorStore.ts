@@ -15,8 +15,8 @@ import {
   type Step,
   type StepOverride,
 } from "@raidplan/shared";
-import { DEFAULT_BACKGROUND } from "../assets/backgrounds";
-import { getIconById } from "../assets/icons";
+import { DEFAULT_BACKGROUND } from "@raidplan/shared";
+import { getIconById } from "@raidplan/shared";
 import { nextAnimId, nextStepId } from "./ids";
 import {
   fitView,

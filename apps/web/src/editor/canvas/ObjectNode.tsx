@@ -12,7 +12,7 @@ import {
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
 import { useShallow } from "zustand/react/shallow";
 import type { ObjectType, ShapeKind } from "@raidplan/shared";
-import { getIconById } from "../../assets/icons";
+import { getIconById } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { selectObjectState } from "../../store/selectors";
 import { labelLayout, LABEL_COLOUR, LABEL_FONT_SIZE } from "./objectLabel";

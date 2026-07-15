@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resolveObjectState } from "@raidplan/shared";
-import { ICONS } from "../assets/icons";
+import { ICONS } from "@raidplan/shared";
 import {
   BASE_STEP_INDEX,
   clearHistory,

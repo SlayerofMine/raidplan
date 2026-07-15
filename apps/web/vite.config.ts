@@ -14,13 +14,17 @@ export default defineConfig({
      * way, so the browser only ever talks to :5173 — no CORS, and the session
      * cookie is simply same-origin.
      *
-     * Note `/p/:slug` is deliberately *not* proxied: it's a client-side viewer
-     * route today. When the server starts rendering it for Discord unfurls
-     * (plan §4.7), that will need revisiting here.
+     * `/p/*` is proxied too: it's the public *share link*, server-rendered
+     * with Open Graph meta for Discord (plan §4.7). The app's own viewer lives
+     * at /view/:slug, which stays client-side.
      */
     proxy: {
       "/api": { target: "http://localhost:4000", changeOrigin: false },
       "/trpc": { target: "http://localhost:4000", changeOrigin: false },
+      // Anchored regex, not a prefix: a plain "/p" key also matches
+      // "/plan/:id/edit" — every editor URL starts with /p — and would send the
+      // whole editor to the API.
+      "^/p/": { target: "http://localhost:4000", changeOrigin: false },
     },
   },
   test: {

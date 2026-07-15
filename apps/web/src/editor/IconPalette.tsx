@@ -4,7 +4,7 @@ import {
   ICON_CATEGORIES,
   searchIcons,
   type IconCategory,
-} from "../assets/icons";
+} from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
 
 const ICON_DATA_TYPE = "application/x-raidplan-icon";

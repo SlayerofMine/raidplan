@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getIconById, ICON_CATEGORIES, ICONS, searchIcons } from "./icons";
+import { getIconById, ICON_CATEGORIES, ICONS, searchIcons } from "./icons.js";
 
 describe("icon manifest", () => {
   it("covers every declared category", () => {

@@ -6,6 +6,10 @@ raidplans.mamzer.dev {
 	encode gzip
 
 	# App API, tRPC, and public share/OG routes are served by the Node service.
+	# /p/* is the *share link*: the API renders it with Open Graph meta so
+	# Discord unfurls a preview (it doesn't run JS, so the SPA shell would show
+	# it nothing). That page then hands people to the SPA's own viewer at
+	# /view/:slug, which is served as a static route below.
 	reverse_proxy /api/* localhost:4000
 	reverse_proxy /trpc/* localhost:4000
 	reverse_proxy /p/* localhost:4000

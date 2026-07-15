@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { ICONS } from "../assets/icons";
+import { ICONS } from "@raidplan/shared";
 import { clearHistory, temporalStore, useEditorStore } from "./editorStore";
 
 const iconId = ICONS[0]!.id;

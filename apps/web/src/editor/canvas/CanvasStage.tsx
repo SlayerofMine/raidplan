@@ -8,7 +8,7 @@ import {
 import { Layer, Line, Image as KonvaImage, Rect, Stage } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import type { PlanObject } from "@raidplan/shared";
-import { getBackgroundSrc } from "../../assets/backgrounds";
+import { getBackgroundSrc } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { isEditableTarget } from "../isEditableTarget";
 import { screenToNative, type Point } from "./coords";

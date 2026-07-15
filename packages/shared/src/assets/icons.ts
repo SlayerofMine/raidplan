@@ -1,4 +1,4 @@
-import { svgToDataUri } from "./svg";
+import { svgToDataUri } from "./svg.js";
 
 /**
  * The icon manifest (plan §11). Every icon here is **original** artwork — plain
@@ -16,19 +16,40 @@ export interface IconDef {
   tags: string[];
   /** Data URI, ready for an `<img>` src or a Konva image. */
   src: string;
+  /**
+   * The same artwork as raw SVG markup **without** an `<svg>` wrapper, drawn in
+   * a {@link ICON_VIEWBOX}-square coordinate space.
+   *
+   * The server-side preview renderer (plan §4.7) inlines this rather than
+   * embedding `src`: resvg silently drops `<text>` inside an embedded SVG
+   * `<image>`, which would render every raid marker as a blank coloured disc —
+   * losing the number that *is* the marker. Inlined, the text renders.
+   */
+  body: string;
   /** Applied as the token's ring colour when added (plan §2.5). */
   tint?: string;
 }
 
+/** Icons are authored in a 64×64 space; callers scale from there. */
+export const ICON_VIEWBOX = 64;
+
 /** A filled disc with a centred glyph — the shared shape of every token. */
-function discSvg(fill: string, label: string, textColor = "#0b0d12"): string {
+function discBody(fill: string, label: string, textColor = "#0b0d12"): string {
   const fontSize = label.length >= 3 ? 18 : label.length === 2 ? 24 : 30;
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">` +
     `<circle cx="32" cy="32" r="28" fill="${fill}" stroke="#0b0d12" stroke-width="3"/>` +
+    // `sans-serif` last: resvg resolves the generic family, and the browser
+    // still prefers the nicer system font ahead of it.
     `<text x="32" y="${32 + fontSize * 0.36}" font-family="system-ui, sans-serif" ` +
-    `font-size="${fontSize}" font-weight="700" text-anchor="middle" fill="${textColor}">${label}</text>` +
-    `</svg>`
+    `font-size="${fontSize}" font-weight="700" text-anchor="middle" fill="${textColor}">${label}</text>`
+  );
+}
+
+/** Wrap icon markup as a standalone SVG document. */
+function iconDocument(body: string): string {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${ICON_VIEWBOX} ${ICON_VIEWBOX}" ` +
+    `width="${ICON_VIEWBOX}" height="${ICON_VIEWBOX}">${body}</svg>`
   );
 }
 
@@ -236,14 +257,18 @@ const CLASSES: DiscSpec[] = [
 ];
 
 function build(specs: DiscSpec[], category: IconCategory): IconDef[] {
-  return specs.map((s) => ({
-    id: s.id,
-    name: s.name,
-    category,
-    tags: [...s.tags, s.name.toLowerCase(), category],
-    src: svgToDataUri(discSvg(s.fill, s.label)),
-    ...(s.tint ? { tint: s.tint } : {}),
-  }));
+  return specs.map((s) => {
+    const body = discBody(s.fill, s.label);
+    return {
+      id: s.id,
+      name: s.name,
+      category,
+      tags: [...s.tags, s.name.toLowerCase(), category],
+      body,
+      src: svgToDataUri(iconDocument(body)),
+      ...(s.tint ? { tint: s.tint } : {}),
+    };
+  });
 }
 
 /** The ordered palette manifest. */
