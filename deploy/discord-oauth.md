@@ -128,6 +128,9 @@ Production — `/etc/raidplans/env`, `chmod 600`, owned by the service user
   silently treats everyone as anonymous is worse than one that won't boot.
 - `GET /healthz` reports `authEnabled`, so you can confirm the service picked
   the config up: `curl -s localhost:4000/healthz`.
+- After signing in you land on the SPA (`WEB_ORIGIN`, default
+  <http://localhost:5173> in dev — the API itself serves no `/`, so redirecting
+  there would 404). Run `pnpm dev` so both are up.
 - **To sign in, open <http://localhost:4000/api/login>** — it redirects you to
   Discord and back. `?next=/plan/local/edit` chooses where you land afterwards;
   <http://localhost:4000/api/logout> signs out.

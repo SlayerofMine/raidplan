@@ -16,6 +16,12 @@ const ConfigSchema = z.object({
   // zod 4 moved string formats to the top level; `z.string().url()` still
   // works but is deprecated.
   BASE_URL: z.url().default("http://localhost:4000"),
+  /**
+   * Where the SPA is served from. In production Caddy serves the app and
+   * proxies /api to this service, so it's the same origin as BASE_URL. In
+   * development they differ: Vite on :5173, the API on :4000.
+   */
+  WEB_ORIGIN: z.url().optional(),
   DATABASE_PATH: z.string().min(1).default("./data/app.db"),
 
   // Auth (plan §10). Optional so the API can boot for local canvas work
@@ -50,10 +56,21 @@ export interface RoleMapping {
   defaultRole: Role;
 }
 
+/** Vite's default dev port — where the SPA lives when not behind Caddy. */
+const DEV_WEB_ORIGIN = "http://localhost:5173";
+
 export type Config = z.infer<typeof ConfigSchema> & {
   /** True when Discord OAuth is fully configured. */
   authEnabled: boolean;
   roleMapping: RoleMapping;
+  /**
+   * Resolved origin of the SPA — where a user is sent after signing in.
+   *
+   * Defaults to BASE_URL in production (Caddy serves both from one origin) and
+   * to Vite's dev server otherwise. Without the dev default, every developer
+   * lands on a 404 after login: the API has no `/` to redirect them to.
+   */
+  webOrigin: string;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -83,6 +100,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     ...config,
     authEnabled,
+    webOrigin:
+      config.WEB_ORIGIN ??
+      (config.NODE_ENV === "production" ? config.BASE_URL : DEV_WEB_ORIGIN),
     roleMapping: {
       ownerRoleIds: idList(config.DISCORD_OWNER_ROLE_IDS),
       editorRoleIds: idList(config.DISCORD_EDITOR_ROLE_IDS),

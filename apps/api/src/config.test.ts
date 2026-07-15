@@ -51,6 +51,32 @@ describe("loadConfig", () => {
     ).not.toThrow();
   });
 
+  it("points webOrigin at the Vite dev server by default", () => {
+    // The API serves no `/`, so defaulting this to BASE_URL would land every
+    // developer on a 404 immediately after a successful login.
+    expect(loadConfig({}).webOrigin).toBe("http://localhost:5173");
+  });
+
+  it("points webOrigin at BASE_URL in production, where Caddy serves both", () => {
+    expect(
+      loadConfig({
+        NODE_ENV: "production",
+        BASE_URL: "https://raidplans.mamzer.dev",
+        ...AUTH,
+      }).webOrigin,
+    ).toBe("https://raidplans.mamzer.dev");
+  });
+
+  it("lets WEB_ORIGIN override either default", () => {
+    expect(loadConfig({ WEB_ORIGIN: "http://localhost:9999" }).webOrigin).toBe(
+      "http://localhost:9999",
+    );
+  });
+
+  it("rejects a WEB_ORIGIN that isn't a URL", () => {
+    expect(() => loadConfig({ WEB_ORIGIN: "nope" })).toThrow(/WEB_ORIGIN/);
+  });
+
   it("reports authEnabled only when Discord is fully configured", () => {
     expect(loadConfig(AUTH).authEnabled).toBe(true);
     // Partial configuration is not "enabled".

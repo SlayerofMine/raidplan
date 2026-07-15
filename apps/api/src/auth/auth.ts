@@ -42,6 +42,9 @@ export function createAuth({ db, config, fetchImpl }: AuthDeps) {
   return betterAuth({
     baseURL: config.BASE_URL,
     secret: config.SESSION_SECRET!,
+    // The SPA's origin differs from the API's in development (Vite :5173 vs
+    // :4000); better-auth rejects a post-login redirect to an untrusted origin.
+    trustedOrigins: [config.BASE_URL, config.webOrigin],
     database: drizzleAdapter(db, {
       provider: "sqlite",
       schema: {

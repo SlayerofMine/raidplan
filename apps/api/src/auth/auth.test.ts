@@ -79,14 +79,35 @@ describe("GET /api/login — the browser-navigable entry point", () => {
     expect(res.headers.get("location")).toContain("discord.com");
   });
 
+  it("sends the user back to the SPA, not the API, after login", async () => {
+    // The bug this guards: the API serves no `/`, so a callbackURL resolved
+    // against BASE_URL 404s the moment login succeeds.
+    const state = new URL(
+      (await app().request("/api/login")).headers.get("location")!,
+    ).searchParams.get("state");
+    expect(state).toBeTruthy();
+
+    // better-auth stores the post-login target with the OAuth state; assert on
+    // what we asked it for instead of reaching into that storage.
+    const url = new URL(
+      (await app().request("/api/login?next=/plan/local/edit")).headers.get(
+        "location",
+      )!,
+    );
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      // The callback still belongs to the API — only the *landing* differs.
+      "http://localhost:4000/api/auth/callback/discord",
+    );
+  });
+
   it("is not mounted when Discord isn't configured", async () => {
     expect((await app(loadConfig({})).request("/api/login")).status).toBe(404);
   });
 
-  it("GET /api/logout redirects back without a session", async () => {
+  it("GET /api/logout redirects back to the SPA, not the API", async () => {
     const res = await app().request("/api/logout");
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/");
+    expect(res.headers.get("location")).toBe("http://localhost:5173/");
   });
 });
 

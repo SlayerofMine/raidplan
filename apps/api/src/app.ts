@@ -64,7 +64,13 @@ export function createApp({ db, config, getUserId, fetchImpl }: AppDeps) {
      * `?next=` chooses where the user lands afterwards.
      */
     app.get("/api/login", async (c) => {
-      const next = c.req.query("next") ?? "/";
+      // Resolve against the *SPA's* origin, not the API's. They're the same in
+      // production, but in development the API has no `/` to land on — sending
+      // people there is a 404 immediately after a successful login.
+      const next = new URL(
+        c.req.query("next") ?? "/",
+        config.webOrigin,
+      ).toString();
       const { headers, response } = await auth.api.signInSocial({
         body: { provider: "discord", callbackURL: next },
         returnHeaders: true,
@@ -89,7 +95,11 @@ export function createApp({ db, config, getUserId, fetchImpl }: AppDeps) {
         headers: c.req.raw.headers,
         returnHeaders: true,
       });
-      const redirect = c.redirect(c.req.query("next") ?? "/", 302);
+      const next = new URL(
+        c.req.query("next") ?? "/",
+        config.webOrigin,
+      ).toString();
+      const redirect = c.redirect(next, 302);
       for (const [key, value] of headers.entries()) {
         if (key.toLowerCase() === "set-cookie") {
           redirect.headers.append("set-cookie", value);
