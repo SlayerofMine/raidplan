@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import {
   Arrow,
   Circle,
@@ -27,7 +27,7 @@ const FILL_ALPHA = "33";
  * other selected nodes **imperatively** during the drag (no React per frame,
  * plan §8.1) and committed to the store on drop.
  */
-export function ObjectNode({
+export const ObjectNode = memo(function ObjectNode({
   objectId,
   draggable,
 }: {
@@ -147,7 +147,7 @@ export function ObjectNode({
       )}
     </Group>
   );
-}
+});
 
 /** The visual for an object, chosen by its type (plan §2.4 primitives). */
 function ObjectContent({

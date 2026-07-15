@@ -1,19 +1,32 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
   type DragEvent as ReactDragEvent,
 } from "react";
-import { Layer, Line, Image as KonvaImage, Stage } from "react-konva";
+import { Layer, Line, Image as KonvaImage, Rect, Stage } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
+import type { PlanObject } from "@raidplan/shared";
 import { getBackgroundSrc } from "../../assets/backgrounds";
 import { useEditorStore } from "../../store/editorStore";
 import { isEditableTarget } from "../isEditableTarget";
-import { screenToNative } from "./coords";
+import { screenToNative, type Point } from "./coords";
+import {
+  MARQUEE_THRESHOLD_PX,
+  normalizeRect,
+  objectsInMarquee,
+} from "./marquee";
 import { ObjectNode } from "./ObjectNode";
 import { SelectionTransformer } from "./SelectionTransformer";
 import { useContainerSize } from "./useContainerSize";
 import { useImageElement } from "./useImageElement";
+
+/** An in-progress rubber-band sweep, in native coordinates. */
+interface Marquee {
+  start: Point;
+  current: Point;
+}
 
 const ICON_DATA_TYPE = "application/x-raidplan-icon";
 const ZOOM_STEP = 1.1;
@@ -40,7 +53,19 @@ export function CanvasStage() {
   const setView = useEditorStore((s) => s.setView);
   const zoomAtPoint = useEditorStore((s) => s.zoomAtPoint);
   const clearSelection = useEditorStore((s) => s.clearSelection);
+  const select = useEditorStore((s) => s.select);
   const addIcon = useEditorStore((s) => s.addIcon);
+
+  // The sweep lives in state (to draw it) and a ref (to read it from the
+  // window-level mouseup without stale-closure games).
+  const [marquee, setMarquee] = useState<Marquee | null>(null);
+  const marqueeRef = useRef<Marquee | null>(null);
+  const marqueeAdditive = useRef(false);
+
+  const updateMarquee = useCallback((next: Marquee | null) => {
+    marqueeRef.current = next;
+    setMarquee(next);
+  }, []);
 
   const bgImage = useImageElement(getBackgroundSrc(background.assetId));
 
@@ -79,10 +104,66 @@ export function CanvasStage() {
     zoomAtPoint(pointer, e.evt.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP);
   };
 
+  /**
+   * Pressing empty space begins a rubber-band sweep; pressing a token drags it
+   * (the node handles that), and Space+drag pans — so left-drag is unambiguous
+   * and needs no mode switch.
+   */
   const handleStageMouseDown = (e: KonvaEventObject<MouseEvent>) => {
-    // A click on empty stage (not on a token) clears the selection.
-    if (!isPanning && e.target === e.target.getStage()) clearSelection();
+    if (isPanning) return;
+    const stage = e.target.getStage();
+    if (!stage || e.target !== stage) return;
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+
+    marqueeAdditive.current = e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey;
+    const start = screenToNative(pointer, view);
+    updateMarquee({ start, current: start });
   };
+
+  const handleStageMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+    if (!marqueeRef.current) return;
+    const pointer = e.target.getStage()?.getPointerPosition();
+    if (!pointer) return;
+    updateMarquee({
+      start: marqueeRef.current.start,
+      current: screenToNative(pointer, view),
+    });
+  };
+
+  const finishMarquee = useCallback(() => {
+    const sweep = marqueeRef.current;
+    if (!sweep) return;
+    updateMarquee(null);
+
+    const rect = normalizeRect(sweep.start, sweep.current);
+    // A press that never really moved is a plain click, not a sweep.
+    const dragged =
+      Math.max(rect.width, rect.height) * view.scale >= MARQUEE_THRESHOLD_PX;
+    if (!dragged) {
+      if (!marqueeAdditive.current) clearSelection();
+      return;
+    }
+
+    const { objects, objectIds, selectedIds } = useEditorStore.getState();
+    const ordered = objectIds
+      .map((id) => objects[id])
+      .filter((o): o is PlanObject => o !== undefined);
+    const swept = objectsInMarquee(ordered, rect);
+
+    select(
+      marqueeAdditive.current
+        ? [...new Set([...selectedIds, ...swept])]
+        : swept,
+    );
+  }, [view.scale, clearSelection, select, updateMarquee]);
+
+  // Finish on mouseup anywhere, so releasing outside the canvas can't strand
+  // the sweep.
+  useEffect(() => {
+    window.addEventListener("mouseup", finishMarquee);
+    return () => window.removeEventListener("mouseup", finishMarquee);
+  }, [finishMarquee]);
 
   const handleStageDragEnd = (e: KonvaEventObject<DragEvent>) => {
     const stage = e.target.getStage();
@@ -125,6 +206,7 @@ export function CanvasStage() {
         draggable={isPanning}
         onWheel={handleWheel}
         onMouseDown={handleStageMouseDown}
+        onMouseMove={handleStageMouseMove}
         onDragEnd={handleStageDragEnd}
       >
         {/* Background + grid: never interactive, so clicks fall through. */}
@@ -148,6 +230,17 @@ export function CanvasStage() {
           {objectIds.map((id) => (
             <ObjectNode key={id} objectId={id} draggable={!isPanning} />
           ))}
+          {marquee && (
+            <Rect
+              {...normalizeRect(marquee.start, marquee.current)}
+              fill="#4f9dff22"
+              stroke="#4f9dff"
+              strokeWidth={1}
+              dash={[4, 4]}
+              strokeScaleEnabled={false}
+              listening={false}
+            />
+          )}
           <SelectionTransformer />
         </Layer>
       </Stage>
