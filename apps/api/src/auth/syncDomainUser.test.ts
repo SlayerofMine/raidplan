@@ -3,9 +3,11 @@ import { loadConfig, type Config } from "../config.js";
 import type { Db } from "../db/client.js";
 import { guilds, memberships, users } from "../db/schema.js";
 import { createTestDb } from "../db/testDb.js";
+import { authAccounts, authUsers } from "../db/authSchema.js";
+import { createPlan } from "../plans/planRepo.js";
 import type { VerifiedIdentity } from "./discordIdentity.js";
 import { syncDomainUser } from "./syncDomainUser.js";
-import { viewerFor } from "./session.js";
+import { domainUserIdFor, viewerFor } from "./session.js";
 
 const GUILD_DISCORD_ID = "111111111111111111";
 const USER = "222222222222222222";
@@ -113,6 +115,112 @@ describe("syncDomainUser", () => {
     const rows = db.select().from(memberships).all();
     expect(rows.find((r) => r.userId === USER)?.role).toBe("owner");
     expect(rows.find((r) => r.userId === "333")?.role).toBe("viewer");
+  });
+});
+
+describe("domainUserIdFor — bridging better-auth's id to ours", () => {
+  /**
+   * The bug this exists for: better-auth generates its own `user.id`, so a
+   * session's user id is NOT our domain id (the Discord snowflake). Treating
+   * them as interchangeable made every plan.create fail on a foreign key,
+   * because `plans.ownerId` references `users.id`.
+   *
+   * The tests missed it because `AppDeps.getUserId` is injected — the seam that
+   * makes the API testable also bypassed the mapping. So test the mapping.
+   */
+  const AUTH_ID = "GwhgV7u07hEgAbC123";
+
+  function linkAccount(authUserId: string, discordId: string) {
+    db.insert(authUsers)
+      .values({
+        id: authUserId,
+        name: "SlayerofMine",
+        email: `discord-${discordId}@raidplans.invalid`,
+        emailVerified: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .run();
+    db.insert(authAccounts)
+      .values({
+        id: `acc_${discordId}`,
+        accountId: discordId,
+        providerId: "discord",
+        userId: authUserId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .run();
+  }
+
+  it("maps a better-auth session id to the Discord snowflake we key on", () => {
+    linkAccount(AUTH_ID, USER);
+    expect(domainUserIdFor(db, AUTH_ID)).toBe(USER);
+    // The two really are different values — that's the whole point.
+    expect(domainUserIdFor(db, AUTH_ID)).not.toBe(AUTH_ID);
+  });
+
+  it("returns null for a session with no linked Discord account", () => {
+    // Unattributable session → anonymous, never a guess.
+    expect(domainUserIdFor(db, "no-such-auth-user")).toBeNull();
+  });
+
+  it("ignores accounts from another provider", () => {
+    // Battle.net is on the roadmap (§10); it must not resolve as Discord.
+    db.insert(authUsers)
+      .values({
+        id: AUTH_ID,
+        name: "X",
+        email: "x@raidplans.invalid",
+        emailVerified: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .run();
+    db.insert(authAccounts)
+      .values({
+        id: "acc_bnet",
+        accountId: "bnet-999",
+        providerId: "battlenet",
+        userId: AUTH_ID,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .run();
+    expect(domainUserIdFor(db, AUTH_ID)).toBeNull();
+  });
+
+  it("resolves to a user that plans can actually be owned by", () => {
+    // The end-to-end shape of the bug: the mapped id must satisfy the
+    // plans.ownerId → users.id foreign key.
+    syncDomainUser(db, config, identity());
+    linkAccount(AUTH_ID, USER);
+
+    const domainId = domainUserIdFor(db, AUTH_ID)!;
+    expect(() =>
+      createPlan(db, {
+        ownerId: domainId,
+        background: { assetId: "arena", width: 1600, height: 900 },
+      }),
+    ).not.toThrow();
+
+    // …and the raw session id must NOT, which is what actually happened.
+    expect(() =>
+      createPlan(db, {
+        ownerId: AUTH_ID,
+        background: { assetId: "arena", width: 1600, height: 900 },
+      }),
+    ).toThrow();
+  });
+
+  it("gives the mapped id the roles the session should have", () => {
+    syncDomainUser(db, config, identity({ role: "owner" }));
+    linkAccount(AUTH_ID, USER);
+
+    const viewer = viewerFor(db, domainUserIdFor(db, AUTH_ID)!);
+    expect(Object.values(viewer.roles)).toEqual(["owner"]);
+    // Against the raw auth id it would silently have no roles at all.
+    expect(viewerFor(db, AUTH_ID).roles).toEqual({});
   });
 });
 

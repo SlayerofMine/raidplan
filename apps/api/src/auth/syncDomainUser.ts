@@ -10,9 +10,9 @@ import type { VerifiedIdentity } from "./discordIdentity.js";
  * "on first login, create user; map the user to your guild").
  *
  * better-auth owns `user`/`session`/`account`; this owns `users`, `guilds` and
- * `memberships`. They share a primary key — the Discord snowflake is both the
- * better-auth `user.id` and our `users.id` — so no mapping table is needed and
- * `viewerFor()` can resolve roles from a bare user id.
+ * `memberships`. Our rows are keyed by the **Discord snowflake**, which is NOT
+ * better-auth's `user.id` (it generates its own) — `domainUserIdFor()` bridges
+ * the two via `account.accountId`.
  *
  * Idempotent: it runs on *every* login, not just the first, so that renames,
  * new avatars and — importantly — **role changes on Discord** are picked up.

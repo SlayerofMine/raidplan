@@ -3,7 +3,7 @@ import { trpcServer } from "@hono/trpc-server";
 import type { Config } from "./config.js";
 import type { Db } from "./db/client.js";
 import { createAuth, type Auth } from "./auth/auth.js";
-import { viewerFor } from "./auth/session.js";
+import { domainUserIdFor, viewerFor } from "./auth/session.js";
 import type { Viewer } from "./auth/access.js";
 import type { Fetch } from "./auth/discordIdentity.js";
 import { createShareRoutes } from "./og/shareRoutes.js";
@@ -116,7 +116,10 @@ export function createApp({ db, config, getUserId, fetchImpl }: AppDeps) {
     (async (req: Request) => {
       if (!auth) return null;
       const session = await auth.api.getSession({ headers: req.headers });
-      return session?.user.id ?? null;
+      if (!session) return null;
+      // NOT session.user.id: better-auth generates that, while our domain rows
+      // are keyed by the Discord snowflake. See `domainUserIdFor`.
+      return domainUserIdFor(db, session.user.id);
     });
 
   // Public share links: server-rendered so Discord's crawler gets real Open

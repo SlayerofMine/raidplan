@@ -17,9 +17,11 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
  *    is in which guild. Nothing there should be hostage to an auth library's
  *    schema.
  *
- * The two share a primary key: a domain `users.id` is the better-auth `user.id`
- * for the same person, upserted at login. That keeps the seam from `session.ts`
- * intact — swapping Discord for Battle.net (§10) touches only this side.
+ * **The two do NOT share a primary key.** better-auth generates its own
+ * `user.id`; the id a social provider returns from `getUserInfo` becomes the
+ * *account* id. Our domain rows are keyed by the Discord snowflake, which lives
+ * on `account.accountId`. `domainUserIdFor()` in `session.ts` is the only place
+ * that bridges the two — everything else works in domain ids.
  *
  * SQLite has no date or boolean type, hence the integer modes.
  */
