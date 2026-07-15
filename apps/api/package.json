@@ -5,7 +5,7 @@
   "type": "module",
   "description": "RaidPlans backend — Hono server, tRPC router, SQLite persistence, Discord auth.",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
     "build": "tsup",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
