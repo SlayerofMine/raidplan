@@ -138,6 +138,43 @@ describe("PlanSchema — malformed documents are rejected", () => {
   });
 });
 
+describe("PlanObjectSchema — shape primitives", () => {
+  it("accepts a shape object with a known shape kind", () => {
+    const plan = validPlan();
+    plan.objects.push({
+      id: "obj_shape",
+      type: "shape",
+      shape: "circle",
+      base: {
+        x: 0,
+        y: 0,
+        w: 100,
+        h: 100,
+        rotation: 0,
+        opacity: 0.5,
+        z: 1,
+        visible: true,
+      },
+    });
+    expect(PlanSchema.safeParse(plan).success).toBe(true);
+  });
+
+  it("rejects an unknown shape kind", () => {
+    const plan = validPlan() as unknown as {
+      objects: { type: string; shape?: string }[];
+    };
+    plan.objects[0]!.type = "shape";
+    plan.objects[0]!.shape = "hexagon";
+    expect(PlanSchema.safeParse(plan).success).toBe(false);
+  });
+
+  it("stays optional, so documents without it remain valid", () => {
+    // `shape` is additive: a token has no shape and must still parse.
+    const parsed = PlanSchema.parse(validPlan());
+    expect(parsed.objects[0]!.shape).toBeUndefined();
+  });
+});
+
 describe("StepOverrideSchema", () => {
   it("accepts an empty override (no-op step for an object)", () => {
     expect(StepOverrideSchema.safeParse({}).success).toBe(true);

@@ -39,14 +39,14 @@ test.describe("view controls", () => {
 
     const x = page.getByTestId("prop-x");
     const y = page.getByTestId("prop-y");
-    const x0 = (await x.textContent())!;
-    const y0 = (await y.textContent())!;
+    const x0 = await x.inputValue();
+    const y0 = await y.inputValue();
 
     await page.getByRole("button", { name: "Zoom in" }).click();
     await page.getByRole("button", { name: "Zoom in" }).click();
 
     // Zoom only changes the view transform, never the stored native position.
-    await expect(x).toHaveText(x0);
-    await expect(y).toHaveText(y0);
+    await expect(x).toHaveValue(x0);
+    await expect(y).toHaveValue(y0);
   });
 });

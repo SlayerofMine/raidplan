@@ -49,6 +49,15 @@ export const OBJECT_TYPES = [
 export const ObjectTypeSchema = z.enum(OBJECT_TYPES);
 export type ObjectType = z.infer<typeof ObjectTypeSchema>;
 
+/**
+ * Which primitive a `type: "shape"` object draws (plan §2.4). Optional on the
+ * object, so it only carries meaning for shapes and older documents that
+ * predate primitives stay valid without a migration.
+ */
+export const SHAPE_KINDS = ["rect", "circle", "cone"] as const;
+export const ShapeKindSchema = z.enum(SHAPE_KINDS);
+export type ShapeKind = z.infer<typeof ShapeKindSchema>;
+
 /** Plan-level visibility for access control (plan §5 persistence / §9). */
 export const VISIBILITIES = ["private", "unlisted", "public"] as const;
 export const VisibilitySchema = z.enum(VISIBILITIES);

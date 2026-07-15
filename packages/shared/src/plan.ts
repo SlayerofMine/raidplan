@@ -5,6 +5,7 @@ import {
   AnimKindSchema,
   AnimTriggerSchema,
   ObjectTypeSchema,
+  ShapeKindSchema,
 } from "./effects.js";
 
 /**
@@ -41,6 +42,8 @@ export const PlanObjectSchema = z.object({
   type: ObjectTypeSchema,
   /** Reference into the icon manifest (plan §11), for icon-backed objects. */
   iconId: z.string().min(1).optional(),
+  /** Which primitive to draw — only meaningful when `type` is `"shape"`. */
+  shape: ShapeKindSchema.optional(),
   base: ObjectBaseSchema,
   locked: z.boolean().optional(),
 });

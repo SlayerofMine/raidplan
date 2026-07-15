@@ -4,13 +4,14 @@ import {
   useState,
   type DragEvent as ReactDragEvent,
 } from "react";
-import { Layer, Image as KonvaImage, Stage } from "react-konva";
+import { Layer, Line, Image as KonvaImage, Stage } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
-import { getBackgroundSrc } from "../../assets/background";
+import { getBackgroundSrc } from "../../assets/backgrounds";
 import { useEditorStore } from "../../store/editorStore";
 import { isEditableTarget } from "../isEditableTarget";
 import { screenToNative } from "./coords";
 import { ObjectNode } from "./ObjectNode";
+import { SelectionTransformer } from "./SelectionTransformer";
 import { useContainerSize } from "./useContainerSize";
 import { useImageElement } from "./useImageElement";
 
@@ -18,10 +19,11 @@ const ICON_DATA_TYPE = "application/x-raidplan-icon";
 const ZOOM_STEP = 1.1;
 
 /**
- * The Konva canvas (plan §1.2–1.5, §6). Owns the stage transform: a background
- * layer (drawn once, non-interactive) and an objects layer. Wheel zooms to the
- * cursor; holding Space turns the stage into a pan surface. HTML5 drops from the
- * palette are converted to native coordinates and added at the drop point.
+ * The Konva canvas (plan §6). Two layers only: a non-interactive background
+ * (map image + optional grid, drawn once) and the interactive objects layer
+ * with the selection transformer. Wheel zooms to the cursor; holding Space
+ * turns the stage into a pan surface. Palette drops are converted to native
+ * coordinates and added at the cursor.
  */
 export function CanvasStage() {
   const [containerRef, size] = useContainerSize<HTMLDivElement>();
@@ -31,11 +33,13 @@ export function CanvasStage() {
   const background = useEditorStore((s) => s.background);
   const objectIds = useEditorStore((s) => s.objectIds);
   const view = useEditorStore((s) => s.view);
+  const snapEnabled = useEditorStore((s) => s.snapEnabled);
+  const gridSize = useEditorStore((s) => s.gridSize);
   const setStageSize = useEditorStore((s) => s.setStageSize);
   const fitToStage = useEditorStore((s) => s.fitToStage);
   const setView = useEditorStore((s) => s.setView);
   const zoomAtPoint = useEditorStore((s) => s.zoomAtPoint);
-  const selectObject = useEditorStore((s) => s.selectObject);
+  const clearSelection = useEditorStore((s) => s.clearSelection);
   const addIcon = useEditorStore((s) => s.addIcon);
 
   const bgImage = useImageElement(getBackgroundSrc(background.assetId));
@@ -77,7 +81,7 @@ export function CanvasStage() {
 
   const handleStageMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     // A click on empty stage (not on a token) clears the selection.
-    if (!isPanning && e.target === e.target.getStage()) selectObject(null);
+    if (!isPanning && e.target === e.target.getStage()) clearSelection();
   };
 
   const handleStageDragEnd = (e: KonvaEventObject<DragEvent>) => {
@@ -123,7 +127,7 @@ export function CanvasStage() {
         onMouseDown={handleStageMouseDown}
         onDragEnd={handleStageDragEnd}
       >
-        {/* Background: drawn once, never interactive so clicks fall through. */}
+        {/* Background + grid: never interactive, so clicks fall through. */}
         <Layer listening={false}>
           {bgImage && (
             <KonvaImage
@@ -132,13 +136,58 @@ export function CanvasStage() {
               height={background.height}
             />
           )}
+          {snapEnabled && (
+            <GridLines
+              width={background.width}
+              height={background.height}
+              size={gridSize}
+            />
+          )}
         </Layer>
         <Layer>
           {objectIds.map((id) => (
             <ObjectNode key={id} objectId={id} draggable={!isPanning} />
           ))}
+          <SelectionTransformer />
         </Layer>
       </Stage>
     </div>
   );
+}
+
+/** The snapping grid, drawn in native space over the map (plan §2.6). */
+function GridLines({
+  width,
+  height,
+  size,
+}: {
+  width: number;
+  height: number;
+  size: number;
+}) {
+  if (size <= 0) return null;
+  const lines = [];
+  for (let x = size; x < width; x += size) {
+    lines.push(
+      <Line
+        key={`v${x}`}
+        points={[x, 0, x, height]}
+        stroke="#2b3a55"
+        strokeWidth={1}
+        opacity={0.5}
+      />,
+    );
+  }
+  for (let y = size; y < height; y += size) {
+    lines.push(
+      <Line
+        key={`h${y}`}
+        points={[0, y, width, y]}
+        stroke="#2b3a55"
+        strokeWidth={1}
+        opacity={0.5}
+      />,
+    );
+  }
+  return <>{lines}</>;
 }

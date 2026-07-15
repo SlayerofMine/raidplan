@@ -25,3 +25,30 @@ test("adds markers from the palette and deletes via toolbar and keyboard", async
   await page.keyboard.press("Delete");
   await expect(count).toHaveText("9");
 });
+
+test("copy/paste, duplicate and select-all work from the keyboard", async ({
+  page,
+}) => {
+  await page.goto("/plan/local/edit");
+  const count = page.getByTestId("object-count");
+
+  await page.getByRole("button", { name: "Add Marker 1" }).click();
+  await expect(count).toHaveText("1");
+
+  // Copy once, paste twice.
+  await page.keyboard.press("Control+c");
+  await page.keyboard.press("Control+v");
+  await expect(count).toHaveText("2");
+  await page.keyboard.press("Control+v");
+  await expect(count).toHaveText("3");
+
+  // Duplicate acts on the current selection.
+  await page.keyboard.press("Control+d");
+  await expect(count).toHaveText("4");
+
+  // Select-all then delete clears the board.
+  await page.keyboard.press("Control+a");
+  await expect(page.getByTestId("multi-selection")).toContainText("4 objects");
+  await page.keyboard.press("Delete");
+  await expect(count).toHaveText("0");
+});

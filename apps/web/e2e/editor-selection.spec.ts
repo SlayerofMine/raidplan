@@ -40,8 +40,8 @@ test.describe("selection & movement", () => {
 
     const x = page.getByTestId("prop-x");
     const y = page.getByTestId("prop-y");
-    const x0 = Number(await x.textContent());
-    const y0 = Number(await y.textContent());
+    const x0 = Number(await x.inputValue());
+    const y0 = Number(await y.inputValue());
 
     const box = (await page.getByTestId("canvas-container").boundingBox())!;
     const cx = box.x + box.width / 2;
@@ -52,10 +52,10 @@ test.describe("selection & movement", () => {
     await page.mouse.up();
 
     await expect
-      .poll(async () => Number(await x.textContent()))
+      .poll(async () => Number(await x.inputValue()))
       .toBeGreaterThan(x0);
     await expect
-      .poll(async () => Number(await y.textContent()))
+      .poll(async () => Number(await y.inputValue()))
       .toBeGreaterThan(y0);
   });
 });

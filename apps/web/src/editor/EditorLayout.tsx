@@ -1,9 +1,10 @@
 import { CanvasStage } from "./canvas/CanvasStage";
 import { IconPalette } from "./IconPalette";
-import { RightPanel } from "./RightPanel";
+import { PropertiesPanel } from "./PropertiesPanel";
 import { StepStrip } from "./StepStrip";
 import { Toolbar } from "./Toolbar";
 import { useEditorHotkeys } from "./useEditorHotkeys";
+import { useLocalPersistence } from "./useLocalPersistence";
 
 /**
  * The five-region editor shell (plan §1.1): toolbar across the top, palette /
@@ -12,6 +13,7 @@ import { useEditorHotkeys } from "./useEditorHotkeys";
  */
 export function EditorLayout() {
   useEditorHotkeys();
+  useLocalPersistence();
 
   return (
     <div
@@ -36,7 +38,7 @@ export function EditorLayout() {
         <CanvasStage />
       </div>
       <div style={{ gridArea: "props" }} className="min-h-0">
-        <RightPanel />
+        <PropertiesPanel />
       </div>
       <div style={{ gridArea: "steps" }}>
         <StepStrip />
