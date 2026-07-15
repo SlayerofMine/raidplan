@@ -39,24 +39,51 @@ production URL resolves without extra config.
 
 ## 4. Scopes
 
+> **Terminology:** Discord's UI says "server"; its API says "guild". They are
+> the same thing. `DISCORD_GUILD_ID` is your **server** id. Nothing here relates
+> to a WoW guild — that name collision is Discord's fault, not ours.
+
 The app requests only:
 
-- **`identify`** — the Discord user id, username and avatar. That's exactly what
-  the `users` table stores.
-- **`guilds`** — the list of guilds the user belongs to, so we can check they're
-  in _your_ guild before letting them in.
+- **`identify`** — the Discord user id, username and avatar. Exactly what the
+  `users` table stores.
+- **`guilds.members.read`** — the user's membership **of one named server**.
+
+We use `guilds.members.read` rather than the broader `guilds`, which would hand
+us a list of _every_ server the user is in. We only ever need one question
+answered — "is this person on our server?" — so we ask Discord exactly that, via
+`GET /users/@me/guilds/{DISCORD_GUILD_ID}/member`: a member object if they are,
+`404` if they aren't. Nothing about the rest of their Discord life is exposed.
+
+It also returns their **role ids** on that server, which is what lets Discord
+roles drive RaidPlans' owner/editor/viewer without a second lookup.
 
 We deliberately **don't** request `email`: nothing in the schema stores one, and
-every extra scope is another thing members must consent to and another thing to
-leak. There's no scope to select in the portal — the app requests these at
-login; the portal's _URL Generator_ is only a convenience for testing.
+every extra scope is another consent prompt and another thing to leak.
 
-## 5. Your guild id → `DISCORD_GUILD_ID`
+There's nothing to select in the portal — the app requests these at login. (The
+portal's _URL Generator_ is only a convenience for hand-testing.) And still **no
+bot**: this endpoint answers on the user's own token.
+
+## 5. Your server id → `DISCORD_GUILD_ID`
 
 1. Discord (the app) → **Settings → Advanced → Developer Mode: on**.
 2. Right-click your server in the sidebar → **Copy Server ID**.
 
-This gates who may sign in: a Discord account not in this guild is refused.
+This is the gate: an account that isn't on this server is refused at login.
+
+### Optional: mapping Discord roles → RaidPlans roles
+
+Because `guilds.members.read` returns role ids, you can promote officers
+automatically. Both are optional; without them every member of the server gets
+the default role.
+
+```
+# Right-click a role → Copy Role ID (Developer Mode must be on).
+# DISCORD_OWNER_ROLE_IDS=1234,5678     # → RaidPlans "owner"
+# DISCORD_EDITOR_ROLE_IDS=9012         # → RaidPlans "editor"
+# DISCORD_DEFAULT_ROLE=viewer          # everyone else on the server
+```
 
 ## 6. Session secret → `SESSION_SECRET`
 
@@ -94,9 +121,10 @@ Production — `/etc/raidplans/env`, `chmod 600`, owned by the service user
 
 ## Troubleshooting
 
-| Symptom                              | Cause                                                                                             |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| `invalid_redirect_uri`               | The redirect URI doesn't match a portal entry exactly (check scheme/port/trailing slash).         |
-| Login loops back to the landing page | Cookie rejected: in production `BASE_URL` must be `https://…` so the `Secure` cookie is accepted. |
-| `invalid_client`                     | Wrong `DISCORD_CLIENT_SECRET`, or it was reset in the portal after you copied it.                 |
-| Signed in but "not a member"         | `DISCORD_GUILD_ID` is wrong, or the account isn't in that guild.                                  |
+| Symptom                              | Cause                                                                                                           |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `invalid_redirect_uri`               | The redirect URI doesn't match a portal entry exactly (check scheme/port/trailing slash).                       |
+| Login loops back to the landing page | Cookie rejected: in production `BASE_URL` must be `https://…` so the `Secure` cookie is accepted.               |
+| `invalid_client`                     | Wrong `DISCORD_CLIENT_SECRET`, or it was reset in the portal after you copied it.                               |
+| Signed in but "not a member"         | `DISCORD_GUILD_ID` is wrong, or the account isn't on that server (the member lookup 404s).                      |
+| Everyone lands as `viewer`           | No role ids mapped — set `DISCORD_OWNER_ROLE_IDS` / `DISCORD_EDITOR_ROLE_IDS`, or raise `DISCORD_DEFAULT_ROLE`. |
