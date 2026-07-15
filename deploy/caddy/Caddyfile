@@ -14,6 +14,12 @@ raidplans.mamzer.dev {
 	reverse_proxy /trpc/* localhost:4000
 	reverse_proxy /p/* localhost:4000
 
+	# Uploaded maps (plan §4.8). The API serves these from UPLOAD_DIR, checking
+	# the asset exists and setting nosniff. Without this route `try_files` below
+	# would answer with index.html and every custom map would silently fail to
+	# decode.
+	reverse_proxy /uploads/* localhost:4000
+
 	# Everything else is the built SPA. `try_files` gives client-side routing
 	# (deep links like /plan/:id/edit) a working refresh.
 	root * /srv/web

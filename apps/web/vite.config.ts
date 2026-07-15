@@ -25,6 +25,10 @@ export default defineConfig({
       // "/plan/:id/edit" — every editor URL starts with /p — and would send the
       // whole editor to the API.
       "^/p/": { target: "http://localhost:4000", changeOrigin: false },
+      // Uploaded maps are served by the API. Without this the SPA fallback
+      // answers with index.html, and the browser fails to decode HTML as an
+      // image — the upload looks broken even though the file is fine.
+      "^/uploads/": { target: "http://localhost:4000", changeOrigin: false },
     },
   },
   preview: {
