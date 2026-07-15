@@ -25,10 +25,41 @@ runMigrations(db);
 
 const app = createApp({ db, config });
 
-serve({ fetch: app.fetch, port: config.PORT }, (info) => {
+const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
   console.log(
     `raidplans-api listening on http://localhost:${info.port} (auth ${
       config.authEnabled ? "enabled" : "disabled"
     })`,
   );
+});
+
+/**
+ * Say what's wrong instead of emitting twenty lines of Node internals.
+ *
+ * A port clash is the single most common way this fails to start — an earlier
+ * `pnpm dev` that didn't shut down, usually. It matters more than it looks:
+ * `pnpm dev` runs the API and the web app in parallel, so the web server still
+ * comes up, the failure scrolls past, and the app then answers every API call
+ * with an empty 500 from the Vite proxy. Naming the cause here saves debugging
+ * the symptom over there.
+ */
+server.on("error", (error: NodeJS.ErrnoException) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(
+      `\n  Port ${config.PORT} is already in use — RaidPlans' API can't start.\n\n` +
+        `  Usually a previous dev server that didn't exit. Free it with:\n` +
+        `    pkill -f "tsx watch"\n\n` +
+        `  Or run on another port:  PORT=4001 pnpm dev\n` +
+        `  (then set WEB_ORIGIN/Vite's proxy target to match)\n`,
+    );
+    process.exit(1);
+  }
+  if (error.code === "EACCES") {
+    console.error(
+      `\n  Not allowed to bind port ${config.PORT}. Ports below 1024 need root;\n` +
+        `  in production Caddy fronts this service on 80/443 instead (§14).\n`,
+    );
+    process.exit(1);
+  }
+  throw error;
 });

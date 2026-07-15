@@ -36,12 +36,18 @@ deploy/         systemd unit, Caddyfile, env + runbook (Oracle Linux / ARM)
 
 ```bash
 pnpm install        # install workspace deps
-pnpm dev            # run web + api in parallel
+pnpm dev            # run web + api in parallel (api :4000, web :5173)
 pnpm typecheck      # tsc across all packages
 pnpm lint           # eslint across the repo
 pnpm test           # vitest unit/component suites
 pnpm build          # build web (static) + api (dist/server.js)
 ```
+
+`pnpm dev` starts both servers in parallel, so if the **API** fails the web app
+still comes up and every request answers with an empty 500 from the Vite proxy
+(which surfaces as a JSON parse error in the console). Check the terminal for
+`raidplans-api listening on :4000`. The usual cause is a previous dev server
+that didn't exit — `pkill -f "tsx watch"` clears it.
 
 End-to-end tests (Playwright) run separately and need browser binaries:
 
