@@ -1,7 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ES2022"],
+    // DOM is here for the E2E specs: `addInitScript`/`evaluate` callbacks are
+    // serialized and run inside the browser, so they legitimately touch
+    // `window`/`localStorage` even though the runner itself is Node.
+    "lib": ["ES2022", "DOM"],
     "types": ["node"]
   },
   "include": ["vite.config.ts", "playwright.config.ts", "e2e"]

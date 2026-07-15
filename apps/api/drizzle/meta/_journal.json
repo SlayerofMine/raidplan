@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1784146204876,
+      "tag": "0000_supreme_grim_reaper",
+      "breakpoints": true
+    }
+  ]
+}
