@@ -88,11 +88,11 @@ export function createUploadRoutes({ db, config, getUserId }: UploadDeps) {
   /**
    * Serve an upload.
    *
-   * Looked up by **asset id in the database**, not by joining the request path
-   * onto a directory — that's what makes path traversal impossible rather than
-   * merely filtered. The content type comes from the stored record, and
-   * `Content-Disposition: attachment` plus `nosniff` mean a browser will never
-   * execute whatever it finds.
+   * Looked up **via the database**, not by joining the request path onto a
+   * directory — that's what makes path traversal impossible rather than merely
+   * filtered. The content type is derived from the extension *we* assigned at
+   * upload (never the client's), and `nosniff` stops a browser second-guessing
+   * it and executing what it finds.
    *
    * In production Caddy can serve this directory directly; this keeps `pnpm dev`
    * working without one.
