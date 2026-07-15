@@ -33,6 +33,16 @@ export function HomePage() {
           {session.status === "loading" && (
             <span className="text-sm text-neutral-500">…</span>
           )}
+          {session.status === "unreachable" && (
+            <button
+              type="button"
+              onClick={session.refresh}
+              data-testid="session-retry"
+              className="rounded border border-panelborder px-3 py-1 text-sm text-neutral-400 hover:border-accent"
+            >
+              Retry
+            </button>
+          )}
           {session.status === "anonymous" && (
             <a
               href={loginUrl("/")}
@@ -54,13 +64,23 @@ export function HomePage() {
         </div>
       </header>
 
+      {session.status === "unreachable" && (
+        <p
+          data-testid="api-unreachable"
+          className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-300"
+        >
+          Can&apos;t reach the RaidPlans server, so signing in and saved plans
+          are unavailable. The offline plan below still works.
+        </p>
+      )}
+
       {session.status === "signedIn" ? (
         <PlanList />
-      ) : (
+      ) : session.status === "anonymous" ? (
         <p className="text-sm text-neutral-500">
           Sign in with Discord to save plans and share them with your guild.
         </p>
-      )}
+      ) : null}
 
       <section className="border-t border-panelborder pt-4">
         <h2 className="text-sm font-semibold text-neutral-300">Offline plan</h2>

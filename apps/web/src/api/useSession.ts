@@ -9,14 +9,17 @@ export interface Session {
 export type SessionState =
   | { status: "loading" }
   | { status: "anonymous" }
-  | { status: "signedIn"; session: Session };
+  | { status: "signedIn"; session: Session }
+  /** The API couldn't be reached — which is *not* the same as being signed out. */
+  | { status: "unreachable" };
 
 /**
  * Who is signed in (plan §10).
  *
  * `me.get` is protected, so UNAUTHORIZED is the *expected* answer for a signed-
- * out visitor, not an error to surface — anything else is a real failure and is
- * logged rather than silently treated as "signed out".
+ * out visitor. Anything else — the API down, a proxy error, a non-JSON response
+ * — is a different situation and must not be reported as "signed out": offering
+ * a sign-in button that cannot work is worse than saying what's wrong.
  */
 export function useSession(): SessionState & { refresh: () => void } {
   const [state, setState] = useState<SessionState>({ status: "loading" });
@@ -31,10 +34,18 @@ export function useSession(): SessionState & { refresh: () => void } {
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        if (!isUnauthorized(error)) {
-          console.error("Failed to load session", error);
+        if (isUnauthorized(error)) {
+          setState({ status: "anonymous" });
+          return;
         }
-        setState({ status: "anonymous" });
+        // In dev this is nearly always the API not running: `pnpm dev` starts
+        // both servers in parallel, and if the API fails to bind the Vite proxy
+        // answers with an empty 500 that surfaces as a JSON parse error.
+        console.error(
+          "Could not reach the RaidPlans API. Is it running on :4000? (`pnpm dev` starts it alongside the web app.)",
+          error,
+        );
+        setState({ status: "unreachable" });
       });
     return () => {
       cancelled = true;

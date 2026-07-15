@@ -27,6 +27,18 @@ export default defineConfig({
       "^/p/": { target: "http://localhost:4000", changeOrigin: false },
     },
   },
+  preview: {
+    /**
+     * Vite's preview server inherits `server.proxy` by default. Undo that.
+     *
+     * Two reasons. It's more faithful: in production Caddy does the proxying
+     * and Vite isn't in the request path at all. And it keeps the E2E suite
+     * hermetic — otherwise the tests quietly talk to whatever dev API happens
+     * to be listening on :4000, so they'd pass or fail depending on the
+     * developer's local state, and could write to a real dev database.
+     */
+    proxy: {},
+  },
   test: {
     environment: "jsdom",
     globals: true,

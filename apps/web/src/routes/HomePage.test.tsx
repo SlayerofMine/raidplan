@@ -63,6 +63,43 @@ describe("HomePage — signed out", () => {
   });
 });
 
+describe("HomePage — API unreachable", () => {
+  /** What an empty 500 from the dev proxy actually looks like to the client. */
+  const parseFailure = () => new Error("Unexpected end of JSON input"); // no `data.code`
+
+  it("says the server is unreachable instead of pretending you're signed out", async () => {
+    // Offering a sign-in button that cannot possibly work is worse than saying
+    // what's wrong — this is what an unstarted API looks like in dev.
+    meGet.mockRejectedValue(parseFailure());
+    renderPage();
+
+    expect(await screen.findByTestId("api-unreachable")).toBeInTheDocument();
+    expect(screen.queryByTestId("sign-in")).not.toBeInTheDocument();
+  });
+
+  it("still offers the offline plan, which doesn't need the server", async () => {
+    meGet.mockRejectedValue(parseFailure());
+    renderPage();
+    await screen.findByTestId("api-unreachable");
+    expect(
+      screen.getByRole("link", { name: /offline editor/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not try to list plans", async () => {
+    meGet.mockRejectedValue(parseFailure());
+    renderPage();
+    await screen.findByTestId("api-unreachable");
+    expect(planList).not.toHaveBeenCalled();
+  });
+
+  it("offers a retry", async () => {
+    meGet.mockRejectedValue(parseFailure());
+    renderPage();
+    expect(await screen.findByTestId("session-retry")).toBeInTheDocument();
+  });
+});
+
 describe("HomePage — signed in", () => {
   beforeEach(() => {
     meGet.mockResolvedValue({ userId: "u1", roles: {} });
