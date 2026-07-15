@@ -128,6 +128,13 @@ Production — `/etc/raidplans/env`, `chmod 600`, owned by the service user
   silently treats everyone as anonymous is worse than one that won't boot.
 - `GET /healthz` reports `authEnabled`, so you can confirm the service picked
   the config up: `curl -s localhost:4000/healthz`.
+- **To sign in, open <http://localhost:4000/api/login>** — it redirects you to
+  Discord and back. `?next=/plan/local/edit` chooses where you land afterwards;
+  <http://localhost:4000/api/logout> signs out.
+
+  Don't navigate to `/api/auth/sign-in/social` directly: better-auth's own
+  endpoint is **POST-only** and answers with a URL for a client to redirect to,
+  so a browser GET correctly 404s. `/api/login` is the linkable wrapper.
 
 ## Troubleshooting
 

@@ -51,6 +51,52 @@ export function createApp({ db, config, getUserId, fetchImpl }: AppDeps) {
   // which is why the callback URL registered with Discord resolves in prod.
   if (auth) {
     app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+
+    /**
+     * Browser-navigable sign-in.
+     *
+     * better-auth's own `sign-in/social` is POST-only and answers with a URL
+     * for a client to redirect to — which is fine for a fetch-based login
+     * button, but means there's nothing you can simply *link to* or paste in an
+     * address bar. This is that link: it performs the POST server-side and
+     * follows the redirect itself.
+     *
+     * `?next=` chooses where the user lands afterwards.
+     */
+    app.get("/api/login", async (c) => {
+      const next = c.req.query("next") ?? "/";
+      const { headers, response } = await auth.api.signInSocial({
+        body: { provider: "discord", callbackURL: next },
+        returnHeaders: true,
+      });
+      if (!response?.url) {
+        return c.json({ error: "Discord sign-in is unavailable." }, 500);
+      }
+      const redirect = c.redirect(response.url, 302);
+      // Carry over anything better-auth set (OAuth state, PKCE) or the
+      // callback will reject the round-trip.
+      for (const [key, value] of headers.entries()) {
+        if (key.toLowerCase() === "set-cookie") {
+          redirect.headers.append("set-cookie", value);
+        }
+      }
+      return redirect;
+    });
+
+    /** Browser-navigable sign-out, for the same reason. */
+    app.get("/api/logout", async (c) => {
+      const { headers } = await auth.api.signOut({
+        headers: c.req.raw.headers,
+        returnHeaders: true,
+      });
+      const redirect = c.redirect(c.req.query("next") ?? "/", 302);
+      for (const [key, value] of headers.entries()) {
+        if (key.toLowerCase() === "set-cookie") {
+          redirect.headers.append("set-cookie", value);
+        }
+      }
+      return redirect;
+    });
   }
 
   const resolveUserId =

@@ -53,6 +53,43 @@ describe("auth routes are mounted", () => {
   });
 });
 
+describe("GET /api/login — the browser-navigable entry point", () => {
+  it("redirects a plain browser navigation to Discord", async () => {
+    // better-auth's own sign-in/social is POST-only, so there is nothing to
+    // link to or paste in an address bar without this.
+    const res = await app().request("/api/login");
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("location")!);
+    expect(location.origin + location.pathname).toBe(
+      "https://discord.com/api/oauth2/authorize",
+    );
+    expect(location.searchParams.get("scope")).toContain("guilds.members.read");
+  });
+
+  it("carries better-auth's cookies so the callback isn't rejected", async () => {
+    // The OAuth state/PKCE cookies must survive the redirect or the round-trip
+    // fails at the callback.
+    const res = await app().request("/api/login");
+    expect(res.headers.get("set-cookie")).toBeTruthy();
+  });
+
+  it("honours ?next= for where to land afterwards", async () => {
+    const res = await app().request("/api/login?next=/plan/local/edit");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("discord.com");
+  });
+
+  it("is not mounted when Discord isn't configured", async () => {
+    expect((await app(loadConfig({})).request("/api/login")).status).toBe(404);
+  });
+
+  it("GET /api/logout redirects back without a session", async () => {
+    const res = await app().request("/api/logout");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/");
+  });
+});
+
 describe("the Discord authorization URL", () => {
   it("points at Discord's OAuth endpoint with our client id", async () => {
     const url = await authorizeUrl();
