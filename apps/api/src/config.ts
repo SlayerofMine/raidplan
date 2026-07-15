@@ -23,6 +23,8 @@ const ConfigSchema = z.object({
    */
   WEB_ORIGIN: z.url().optional(),
   DATABASE_PATH: z.string().min(1).default("./data/app.db"),
+  /** Where uploaded backgrounds are written (plan §4.8 / §14). */
+  UPLOAD_DIR: z.string().min(1).default("./data/uploads"),
 
   // Auth (plan §10). Optional so the API can boot for local canvas work
   // before Discord credentials exist; `authEnabled` reports whether it's live.

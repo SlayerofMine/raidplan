@@ -7,6 +7,7 @@ import { viewerFor } from "./auth/session.js";
 import type { Viewer } from "./auth/access.js";
 import type { Fetch } from "./auth/discordIdentity.js";
 import { createShareRoutes } from "./og/shareRoutes.js";
+import { createUploadRoutes } from "./uploads/uploadRoutes.js";
 import { appRouter } from "./trpc/appRouter.js";
 
 export interface AppDeps {
@@ -124,6 +125,9 @@ export function createApp({ db, config, getUserId, fetchImpl }: AppDeps) {
     "/",
     createShareRoutes({ db, config, getUserId: resolveUserId, viewerFor }),
   );
+
+  // Custom background uploads (plan §4.8).
+  app.route("/", createUploadRoutes({ db, config, getUserId: resolveUserId }));
 
   app.use(
     "/trpc/*",

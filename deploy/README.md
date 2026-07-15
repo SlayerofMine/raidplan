@@ -94,8 +94,9 @@ journalctl -u raidplans-api -f                    # logs (pino → journald)
 
 The DB is one file. Replicate continuously with **litestream** → OCI Object
 Storage (S3-compatible), or a nightly `sqlite3 app.db '.backup backup.db'`
-copied off-box. Back up `/var/lib/raidplans/uploads` too. **Test restore before
-go-live.**
+copied off-box. Back up `/var/lib/raidplans/uploads` too — uploaded backgrounds
+live on disk, and the database only stores their paths, so a DB-only restore
+leaves every custom map broken. **Test restore before go-live.**
 
 > Phase 0 scope: this repo ships the configs and this runbook. Actual VM
 > provisioning happens on the Oracle host and is not exercised by CI.
