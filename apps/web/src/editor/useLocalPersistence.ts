@@ -15,13 +15,13 @@ export const AUTOSAVE_DELAY_MS = 1000;
  * (plan §8.1/§8.8). Only document changes are saved — camera and selection
  * churn is ignored by comparing the (immer-stable) document slices.
  */
-export function useLocalPersistence(): void {
+export function useLocalPersistence(enabled = true): void {
   const restored = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout>>();
 
   // Restore once, before the first autosave can run.
   useEffect(() => {
-    if (restored.current) return;
+    if (!enabled || restored.current) return;
     restored.current = true;
     const saved = loadPlan();
     if (saved) {
@@ -29,9 +29,10 @@ export function useLocalPersistence(): void {
       // Undo must not be able to step back across a load.
       clearHistory();
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     const unsubscribe = useEditorStore.subscribe((state, prev) => {
       const documentUnchanged =
         state.objects === prev.objects &&
@@ -52,5 +53,5 @@ export function useLocalPersistence(): void {
       clearTimeout(timer.current);
       unsubscribe();
     };
-  }, []);
+  }, [enabled]);
 }

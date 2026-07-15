@@ -1,17 +1,115 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { HomePage } from "./HomePage";
+import { LOCAL_PLAN_ID } from "../editor/planScope";
 
-describe("HomePage", () => {
-  it("renders the title and a link into the editor", () => {
-    render(<HomePage />, { wrapper: MemoryRouter });
+/**
+ * The tRPC client is a Proxy — its methods don't physically exist until called,
+ * so they can't be spied on. Mock the module instead.
+ */
+vi.mock("../api/client", () => {
+  const code = (e: unknown) =>
+    (e as { data?: { code?: string } } | undefined)?.data?.code;
+  return {
+    api: {
+      me: { get: { query: vi.fn() } },
+      plan: { list: { query: vi.fn() }, create: { mutate: vi.fn() } },
+    },
+    errorCode: code,
+    isUnauthorized: (e: unknown) => code(e) === "UNAUTHORIZED",
+    isConflict: (e: unknown) => code(e) === "CONFLICT",
+  };
+});
+
+const { api } = await import("../api/client");
+const meGet = vi.mocked(api.me.get.query);
+const planList = vi.mocked(api.plan.list.query);
+
+/** A tRPC-shaped rejection, as the client surfaces it. */
+function trpcError(code: string) {
+  return Object.assign(new Error(code), { data: { code } });
+}
+
+const renderPage = () => render(<HomePage />, { wrapper: MemoryRouter });
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("HomePage — signed out", () => {
+  beforeEach(() => {
+    // `me.get` is protected: UNAUTHORIZED is the normal signed-out answer.
+    meGet.mockRejectedValue(trpcError("UNAUTHORIZED"));
+  });
+
+  it("offers a Discord sign-in", async () => {
+    renderPage();
+    const link = await screen.findByTestId("sign-in");
+    expect(link).toHaveAttribute("href", expect.stringContaining("/api/login"));
+  });
+
+  it("still offers the offline editor without an account", async () => {
+    renderPage();
+    // The whole point of the local plan: usable with no sign-in at all.
+    const link = await screen.findByRole("link", { name: /offline editor/i });
+    expect(link).toHaveAttribute("href", `/plan/${LOCAL_PLAN_ID}/edit`);
+  });
+
+  it("does not try to list plans when signed out", async () => {
+    renderPage();
+    await screen.findByTestId("sign-in");
+    expect(planList).not.toHaveBeenCalled();
+  });
+});
+
+describe("HomePage — signed in", () => {
+  beforeEach(() => {
+    meGet.mockResolvedValue({ userId: "u1", roles: {} });
+  });
+
+  const summary = (over: Record<string, unknown> = {}) =>
+    ({
+      id: "p1",
+      title: "Mythic Council",
+      slug: "abcdefghij",
+      raid: "",
+      ownerId: "u1",
+      guildId: null,
+      visibility: "private",
+      thumbnailUrl: null,
+      updatedAt: 0,
+      ...over,
+    }) as never;
+
+  it("lists the user's plans, linking to the editor", async () => {
+    planList.mockResolvedValue([summary()]);
+    renderPage();
+
+    expect(await screen.findByText("Mythic Council")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /raidplans/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /open editor/i })).toHaveAttribute(
-      "href",
-      "/plan/local/edit",
+      screen.getByRole("link", { name: /Mythic Council/ }),
+    ).toHaveAttribute("href", "/plan/p1/edit");
+    expect(screen.getByTestId("sign-out")).toBeInTheDocument();
+  });
+
+  it("shows an empty state rather than nothing", async () => {
+    planList.mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByTestId("plans-empty")).toBeInTheDocument();
+  });
+
+  it("surfaces a failure to load plans instead of spinning forever", async () => {
+    planList.mockRejectedValue(trpcError("INTERNAL_SERVER_ERROR"));
+    renderPage();
+    expect(await screen.findByTestId("plans-error")).toBeInTheDocument();
+  });
+
+  it("offers to create a plan", async () => {
+    planList.mockResolvedValue([]);
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByTestId("new-plan")).toBeInTheDocument(),
     );
   });
 });

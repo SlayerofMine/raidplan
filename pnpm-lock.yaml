@@ -102,6 +102,9 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.11.2
         version: 3.14.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@trpc/client':
+        specifier: ^11.0.0-rc.660
+        version: 11.18.0(@trpc/server@11.18.0(typescript@5.9.3))(typescript@5.9.3)
       gsap:
         specifier: ^3.12.5
         version: 3.15.0
@@ -133,6 +136,9 @@ importers:
       '@playwright/test':
         specifier: ^1.49.1
         version: 1.61.1
+      '@raidplan/api':
+        specifier: workspace:*
+        version: link:../api
       '@testing-library/jest-dom':
         specifier: ^6.6.3
         version: 6.9.1
@@ -1441,6 +1447,13 @@ packages:
     engines: {node: '>=12', npm: '>=6'}
     peerDependencies:
       '@testing-library/dom': '>=7.21.4'
+
+  '@trpc/client@11.18.0':
+    resolution: {integrity: sha512-wOqeg3Fvl25V1ZisQhUD3K8G60ZJDlSGJNSyeXrLH24xAo5w6GSR2Kzb1cSNY9Y+IQ2YZvYGZstBU+V/ulo/ow==}
+    hasBin: true
+    peerDependencies:
+      '@trpc/server': 11.18.0
+      typescript: '>=5.7.2'
 
   '@trpc/server@11.18.0':
     resolution: {integrity: sha512-JAvXOuNTxgXjIDfQaOvDq1j66LMNfDJUH1IU7Slfn8EvRv2EkH6ehu3A7zpYhjO0syHHiYg77v2lG2JFJgvw7Q==}
@@ -4231,6 +4244,11 @@ snapshots:
   '@testing-library/user-event@14.6.1(@testing-library/dom@10.4.1)':
     dependencies:
       '@testing-library/dom': 10.4.1
+
+  '@trpc/client@11.18.0(@trpc/server@11.18.0(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      '@trpc/server': 11.18.0(typescript@5.9.3)
+      typescript: 5.9.3
 
   '@trpc/server@11.18.0(typescript@5.9.3)':
     dependencies:

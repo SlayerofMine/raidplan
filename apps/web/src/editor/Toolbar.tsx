@@ -12,7 +12,7 @@ import { downloadPlan, parsePlanJson } from "./planFile";
  * readout — the readout gives the E2E suite a DOM-observable signal, since
  * canvas pixels aren't queryable.
  */
-export function Toolbar() {
+export function Toolbar({ status }: { status?: React.ReactNode }) {
   const objectCount = useEditorStore((s) => s.objectIds.length);
   const hasSelection = useEditorStore((s) => s.selectedIds.length > 0);
   const title = useEditorStore((s) => s.title);
@@ -158,9 +158,12 @@ export function Toolbar() {
         data-testid="import-input"
       />
 
-      <div className="ml-auto text-sm text-neutral-400">
-        <span data-testid="object-count">{objectCount}</span> object
-        {objectCount === 1 ? "" : "s"}
+      <div className="ml-auto flex items-center gap-3">
+        {status}
+        <span className="text-sm text-neutral-400">
+          <span data-testid="object-count">{objectCount}</span> object
+          {objectCount === 1 ? "" : "s"}
+        </span>
       </div>
     </header>
   );
