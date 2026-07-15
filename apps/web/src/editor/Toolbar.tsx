@@ -1,10 +1,11 @@
-import { useRef, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { Link } from "react-router-dom";
-import { BACKGROUNDS, toBackground } from "@raidplan/shared";
+import { BACKGROUNDS, isUploadedAsset, toBackground } from "@raidplan/shared";
 import { clearHistory, useEditorStore } from "../store/editorStore";
 import { useTemporal } from "../store/useTemporal";
 import { SCALE_MAX, SCALE_MIN } from "./canvas/coords";
 import { downloadPlan, parsePlanJson } from "./planFile";
+import { uploadBackground } from "./uploadBackground";
 
 /**
  * Top toolbar (plan §2). Document actions (title, import/export), history,
@@ -12,7 +13,14 @@ import { downloadPlan, parsePlanJson } from "./planFile";
  * readout — the readout gives the E2E suite a DOM-observable signal, since
  * canvas pixels aren't queryable.
  */
-export function Toolbar({ status }: { status?: React.ReactNode }) {
+export function Toolbar({
+  status,
+  viewHref,
+}: {
+  status?: React.ReactNode;
+  /** Where "Play" goes, or null while a server plan's slug is still loading. */
+  viewHref?: string | null;
+}) {
   const objectCount = useEditorStore((s) => s.objectIds.length);
   const hasSelection = useEditorStore((s) => s.selectedIds.length > 0);
   const title = useEditorStore((s) => s.title);
@@ -34,6 +42,8 @@ export function Toolbar({ status }: { status?: React.ReactNode }) {
 
   const { canUndo, canRedo, undo, redo } = useTemporal();
   const fileInput = useRef<HTMLInputElement>(null);
+  const mapInput = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
 
   const zoomCentre = (factor: number) =>
     zoomAtPoint({ x: stageSize.width / 2, y: stageSize.height / 2 }, factor);
@@ -50,6 +60,23 @@ export function Toolbar({ status }: { status?: React.ReactNode }) {
       window.alert(result.error);
     }
     e.target.value = ""; // let the same file be picked again
+  };
+
+  const handleUploadMap = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    try {
+      setBackground(await uploadBackground(file));
+    } catch (error) {
+      // Phase 5.4 replaces this with a proper toast.
+      window.alert(
+        error instanceof Error ? error.message : "That upload failed.",
+      );
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -114,7 +141,26 @@ export function Toolbar({ status }: { status?: React.ReactNode }) {
             {b.name}
           </option>
         ))}
+        {/* An uploaded map isn't in the bundled list, but the picker still has
+            to show what's actually selected. */}
+        {isUploadedAsset(backgroundId) && (
+          <option value={backgroundId}>Uploaded map</option>
+        )}
       </select>
+
+      <Btn
+        onClick={() => mapInput.current?.click()}
+        disabled={uploading}
+        label={uploading ? "Uploading…" : "Upload map"}
+      />
+      <input
+        ref={mapInput}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        onChange={handleUploadMap}
+        className="hidden"
+        data-testid="upload-map-input"
+      />
 
       <Divider />
 
@@ -140,13 +186,23 @@ export function Toolbar({ status }: { status?: React.ReactNode }) {
 
       <Divider />
 
-      <Link
-        to="/view/local"
-        data-testid="open-viewer"
-        className="rounded border border-panelborder px-2 py-1 text-sm hover:border-accent"
-      >
-        Play
-      </Link>
+      {viewHref ? (
+        <Link
+          to={viewHref}
+          data-testid="open-viewer"
+          className="rounded border border-panelborder px-2 py-1 text-sm hover:border-accent"
+        >
+          Play
+        </Link>
+      ) : (
+        <span
+          data-testid="open-viewer-pending"
+          title="Loading the plan…"
+          className="rounded border border-panelborder px-2 py-1 text-sm opacity-40"
+        >
+          Play
+        </span>
+      )}
       <Btn onClick={() => downloadPlan(getPlan())} label="Export" />
       <Btn onClick={() => fileInput.current?.click()} label="Import" />
       <input

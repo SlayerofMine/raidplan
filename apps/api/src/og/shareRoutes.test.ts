@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SCHEMA_VERSION, type Plan } from "@raidplan/shared";
 import { createApp } from "../app.js";
@@ -6,15 +9,32 @@ import type { Db } from "../db/client.js";
 import { users } from "../db/schema.js";
 import { createTestDb } from "../db/testDb.js";
 import { createPlan, saveDoc, setVisibility } from "../plans/planRepo.js";
-import { planDescription, sharePageHtml } from "./shareRoutes.js";
+import {
+  inlineUploadedBackground,
+  planDescription,
+  sharePageHtml,
+} from "./shareRoutes.js";
 import { renderPlanSvg } from "./renderPlanSvg.js";
 import { renderOgImage } from "./renderOgImage.js";
+import { Resvg } from "@resvg/resvg-js";
 
 const config: Config = loadConfig({
   NODE_ENV: "test",
   BASE_URL: "https://raidplans.mamzer.dev",
 });
 const BACKGROUND = { assetId: "arena", width: 1600, height: 900 };
+
+/**
+ * A real, **opaque** PNG to stand in for an uploaded map. Generated rather than
+ * hard-coded: a transparent one composites to nothing over the dark base and
+ * would make "the map rendered" indistinguishable from "no map".
+ */
+const PNG_2x1 = new Resvg(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4">' +
+    '<rect width="8" height="4" fill="#c0392b"/></svg>',
+)
+  .render()
+  .asPng();
 
 let db: Db;
 let close: () => void;
@@ -155,6 +175,68 @@ describe("GET /p/:slug/og.png — the preview image", () => {
     const a = Buffer.from(await withTokens.arrayBuffer());
     const b = Buffer.from(await blank.arrayBuffer());
     expect(a.length).not.toBe(b.length);
+  });
+});
+
+describe("uploaded backgrounds in the preview", () => {
+  /**
+   * Regression: an upload's assetId is a URL path, and resvg reads no network —
+   * so the preview rendered byte-identically to having no map at all. Tokens
+   * floating on an empty floor, silently.
+   */
+  const uploadedPlan = (assetId: string) =>
+    planDoc({ background: { assetId, width: 8, height: 4 } });
+
+  // Compare *pixels*, not byte length: two different solid colours compress to
+  // PNGs of identical length, so a length check would pass either way.
+  const blank = () => renderOgImage(uploadedPlan("no-such-map"), -1);
+
+  it("renders nothing for an upload without the file inlined", () => {
+    // The bug, pinned: resvg cannot fetch a URL, so the map silently vanishes.
+    const withUpload = renderOgImage(uploadedPlan("/uploads/x.png"), -1);
+    expect(withUpload.equals(blank())).toBe(true);
+  });
+
+  it("renders the map once the file is inlined as a data URI", () => {
+    const inlined = renderOgImage(uploadedPlan("/uploads/x.png"), -1, {
+      backgroundSrc: `data:image/png;base64,${PNG_2x1.toString("base64")}`,
+    });
+    expect(inlined.equals(blank())).toBe(false);
+  });
+
+  it("inlineUploadedBackground reads the stored file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "raidplans-og-"));
+    try {
+      await writeFile(join(dir, "map.png"), PNG_2x1);
+      const src = await inlineUploadedBackground("/uploads/map.png", dir);
+      expect(src?.startsWith("data:image/png;base64,")).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores bundled maps — they already resolve to inline artwork", async () => {
+    expect(await inlineUploadedBackground("arena", "/tmp")).toBeUndefined();
+  });
+
+  it("returns undefined rather than throwing when the file is gone", async () => {
+    // A deleted upload must not 500 the preview.
+    expect(
+      await inlineUploadedBackground("/uploads/missing.png", "/tmp"),
+    ).toBeUndefined();
+  });
+
+  it("cannot be walked out of the uploads directory", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "raidplans-og-"));
+    try {
+      // Even though the id comes from our own route, a stored string must not
+      // be able to assemble a path that escapes.
+      expect(
+        await inlineUploadedBackground("/uploads/../../etc/passwd.png", dir),
+      ).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

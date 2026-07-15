@@ -108,8 +108,32 @@ export function getBackgroundDef(assetId: string): BackgroundDef | undefined {
 }
 
 /** Resolve a background's image `data:` URI by asset id. */
+/**
+ * The prefix an uploaded background's `assetId` carries (plan §4.8).
+ *
+ * A plan's background is either a **bundled map** (`"arena"`, resolved to an
+ * inline SVG data URI) or a **user upload**, whose `assetId` *is* its served
+ * path — `/uploads/<uuid>.png`. Using the path as the id keeps the document
+ * self-contained: a plan can be exported, imported or opened by anyone without
+ * a second lookup to find out where its background lives.
+ */
+export const UPLOAD_ASSET_PREFIX = "/uploads/";
+
+export const isUploadedAsset = (assetId: string): boolean =>
+  assetId.startsWith(UPLOAD_ASSET_PREFIX);
+
+/**
+ * Resolve a background's image source by asset id.
+ *
+ * Returns `undefined` for an id we don't recognise, so a plan referencing a
+ * deleted or unknown map still renders its objects on the empty floor rather
+ * than failing outright.
+ */
 export function getBackgroundSrc(assetId: string): string | undefined {
-  return BY_ID.get(assetId)?.src;
+  const bundled = BY_ID.get(assetId);
+  if (bundled) return bundled.src;
+  // An upload's id is already the URL that serves it.
+  return isUploadedAsset(assetId) ? assetId : undefined;
 }
 
 /** The `Background` document value for a bundled map. */

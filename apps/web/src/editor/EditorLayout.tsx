@@ -1,7 +1,7 @@
 import { AnimationPanel } from "./AnimationPanel";
 import { CanvasStage } from "./canvas/CanvasStage";
 import { IconPalette } from "./IconPalette";
-import { isLocalPlan } from "./planScope";
+import { isLocalPlan, LOCAL_PLAN_ID } from "./planScope";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { SaveStatus } from "./SaveStatus";
 import { StepStrip } from "./StepStrip";
@@ -36,7 +36,18 @@ export function EditorLayout({ planId }: { planId: string }) {
       }}
     >
       <div style={{ gridArea: "toolbar" }}>
-        <Toolbar status={<SaveStatus planId={planId} remote={remote} />} />
+        <Toolbar
+          // The viewer addresses plans by *slug*, not by the id in this URL —
+          // and a server plan's slug is only known once it has loaded.
+          viewHref={
+            isLocalPlan(planId)
+              ? `/view/${LOCAL_PLAN_ID}`
+              : remote?.slug
+                ? `/view/${remote.slug}`
+                : null
+          }
+          status={<SaveStatus planId={planId} remote={remote} />}
+        />
       </div>
       <div style={{ gridArea: "palette" }} className="min-h-0">
         <IconPalette />

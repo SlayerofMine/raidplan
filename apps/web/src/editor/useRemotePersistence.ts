@@ -6,12 +6,21 @@ import { toPlan } from "../store/planSerialization";
 /** Idle delay before an autosave fires (plan §8.8: "1–2 s idle"). */
 export const AUTOSAVE_DELAY_MS = 1000;
 
-export type RemoteStatus =
+export type SaveState =
   | { status: "loading" }
   | { status: "ready" }
   | { status: "saving" }
   | { status: "conflict" }
   | { status: "error"; message: string };
+
+export type RemoteStatus = SaveState & {
+  /**
+   * The plan's share slug, once loaded. The editor addresses plans by id but
+   * the viewer and share links use the slug, so anything linking out of the
+   * editor needs this rather than the id in the URL.
+   */
+  slug: string | null;
+};
 
 /**
  * Server-backed persistence for one plan (plan §4.4).
@@ -27,7 +36,8 @@ export type RemoteStatus =
  */
 /** Pass `null` for the offline plan: the hook still runs, but does nothing. */
 export function useRemotePersistence(planId: string | null): RemoteStatus {
-  const [state, setState] = useState<RemoteStatus>({ status: "loading" });
+  const [state, setState] = useState<SaveState>({ status: "loading" });
+  const [slug, setSlug] = useState<string | null>(null);
   const version = useRef<number | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   /** Set once a save is refused; stops us hammering a doomed write. */
@@ -39,6 +49,7 @@ export function useRemotePersistence(planId: string | null): RemoteStatus {
     let cancelled = false;
     stopped.current = false;
     version.current = null;
+    setSlug(null);
     setState({ status: "loading" });
 
     api.plan.get
@@ -46,6 +57,7 @@ export function useRemotePersistence(planId: string | null): RemoteStatus {
       .then((plan) => {
         if (cancelled) return;
         version.current = plan.version;
+        setSlug(plan.slug);
         useEditorStore.getState().loadPlan(plan.doc);
         // Undo must not be able to step back across the load.
         clearHistory();
@@ -122,5 +134,5 @@ export function useRemotePersistence(planId: string | null): RemoteStatus {
     };
   }, [planId]);
 
-  return state;
+  return { ...state, slug };
 }

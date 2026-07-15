@@ -1,5 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { Hono } from "hono";
-import type { Plan } from "@raidplan/shared";
+import { isUploadedAsset, type Plan } from "@raidplan/shared";
 import { canView } from "../auth/access.js";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
@@ -60,7 +62,12 @@ export function createShareRoutes({
     if (!plan) return c.text("Not found", 404);
 
     // "Step 1" is index 0; a plan with no steps previews its base layout.
-    const png = renderOgImage(plan, plan.steps.length > 0 ? 0 : -1);
+    const png = renderOgImage(plan, plan.steps.length > 0 ? 0 : -1, {
+      backgroundSrc: await inlineUploadedBackground(
+        plan.background.assetId,
+        config.UPLOAD_DIR,
+      ),
+    });
     return c.body(new Uint8Array(png), 200, {
       "content-type": "image/png",
       "cache-control": `public, max-age=${OG_CACHE_SECONDS}`,
@@ -79,6 +86,43 @@ export function createShareRoutes({
   });
 
   return app;
+}
+
+/** Content types we store, keyed by the extension the upload route assigned. */
+const UPLOAD_MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif",
+};
+
+/**
+ * Inline an uploaded background as a data URI, or `undefined` for anything else.
+ *
+ * A bundled map's `assetId` already resolves to inline artwork, but an upload's
+ * is a URL path — and resvg reads no network, so it would silently draw nothing
+ * and the preview would show tokens on an empty floor. Reading the file is the
+ * only way it can appear.
+ *
+ * `basename` is belt-and-braces: the id comes from our own upload route, but a
+ * path assembled from a stored string should never be able to leave the
+ * uploads directory.
+ */
+export async function inlineUploadedBackground(
+  assetId: string,
+  uploadDir: string,
+): Promise<string | undefined> {
+  if (!isUploadedAsset(assetId)) return undefined;
+  const filename = basename(assetId);
+  const mime = UPLOAD_MIME[filename.split(".").pop() ?? ""];
+  if (!mime) return undefined;
+  try {
+    const bytes = await readFile(join(uploadDir, filename));
+    return `data:${mime};base64,${bytes.toString("base64")}`;
+  } catch {
+    // A missing file shouldn't 500 the preview — draw the plan without it.
+    return undefined;
+  }
 }
 
 /** A one-line summary for the unfurl card. */

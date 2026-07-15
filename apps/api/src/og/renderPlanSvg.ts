@@ -118,9 +118,26 @@ function renderObject(object: PlanObject, state: ObjectState): string {
  * 0..n a step. The plan calls for a render of "step 1" (§9), i.e. index 0 when
  * the plan has steps.
  */
-export function renderPlanSvg(plan: Plan, stepIndex = 0): string {
+export interface RenderOptions {
+  /**
+   * Overrides the background source.
+   *
+   * Needed for uploaded maps: their `assetId` is a *URL path* (`/uploads/x.png`)
+   * that only a browser can fetch. resvg reads no network, so the caller inlines
+   * the file as a data URI — otherwise the preview silently renders the tokens
+   * on an empty floor, byte-identical to having no map at all.
+   */
+  backgroundSrc?: string | undefined;
+}
+
+export function renderPlanSvg(
+  plan: Plan,
+  stepIndex = 0,
+  options: RenderOptions = {},
+): string {
   const { width, height } = plan.background;
-  const background = getBackgroundSrc(plan.background.assetId);
+  const background =
+    options.backgroundSrc ?? getBackgroundSrc(plan.background.assetId);
 
   const objects = plan.objects
     // Draw in z-order so the preview stacks like the board does.
