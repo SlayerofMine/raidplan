@@ -10,8 +10,10 @@ import {
   Wedge,
 } from "react-konva";
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
+import type { ObjectType, ShapeKind } from "@raidplan/shared";
 import { getIconById } from "../../assets/icons";
 import { useEditorStore } from "../../store/editorStore";
+import { labelLayout, LABEL_COLOUR, LABEL_FONT_SIZE } from "./objectLabel";
 import { useImageElement } from "./useImageElement";
 
 const DEFAULT_TINT = "#4f9dff";
@@ -160,8 +162,8 @@ function ObjectContent({
   label,
   icon,
 }: {
-  type: string;
-  shape: string | undefined;
+  type: ObjectType;
+  shape: ShapeKind | undefined;
   w: number;
   h: number;
   /** Tint with a fallback applied — safe to use as a stroke/fill. */
@@ -171,21 +173,88 @@ function ObjectContent({
   label: string | undefined;
   icon: HTMLImageElement | undefined;
 }) {
-  switch (type) {
-    case "text":
-      return (
-        <Text
-          text={label ?? "Text"}
-          width={w}
-          height={h}
-          fontSize={Math.max(10, h * 0.6)}
-          fontStyle="bold"
-          fill={colour}
-          align="center"
-          verticalAlign="middle"
-        />
-      );
+  // A text object *is* its label, so it renders the label as its content and
+  // gets no separate one; every other type draws its artwork then the label.
+  if (type === "text") {
+    return (
+      <Text
+        text={label ?? "Text"}
+        width={w}
+        height={h}
+        fontSize={Math.max(10, h * 0.6)}
+        fontStyle="bold"
+        fill={colour}
+        align="center"
+        verticalAlign="middle"
+      />
+    );
+  }
 
+  return (
+    <>
+      <ObjectArtwork
+        type={type}
+        shape={shape}
+        w={w}
+        h={h}
+        colour={colour}
+        tint={tint}
+        icon={icon}
+      />
+      <ObjectLabel type={type} label={label} w={w} h={h} />
+    </>
+  );
+}
+
+/** The object's label, placed per its type (plan §5 — every object may have one). */
+function ObjectLabel({
+  type,
+  label,
+  w,
+  h,
+}: {
+  type: ObjectType;
+  label: string | undefined;
+  w: number;
+  h: number;
+}) {
+  const layout = labelLayout(type, h);
+  if (!label || !layout) return null;
+  return (
+    <Text
+      text={label}
+      x={0}
+      y={layout.y}
+      width={w}
+      height={layout.height}
+      align="center"
+      verticalAlign={layout.verticalAlign}
+      fontSize={LABEL_FONT_SIZE}
+      fill={LABEL_COLOUR}
+      listening={false}
+    />
+  );
+}
+
+/** The visual for an object, chosen by its type (plan §2.4 primitives). */
+function ObjectArtwork({
+  type,
+  shape,
+  w,
+  h,
+  colour,
+  tint,
+  icon,
+}: {
+  type: ObjectType;
+  shape: ShapeKind | undefined;
+  w: number;
+  h: number;
+  colour: string;
+  tint: string | undefined;
+  icon: HTMLImageElement | undefined;
+}) {
+  switch (type) {
     case "arrow":
       return (
         <Arrow
@@ -251,17 +320,6 @@ function ObjectContent({
               radius={Math.min(w, h) / 2 - 2}
               stroke={tint}
               strokeWidth={4}
-              listening={false}
-            />
-          )}
-          {label && (
-            <Text
-              text={label}
-              y={h + 2}
-              width={w}
-              align="center"
-              fontSize={14}
-              fill="#e6e6e6"
               listening={false}
             />
           )}
