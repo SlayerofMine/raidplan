@@ -1,0 +1,23 @@
+[Unit]
+Description=RaidPlans backup (SQLite snapshot + uploads → local block storage)
+Documentation=https://raidplans.mamzer.dev
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=raidplans
+Group=raidplans
+WorkingDirectory=/srv/raidplans
+EnvironmentFile=/etc/raidplans/env
+ExecStart=/srv/raidplans/deploy/backup.sh
+
+# Hardening — mirrors the API unit. Only the state dir is writable.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+StateDirectory=raidplans
+ReadWritePaths=/var/lib/raidplans
+
+[Install]
+WantedBy=multi-user.target

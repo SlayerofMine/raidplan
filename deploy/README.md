@@ -76,6 +76,9 @@ sudo cp deploy/systemd/raidplans-api.service /etc/systemd/system/
 # WoW icon sync (plan §11.1): a oneshot job + a weekly timer.
 sudo cp deploy/systemd/raidplans-icon-sync.service /etc/systemd/system/
 sudo cp deploy/systemd/raidplans-icon-sync.timer /etc/systemd/system/
+# Daily backup (plan §5.6): a oneshot job + a daily timer.
+sudo cp deploy/systemd/raidplans-backup.service /etc/systemd/system/
+sudo cp deploy/systemd/raidplans-backup.timer /etc/systemd/system/
 sudo cp deploy/env.example /etc/raidplans/env   # then edit + chmod 600
 sudo chmod 600 /etc/raidplans/env
 sudo cp deploy/caddy/Caddyfile /etc/caddy/Caddyfile
@@ -121,18 +124,59 @@ curl -fsS https://raidplans.mamzer.dev/           # served SPA over TLS
 journalctl -u raidplans-api -f                    # logs (pino → journald)
 ```
 
-## 6. Backups (Phase 4+)
+## 6. Backups — local block storage (plan §5.6)
 
-The DB is one file. Replicate continuously with **litestream** → OCI Object
-Storage (S3-compatible), or a nightly `sqlite3 app.db '.backup backup.db'`
-copied off-box. Back up `/var/lib/raidplans/uploads` too — uploaded backgrounds
-live on disk, and the database only stores their paths, so a DB-only restore
-leaves every custom map broken. **Test restore before go-live.**
+Backups stay **on the VM's own block volume** (no object storage). A daily timer
+runs `deploy/backup.sh`, which takes a WAL-safe SQLite snapshot (`.backup`, not a
+plain `cp`) plus a tarball of the uploads directory, and prunes anything past the
+retention window.
 
-`/var/lib/raidplans/icons` (synced WoW icons) need not be backed up: a sync
-regenerates them from the source. But restoring the DB without them means every
-synced-icon token is broken until the next sync runs — trigger one after a
-restore, or back the directory up too.
+Needs the sqlite CLI:
 
-> Phase 0 scope: this repo ships the configs and this runbook. Actual VM
-> provisioning happens on the Oracle host and is not exercised by CI.
+```bash
+sudo dnf install -y sqlite
+```
+
+Enable the daily backup (the units were copied in §5):
+
+```bash
+sudo systemctl enable --now raidplans-backup.timer
+sudo systemctl start raidplans-backup.service   # take one now
+ls -lh /var/lib/raidplans/backups               # app-*.db.gz, uploads-*.tar.gz
+```
+
+Tune via `/etc/raidplans/env`: `BACKUP_DIR` (default
+`/var/lib/raidplans/backups`) and `BACKUP_RETENTION_DAYS` (default 14). Point
+`BACKUP_DIR` at a second block volume if you attach one — still no object store.
+
+**What's backed up, and what isn't.** The DB and `UPLOAD_DIR` are — uploaded
+maps are user data the DB only references by path, so a DB-only restore leaves
+every custom map broken. `ICON_DIR` (synced WoW icons) is **not**: a sync
+regenerates it, so re-run the icon sync after a restore rather than paying to
+store tens of thousands of regenerable files.
+
+**Restore:**
+
+```bash
+sudo systemctl stop raidplans-api
+gunzip -c /var/lib/raidplans/backups/app-YYYYmmdd-HHMMSS.db.gz \
+  > /var/lib/raidplans/app.db
+# Drop stale WAL/SHM so SQLite reopens the restored file cleanly.
+sudo rm -f /var/lib/raidplans/app.db-wal /var/lib/raidplans/app.db-shm
+tar -xzf /var/lib/raidplans/backups/uploads-YYYYmmdd-HHMMSS.tar.gz \
+  -C /var/lib/raidplans
+sudo chown -R raidplans:raidplans /var/lib/raidplans
+sudo systemctl start raidplans-api
+sudo systemctl start raidplans-icon-sync.service   # rebuild synced icons
+```
+
+**Test the restore before go-live** — an untested backup isn't one.
+
+> Want continuous, point-in-time recovery without an object store? Run
+> **litestream** with a `file://` replica on the block volume (`db → replica`
+> both local). It's a single arm64 binary. Off-box replication (litestream →
+> S3-compatible) remains available if you ever change your mind about object
+> storage, but nothing here requires it.
+
+> Phase 0 scope: this repo ships the configs, scripts and this runbook. Actual
+> VM provisioning happens on the Oracle host and is not exercised by CI.

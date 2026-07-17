@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily RaidPlans backup (plan §5.6)
+Documentation=https://raidplans.mamzer.dev
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+# Catch up if the box was off at the scheduled time.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
