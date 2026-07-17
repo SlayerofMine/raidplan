@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
 import { assets } from "../db/schema.js";
+import { FixedWindowRateLimiter, rateLimit } from "../middleware/rateLimit.js";
 import {
   MAX_UPLOAD_BYTES,
   readImageSize,
@@ -33,7 +34,10 @@ export interface UploadDeps {
 export function createUploadRoutes({ db, config, getUserId }: UploadDeps) {
   const app = new Hono();
 
-  app.post("/api/upload", async (c) => {
+  // Writes to disk — the most abuse-prone surface (plan §5.5). Per IP.
+  const uploadLimiter = new FixedWindowRateLimiter(30, 60_000);
+
+  app.post("/api/upload", rateLimit(uploadLimiter), async (c) => {
     const userId = await getUserId(c.req.raw);
     if (!userId) return c.json({ error: "Sign in first." }, 401);
 

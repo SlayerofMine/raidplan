@@ -5,6 +5,7 @@ import { IconCatalogQuerySchema } from "@raidplan/shared";
 import type { Viewer } from "../auth/access.js";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
+import { FixedWindowRateLimiter, rateLimit } from "../middleware/rateLimit.js";
 import { createIconCatalogRepo } from "./catalogRepo.js";
 import { isIconAdmin } from "./iconAdmin.js";
 import { buildSyncDeps } from "./syncDeps.js";
@@ -47,6 +48,8 @@ export function createIconRoutes({
 }: IconRouteDeps) {
   const app = new Hono();
   const repo = createIconCatalogRepo(db);
+  // A sync is expensive; cap even admins (plan §5.5).
+  const syncLimiter = new FixedWindowRateLimiter(5, 60_000);
 
   const viewerOf = async (req: Request): Promise<Viewer | null> => {
     const userId = await getUserId(req);
@@ -55,7 +58,7 @@ export function createIconRoutes({
 
   // --- admin: trigger + status ---------------------------------------------
 
-  app.post("/api/admin/icons/sync", async (c) => {
+  app.post("/api/admin/icons/sync", rateLimit(syncLimiter), async (c) => {
     const userId = await getUserId(c.req.raw);
     if (!userId) return c.json({ error: "Sign in first." }, 401);
     const viewer = viewerFor(db, userId);

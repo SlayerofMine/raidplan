@@ -11,6 +11,7 @@ import { createUploadRoutes } from "./uploads/uploadRoutes.js";
 import { createIconRoutes } from "./icons/iconRoutes.js";
 import { appRouter } from "./trpc/appRouter.js";
 import { logger } from "./logger.js";
+import { FixedWindowRateLimiter, rateLimit } from "./middleware/rateLimit.js";
 
 export interface AppDeps {
   db: Db;
@@ -72,6 +73,9 @@ export function createApp({ db, config, getUserId, fetchImpl }: AppDeps) {
   if (auth) {
     app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
+    // Cap sign-in initiations per IP (plan §5.5) — each mints OAuth state.
+    const loginLimiter = new FixedWindowRateLimiter(20, 60_000);
+
     /**
      * Browser-navigable sign-in.
      *
@@ -83,7 +87,7 @@ export function createApp({ db, config, getUserId, fetchImpl }: AppDeps) {
      *
      * `?next=` chooses where the user lands afterwards.
      */
-    app.get("/api/login", async (c) => {
+    app.get("/api/login", rateLimit(loginLimiter), async (c) => {
       // Resolve against the *SPA's* origin, not the API's. They're the same in
       // production, but in development the API has no `/` to land on — sending
       // people there is a 404 immediately after a successful login.

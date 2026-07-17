@@ -102,6 +102,18 @@ describe("createIconRoutes", () => {
       });
       expect(res.status).toBe(202);
     });
+
+    it("rate-limits repeated triggers with a 429 (plan §5.5)", async () => {
+      userId = ADMIN;
+      const routes = app(); // one instance → one limiter (5/min)
+      const fire = () =>
+        routes.request("/api/admin/icons/sync", { method: "POST" });
+
+      for (let i = 0; i < 5; i++) expect((await fire()).status).toBe(202);
+      const limited = await fire();
+      expect(limited.status).toBe(429);
+      expect(limited.headers.get("retry-after")).not.toBeNull();
+    });
   });
 
   describe("GET /api/admin/icons/sync/:runId", () => {
