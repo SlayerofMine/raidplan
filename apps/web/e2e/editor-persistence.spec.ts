@@ -35,7 +35,7 @@ test("export → import round-trips the plan", async ({ page }) => {
 
   // Export writes a .json file.
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export" }).click();
+  await page.getByRole("button", { name: "Export JSON" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("round-trip.json");
   const file = await download.path();

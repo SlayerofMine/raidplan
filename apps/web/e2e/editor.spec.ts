@@ -49,6 +49,21 @@ test("the WoW icon tab mounts and degrades gracefully with no catalog", async ({
   ).toBeVisible();
 });
 
+test("exports the current step as a PNG download", async ({ page }) => {
+  await page.goto("/plan/local/edit");
+  // Put something on the board so the capture isn't an empty floor.
+  await page
+    .getByRole("button", { name: /^Add Marker/ })
+    .first()
+    .click();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Export PNG" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/-base\.png$/);
+});
+
 test("copy/paste, duplicate and select-all work from the keyboard", async ({
   page,
 }) => {

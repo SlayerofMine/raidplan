@@ -4,7 +4,13 @@ import { BACKGROUNDS, isUploadedAsset, toBackground } from "@raidplan/shared";
 import { clearHistory, useEditorStore } from "../store/editorStore";
 import { useTemporal } from "../store/useTemporal";
 import { SCALE_MAX, SCALE_MIN } from "./canvas/coords";
+import { getStageNode } from "./canvas/stageHandle";
 import { downloadPlan, parsePlanJson } from "./planFile";
+import {
+  capturePlanPng,
+  downloadDataUrl,
+  exportStepFileName,
+} from "./pngExport";
 import { uploadBackground } from "./uploadBackground";
 
 /**
@@ -60,6 +66,20 @@ export function Toolbar({
       window.alert(result.error);
     }
     e.target.value = ""; // let the same file be picked again
+  };
+
+  const handleExportPng = () => {
+    const stage = getStageNode();
+    if (!stage) return;
+    const s = useEditorStore.getState();
+    // Snapshot the *current* step; drop the selection so the transformer
+    // handles aren't baked into the image.
+    s.clearSelection();
+    // One frame for Konva to redraw without the handles, then capture.
+    requestAnimationFrame(() => {
+      const url = capturePlanPng(stage, s.background, s.view);
+      downloadDataUrl(url, exportStepFileName(s.title, s.currentStepIndex));
+    });
   };
 
   const handleUploadMap = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -203,7 +223,12 @@ export function Toolbar({
           Play
         </span>
       )}
-      <Btn onClick={() => downloadPlan(getPlan())} label="Export" />
+      <Btn
+        onClick={() => downloadPlan(getPlan())}
+        label="JSON"
+        ariaLabel="Export JSON"
+      />
+      <Btn onClick={handleExportPng} label="PNG" ariaLabel="Export PNG" />
       <Btn onClick={() => fileInput.current?.click()} label="Import" />
       <input
         ref={fileInput}

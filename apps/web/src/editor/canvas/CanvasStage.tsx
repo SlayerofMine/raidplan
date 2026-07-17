@@ -20,6 +20,7 @@ import {
 } from "./marquee";
 import { ObjectNode } from "./ObjectNode";
 import { SelectionTransformer } from "./SelectionTransformer";
+import { setStageNode } from "./stageHandle";
 import { useContainerSize } from "./useContainerSize";
 import { useImageElement } from "./useImageElement";
 
@@ -197,6 +198,8 @@ export function CanvasStage() {
       data-testid="canvas-container"
     >
       <Stage
+        // Register the node for PNG export (plan §5.1).
+        ref={setStageNode}
         width={size.width}
         height={size.height}
         scaleX={view.scale}
