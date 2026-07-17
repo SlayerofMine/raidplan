@@ -37,7 +37,10 @@ export function IconPalette() {
   });
 
   return (
-    <aside className="flex h-full min-h-0 flex-col border-r border-panelborder bg-panel">
+    <aside
+      aria-label="Icons"
+      className="flex h-full min-h-0 flex-col border-r border-panelborder bg-panel"
+    >
       <h2 className="px-3 pt-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
         Icons
       </h2>

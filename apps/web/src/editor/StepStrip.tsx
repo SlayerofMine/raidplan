@@ -21,7 +21,10 @@ export function StepStrip() {
   const isBase = currentStepIndex === BASE_STEP_INDEX;
 
   return (
-    <footer className="flex items-center gap-2 overflow-x-auto border-t border-panelborder bg-panel px-3 py-2">
+    <footer
+      aria-label="Steps"
+      className="flex items-center gap-2 overflow-x-auto border-t border-panelborder bg-panel px-3 py-2"
+    >
       <button
         type="button"
         onClick={() => selectStep(BASE_STEP_INDEX)}

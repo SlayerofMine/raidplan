@@ -34,6 +34,8 @@ export function ViewerStage({ stageRef }: { stageRef: RefObject<StageNode> }) {
   return (
     <div
       ref={containerRef}
+      role="application"
+      aria-label="Plan viewer"
       className="relative h-full w-full overflow-hidden bg-[#0b0d12]"
       data-testid="viewer-canvas"
     >

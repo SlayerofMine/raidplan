@@ -191,6 +191,10 @@ export function CanvasStage() {
   return (
     <div
       ref={containerRef}
+      // A custom canvas widget: label it and let it own the keyboard (plan
+      // §5.3). The board's shortcuts live in `useEditorHotkeys`.
+      role="application"
+      aria-label="Plan canvas"
       className="relative h-full w-full overflow-hidden bg-[#0b0d12]"
       style={{ cursor: isPanning ? "grab" : "default" }}
       onDrop={handleDrop}

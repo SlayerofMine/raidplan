@@ -24,6 +24,13 @@ describe("IconPalette", () => {
     expect(iconButtons()).toHaveLength(ICONS.length);
   });
 
+  it("exposes the palette as a labelled landmark (a11y, plan §5.3)", () => {
+    render(<IconPalette />);
+    expect(
+      screen.getByRole("complementary", { name: "Icons" }),
+    ).toBeInTheDocument();
+  });
+
   it("adds an object to the store when an icon is clicked", async () => {
     const user = userEvent.setup();
     render(<IconPalette />);

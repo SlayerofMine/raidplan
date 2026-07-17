@@ -35,7 +35,7 @@ export function PropertiesPanel() {
   const sendToBack = useEditorStore((s) => s.sendToBack);
 
   return (
-    <section className="flex flex-col">
+    <section aria-label="Properties" className="flex flex-col">
       <h2 className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
         Properties
       </h2>
