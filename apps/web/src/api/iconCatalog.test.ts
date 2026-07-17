@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchIconCatalog, IconCatalogError } from "./iconCatalog";
+import {
+  fetchIconCatalog,
+  IconCatalogError,
+  resolveIcons,
+} from "./iconCatalog";
 
 const page = {
   items: [
@@ -62,5 +66,47 @@ describe("fetchIconCatalog", () => {
   it("rejects a malformed page — the schema is the guard", async () => {
     const fetchImpl = okFetch({ items: [{ id: "x" }], nextCursor: null });
     await expect(fetchIconCatalog({}, fetchImpl)).rejects.toThrow();
+  });
+});
+
+describe("resolveIcons", () => {
+  const entry = (id: string) => ({
+    id,
+    displayName: id,
+    category: "spell" as const,
+    url: `/icons/${id}_56.webp`,
+  });
+
+  it("requests the ids and returns the resolved entries", async () => {
+    const fetchImpl = okFetch({ items: [entry("spell_fire_a")] });
+    const result = await resolveIcons(["spell_fire_a"], fetchImpl);
+
+    expect(result).toEqual([entry("spell_fire_a")]);
+    const [url, init] = calls(fetchImpl)[0]!;
+    expect(url).toContain("/api/icons/resolve?ids=spell_fire_a");
+    expect((init as RequestInit).credentials).toBe("include");
+  });
+
+  it("returns nothing (and makes no request) for an empty id list", async () => {
+    const fetchImpl = okFetch({ items: [] });
+    expect(await resolveIcons([], fetchImpl)).toEqual([]);
+    expect(calls(fetchImpl)).toHaveLength(0);
+  });
+
+  it("chunks large id lists across multiple requests", async () => {
+    const ids = Array.from({ length: 450 }, (_, i) => `icon_${i}`);
+    const fetchImpl = okFetch({ items: [] });
+    await resolveIcons(ids, fetchImpl);
+    // 450 ids / 200-per-request → 3 calls.
+    expect(calls(fetchImpl)).toHaveLength(3);
+  });
+
+  it("throws IconCatalogError on a non-2xx", async () => {
+    const fetchImpl = vi.fn(
+      async () => new Response("", { status: 500 }),
+    ) as unknown as typeof fetch;
+    await expect(resolveIcons(["a"], fetchImpl)).rejects.toBeInstanceOf(
+      IconCatalogError,
+    );
   });
 });

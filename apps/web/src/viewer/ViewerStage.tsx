@@ -4,6 +4,7 @@ import type { Stage as StageNode } from "konva/lib/Stage";
 import { getBackgroundSrc } from "@raidplan/shared";
 import { fitView } from "../editor/canvas/coords";
 import { ObjectNode } from "../editor/canvas/ObjectNode";
+import { SyncedIconResolver } from "../editor/SyncedIconResolver";
 import { useContainerSize } from "../editor/canvas/useContainerSize";
 import { useImageElement } from "../editor/canvas/useImageElement";
 import { useEditorStore } from "../store/editorStore";
@@ -36,6 +37,8 @@ export function ViewerStage({ stageRef }: { stageRef: RefObject<StageNode> }) {
       className="relative h-full w-full overflow-hidden bg-[#0b0d12]"
       data-testid="viewer-canvas"
     >
+      {/* Fetches URLs for synced WoW tokens this plan references. */}
+      <SyncedIconResolver />
       <Stage
         ref={stageRef}
         width={size.width}

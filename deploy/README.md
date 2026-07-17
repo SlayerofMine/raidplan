@@ -88,6 +88,9 @@ sudo systemctl enable --now raidplans-icon-sync.timer   # weekly refresh
 
 ### WoW icon catalog (plan §11.1)
 
+Full walkthrough — source options, the `pack` layout, every trigger and knob:
+**`deploy/populate-icons.md`**. The essentials:
+
 The catalog starts empty. Populate it with a first sync — run the oneshot job
 directly rather than waiting for the timer (a first full pull can take minutes):
 

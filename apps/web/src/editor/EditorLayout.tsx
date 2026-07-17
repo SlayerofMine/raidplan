@@ -4,6 +4,7 @@ import { IconPalette } from "./IconPalette";
 import { isLocalPlan, LOCAL_PLAN_ID } from "./planScope";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { SaveStatus } from "./SaveStatus";
+import { SyncedIconResolver } from "./SyncedIconResolver";
 import { StepStrip } from "./StepStrip";
 import { Toolbar } from "./Toolbar";
 import { useEditorHotkeys } from "./useEditorHotkeys";
@@ -55,6 +56,8 @@ export function EditorLayout({ planId }: { planId: string }) {
       <div style={{ gridArea: "canvas" }} className="min-h-0">
         <CanvasStage />
       </div>
+      {/* Fetches URLs for synced WoW tokens a reopened plan references. */}
+      <SyncedIconResolver />
       <div
         style={{ gridArea: "props" }}
         className="flex min-h-0 flex-col overflow-y-auto border-l border-panelborder bg-panel"

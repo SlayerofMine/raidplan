@@ -1,6 +1,8 @@
 import {
+  IconCatalogEntrySchema,
   IconCatalogPageSchema,
   type IconCatalogCategory,
+  type IconCatalogEntry,
   type IconCatalogPage,
 } from "@raidplan/shared";
 
@@ -39,4 +41,34 @@ export async function fetchIconCatalog(
   });
   if (!res.ok) throw new IconCatalogError(res.status);
   return IconCatalogPageSchema.parse(await res.json());
+}
+
+/** The `/api/icons/resolve` payload is `{ items: [...] }`. */
+const ResolveItemsSchema = IconCatalogEntrySchema.array();
+
+/**
+ * Resolve a plan's stable icon ids to their current URLs (plan §11.1). This is
+ * the open, no-auth counterpart to the search feed — it's how a loaded plan
+ * turns the synced ids it stored back into drawable images, including ids that
+ * were later deprecated. Chunked so a huge plan can't exceed the endpoint's
+ * per-request id cap.
+ */
+const RESOLVE_CHUNK = 200;
+
+export async function resolveIcons(
+  ids: readonly string[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<IconCatalogEntry[]> {
+  const out: IconCatalogEntry[] = [];
+  for (let i = 0; i < ids.length; i += RESOLVE_CHUNK) {
+    const chunk = ids.slice(i, i + RESOLVE_CHUNK);
+    const res = await fetchImpl(
+      `/api/icons/resolve?ids=${encodeURIComponent(chunk.join(","))}`,
+      { credentials: "include" },
+    );
+    if (!res.ok) throw new IconCatalogError(res.status);
+    const body = (await res.json()) as { items?: unknown };
+    out.push(...ResolveItemsSchema.parse(body.items ?? []));
+  }
+  return out;
 }

@@ -14,7 +14,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { ObjectType, ShapeKind } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { selectObjectState } from "../../store/selectors";
-import { resolveIconSrc } from "../iconSrc";
+import { useIconSrc } from "../iconSrc";
 import { labelLayout, LABEL_COLOUR, LABEL_FONT_SIZE } from "./objectLabel";
 import { useImageElement } from "./useImageElement";
 
@@ -50,9 +50,9 @@ export const ObjectNode = memo(function ObjectNode({
   const moveObject = useEditorStore((s) => s.moveObject);
   const updateObject = useEditorStore((s) => s.updateObject);
   // Resolves bundled *and* synced WoW icons (plan §11.1) — a synced token
-  // stores its stable id and its URL is registered as the palette/plan-load
-  // learns it.
-  const icon = useImageElement(resolveIconSrc(object?.iconId));
+  // stores its stable id, and this re-renders once the palette or plan-load
+  // registers its URL.
+  const icon = useImageElement(useIconSrc(object?.iconId));
 
   const drag = useRef<{
     origin: { x: number; y: number };

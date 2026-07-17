@@ -32,3 +32,4 @@ playwright-report/
 # Logs
 *.log
 apps/api/data/uploads/*
+apps/api/data/icons/*
