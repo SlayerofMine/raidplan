@@ -39,7 +39,7 @@ This document is written so that a professional developer **or** another AI agen
 | Repo | **pnpm workspace monorepo** (`apps/web`, `apps/api`, `packages/shared`) | Share the Plan schema (zod) → end‑to‑end types | Single package (fine, less type‑sharing) |
 | Infra | **systemd‑managed Node process + Caddy** on Oracle Linux 10 / ARM — no Docker | Runs the API directly on the VM; Caddy gives automatic HTTPS with near‑zero config; Node/Caddy/SQLite all have first‑class `aarch64` support | Docker (declined) · nginx + certbot |
 
-> Per your calls: **SQLite** (light traffic) and **no Docker** — the API runs as a native process behind Caddy. The two decisions still worth confirming before Phase 4 are the **auth provider** (Discord vs Battle.net vs email) and the **animation model** (steps vs full keyframe timeline). Everything else is easy to swap.
+> Per your calls: **SQLite** (light traffic) and **no Docker** — the API runs as a native process behind Caddy. The decisions still worth confirming before Phase 4: the **auth provider** (Discord vs Battle.net vs email), the **animation model** (steps vs full keyframe timeline), and the **WoW icon source** for the sync service (official Battle.net API vs CASC/TACT extraction vs a mirror — see §11.1). Everything else is easy to swap.
 
 ---
 
@@ -63,6 +63,7 @@ This document is written so that a professional developer **or** another AI agen
 - **better-auth** (Discord OAuth), session cookies
 - `satori` + `@resvg/resvg-js` — OG/preview image generation (preferred on ARM: prebuilt `aarch64` binaries, no system libs; avoid `node-canvas` unless you install its native deps)
 - `pino` (logging), `zod` (validation)
+- `sharp` (image resize → WebP; arm64 prebuilds) — icon sync pipeline (§11.1)
 
 **Shared (`packages/shared`)**
 - The **Plan schema** (zod + inferred TS types), effect/enums, and pure helpers (state resolution). Imported by both web and api.
@@ -263,10 +264,74 @@ Design targets: **60 fps** playback and drag with 50–100 objects; graceful to 
 
 ## 11. Asset / Icon Pipeline
 
-- **Icon manifest** (`packages/shared` or `apps/web/assets/icons.json`): `{ id, category, name, file, tags[] }`. Categories: **class**, **spec**, **role** (tank/heal/dps), **raid markers** (skull/cross/square/moon/star/circle/diamond/triangle), **shapes** (circle/rect/cone/line/arrow), **utility** (numbers, letters, custom).
+Two distinct icon sources feed the palette:
+
+- **A. Bundled app icons** (shipped in the repo, versioned): raid target markers (skull/cross/square/moon/star/circle/diamond/triangle), generic shapes (circle/rect/cone/line/arrow), role icons (tank/heal/dps), UI glyphs. Small, curated, original or clearly‑licensed art. Manifest `{ id, category, name, file, tags[] }` → packed into a **sprite atlas** for the palette + tokens.
+- **B. Synced WoW icon catalog** (dynamic, refreshable): the large native library of spell/ability/item/class/spec icons, kept current with the live game by the **Icon Sync Service** (§11.1). Served from our own storage, searched via an API, referenced from plans by stable id.
 - **Backgrounds:** curated arena/dungeon/raid maps bundled as assets, selectable via the raid/map picker; plus user uploads (Phase 4).
 - **Build step:** generate a **sprite atlas** + preload list from the manifest.
-- **⚠️ Licensing:** WoW class/spell/ability icons and maps are **Blizzard's intellectual property**. For a private, non‑commercial guild tool this is the same territory as existing community sites, but it is legally Blizzard's. Prefer: Blizzard's own **Battle.net API media** where available, clearly‑licensed community packs, or original/CC‑licensed art for anything you redistribute. Keep the manifest source‑attributed so assets can be swapped. Do not sell or publicly redistribute the asset pack.
+- **⚠️ Licensing:** WoW icons/maps are **Blizzard's IP** — see the licensing note at the end of §11.1 for how each source is handled.
+
+### 11.1 WoW Native Icon Sync Service
+
+**Goal:** a refreshable catalog of the icons that exist in WoW, sourced from WoW itself, stored on our infra, exposed to the palette through a search API — with a `POST` endpoint (and a scheduled timer) that "refreshes" the catalog whenever Blizzard ships a new build.
+
+**Two-source model.** The **index** (which icons exist) comes from the community **listfile** (wowdev's `community-listfile.csv`, filtered to `interface/icons/`) — it maps `FileDataID → name` (`spell_fire_fireball02`, `inv_sword_04`, …), is just a text file, and updates every patch. The **image bytes** come from a pluggable **Source Adapter** (below). Plans reference the **stable id**; the adapter is an implementation detail.
+
+**Pipeline**
+
+```mermaid
+flowchart TD
+  Trigger["POST /api/admin/icons/sync  or  systemd timer"] --> Ver
+  Ver["Detect current WoW build (TACT/Ribbit or wago.tools)"] -->|unchanged and not forced| Noop["no-op"]
+  Ver -->|new build| List["Fetch listfile, filter interface icons"]
+  List --> Diff["Diff vs catalog by FileDataID and content hash"]
+  Diff --> Fetch["For new or changed: fetch image via Source Adapter"]
+  Fetch --> Conv["Convert to WebP at 56 and 112 px (sharp)"]
+  Conv --> Store["Upload to OCI Object Storage, content-hashed URL"]
+  Store --> Upsert["Upsert icons row; mark missing as deprecated"]
+  Upsert --> Record["Write icon_sync_runs record"]
+```
+
+**Source adapter (pluggable — pick per environment):**
+
+| Adapter | What it is | Pros | Cons |
+|---|---|---|---|
+| **Battle.net API + Media** | Official Game Data + `/media/...` endpoints | Licensed for non‑commercial fan use (with attribution); clean id↔icon mapping | Keyed by entity (item/spell/…), no bulk "all icons" list; needs a client id/secret |
+| **Blizzard CDN via TACT/CASC** | Extract BLP textures from Blizzard's CDN for the live build | Authoritative, complete, auto‑updates per patch — the "proper" way | Most work: TACT/CASC + BLP→WebP; JS tooling is weak (C#/Python/Go stronger — shell out, or use `wow.export`/CascLib) |
+| **Mirror / wago.tools** | Community datamining site: build info + file access | Simple bulk import; already decoded | Depends on a third party staying current |
+| **Wowhead CDN (by name)** | `wow.zamimg.com/images/wow/icons/large/{name}.jpg` | Trivial per‑name fetch | Hotlinking is against Wowhead's wishes → **cache into our store, never hotlink at runtime** |
+
+**Recommended strategy:** code against a small `IconSource` interface and run **two sources**: (1) **Battle.net API** for the *curated* sets — classes, specs, roles, and any spell/item resolved by id (ships in Phase 2's palette); (2) a **bulk source** for the giant searchable library — start with the *simplest* (mirror/wago.tools or cached Wowhead‑by‑name), keep **TACT/CASC** as the fully‑automated‑per‑patch upgrade. Swapping the bulk source later changes **no plan data and no frontend code**.
+
+**Names → categories & search.** Tokenise the listfile name on `_` to derive a rough **category** (`spell` / `ability` / `inv`→item / `achievement` / `class` / `trade` …) and **search tags** ("fire", "sword", "frost"). Powers palette search with zero manual tagging.
+
+**Catalog schema (SQLite, Drizzle):**
+```
+icons(id TEXT PK,            -- stable slug = icon name, e.g. "spell_fire_fireball02"
+      file_data_id INTEGER,  -- WoW FileDataID (nullable for non-CASC sources)
+      display_name, category, tags TEXT,   -- tags = JSON array
+      url_56 TEXT, url_112 TEXT,            -- our storage URLs (content-hashed, immutable)
+      content_hash, source,                -- source = 'bnet' | 'tact' | 'pack' | 'wowhead'
+      first_seen_build, deprecated INTEGER DEFAULT 0, updated_at)
+icon_sync_runs(id, started_at, finished_at, build, added, updated, removed, status, error)
+```
+
+**Endpoints**
+- `POST /api/admin/icons/sync` — **admin/owner‑gated**; kicks off the job **async** (returns `{ runId }` — a first full pull can run minutes). Body: `{ force?: boolean, source?: 'bnet' | 'tact' | ... }`.
+- `GET /api/admin/icons/sync/:runId` — run status/progress.
+- `GET /api/icons?query=&category=&cursor=` — the palette's search/paginate feed (guild‑readable); returns `{ id, display_name, category, url_56 }[]` + cursor. **Never** dumps 40k rows.
+- Images are static objects on OCI Object Storage / behind Caddy — immutable, long `Cache-Control`.
+
+**Refresh detection & scheduling.** A **systemd timer** (e.g. weekly) hits the same job; it first reads the current build (TACT/Ribbit or wago.tools) and **no‑ops if unchanged** unless `force`. Diffs are **incremental**, so steady‑state refreshes fetch only the handful of icons a patch adds/changes.
+
+**Stability contract (important).** Plans store the **stable icon id** (name/FileDataID), never a URL. Deprecated/removed icons are **retained** (flagged) so historical plans never break. Content‑hashed URLs let browser + CDN cache aggressively.
+
+**Frontend integration.** The palette is a **virtualised grid** backed by `GET /api/icons` (server search + pagination), images `loading="lazy"`. Opening a plan resolves only the ids it actually uses and warms the Konva image cache for those.
+
+**Sizing.** ~40k icons as 56px WebP ≈ a few KB each → well under ~200 MB total; trivial on OCI Object Storage. A curated subset (spell/ability/class/spec) is far smaller.
+
+**⚠️ Licensing (per source).** WoW icons are **Blizzard's IP**. The **official Battle.net API** is the cleanest path (non‑commercial fan use with attribution — per Blizzard's API ToS). CASC/TACT extraction and Wowhead caching are community‑standard datamining but are still Blizzard's assets: keep the tool **private/guild‑gated**, **cache into your own storage** (don't hammer or hotlink third parties at runtime), add **attribution**, and **don't publicly redistribute** the icon pack. Prefer the official API wherever it covers what you need.
 
 ---
 
@@ -293,7 +358,7 @@ Estimates assume **one experienced full‑stack dev**; scale accordingly. Every 
 - **Acceptance:** add 10 icons, drag smoothly, delete; positions stable across zoom/resize.
 
 ### Phase 2 — Full single‑board editor, local persistence (≈ 1–2 weeks)
-- **2.1** Asset pipeline: icon manifest + categories; preloaded image cache / atlas; searchable, **virtualized** palette.
+- **2.1** Asset pipeline: bundled markers/shapes/role icons (manifest + **sprite atlas**) **plus** a curated WoW class/spec icon set (Battle.net API or bundled); preloaded image cache; searchable, **virtualized** palette. *(The full synced catalog lands in 4.9 — the palette API is designed for it now.)*
 - **2.2** `Konva.Transformer`: resize/rotate handles; rotation snap; aspect constraints.
 - **2.3** Properties panel: x/y, size, rotation, opacity, tint, label, lock, z‑order.
 - **2.4** Primitive tools: text labels; shapes (rect/circle/cone); freehand/anchored **arrows & movement paths**.
@@ -323,7 +388,8 @@ Estimates assume **one experienced full‑stack dev**; scale accordingly. Every 
 - **4.6** Public viewer route `/p/:slug` (no login for unlisted/public).
 - **4.7** OG preview image (server render of step 1) + meta tags for **Discord unfurl**.
 - **4.8** Uploads: custom backgrounds → local volume or S3/MinIO; validation & limits.
-- **Acceptance:** two guild members log in via Discord; one creates & shares a plan; the other views it; the link unfurls with an image in Discord.
+- **4.9** WoW Icon Sync Service (§11.1): `icons` + `icon_sync_runs` tables; pluggable `IconSource` adapter (Battle.net API for curated sets; TACT/CASC or a pack for bulk); `POST /api/admin/icons/sync` (async, admin‑gated) + `GET /api/icons` search feed; BLP/JPG→WebP via `sharp`; upload to OCI Object Storage; **systemd timer** for scheduled refresh with incremental build diffing; deprecated‑icon retention.
+- **Acceptance:** two guild members log in via Discord; one creates & shares a plan; the other views it; the link unfurls in Discord. A `POST /api/admin/icons/sync` run populates the WoW icon catalog and the palette searches it.
 
 ### Phase 5 — Polish, export, deploy (≈ 1 week)
 - **5.1** Export: PNG per step (`toDataURL`); optional animated export (canvas `captureStream` → WebM) as nice‑to‑have.

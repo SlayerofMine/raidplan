@@ -25,6 +25,21 @@ const ConfigSchema = z.object({
   DATABASE_PATH: z.string().min(1).default("./data/app.db"),
   /** Where uploaded backgrounds are written (plan §4.8 / §14). */
   UPLOAD_DIR: z.string().min(1).default("./data/uploads"),
+  /** Where synced WoW icons are written/served (plan §11.1). */
+  ICON_DIR: z.string().min(1).default("./data/icons"),
+  /**
+   * Which bulk image source the sync pulls from (plan §11.1). `pack` reads a
+   * local `<ICON_DIR>/pack` directory (no network — the default); `wowhead`
+   * caches Wowhead's icon CDN into our store. TACT/CASC and Battle.net are
+   * future adapters.
+   */
+  ICON_SYNC_SOURCE: z.enum(["pack", "wowhead"]).default("pack"),
+  /**
+   * Discord ids allowed to trigger a sync over HTTP (`POST
+   * /api/admin/icons/sync`). Comma-separated. Empty means no one can trigger it
+   * via HTTP — the systemd timer / CLI still can.
+   */
+  ICON_ADMIN_USER_IDS: z.string().default(""),
 
   // Auth (plan §10). Optional so the API can boot for local canvas work
   // before Discord credentials exist; `authEnabled` reports whether it's live.
@@ -73,6 +88,10 @@ export type Config = z.infer<typeof ConfigSchema> & {
    * lands on a 404 after login: the API has no `/` to redirect them to.
    */
   webOrigin: string;
+  /** Directory the `pack` icon source reads from (`<ICON_DIR>/pack`). */
+  iconPackDir: string;
+  /** Parsed {@link ConfigSchema.ICON_ADMIN_USER_IDS}. */
+  iconAdminUserIds: string[];
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -110,5 +129,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       editorRoleIds: idList(config.DISCORD_EDITOR_ROLE_IDS),
       defaultRole: config.DISCORD_DEFAULT_ROLE,
     },
+    // POSIX join without importing path: config stays dependency-free.
+    iconPackDir: `${config.ICON_DIR.replace(/\/+$/, "")}/pack`,
+    iconAdminUserIds: idList(config.ICON_ADMIN_USER_IDS),
   };
 }

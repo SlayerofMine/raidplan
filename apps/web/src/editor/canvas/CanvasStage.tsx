@@ -11,6 +11,7 @@ import type { PlanObject } from "@raidplan/shared";
 import { getBackgroundSrc } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { isEditableTarget } from "../isEditableTarget";
+import { ICON_DATA_TYPE } from "../iconDrag";
 import { screenToNative, type Point } from "./coords";
 import {
   MARQUEE_THRESHOLD_PX,
@@ -28,7 +29,6 @@ interface Marquee {
   current: Point;
 }
 
-const ICON_DATA_TYPE = "application/x-raidplan-icon";
 const ZOOM_STEP = 1.1;
 
 /**

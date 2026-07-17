@@ -73,6 +73,9 @@ sudo systemctl reload caddy       # only if the Caddyfile changed
 
 ```bash
 sudo cp deploy/systemd/raidplans-api.service /etc/systemd/system/
+# WoW icon sync (plan §11.1): a oneshot job + a weekly timer.
+sudo cp deploy/systemd/raidplans-icon-sync.service /etc/systemd/system/
+sudo cp deploy/systemd/raidplans-icon-sync.timer /etc/systemd/system/
 sudo cp deploy/env.example /etc/raidplans/env   # then edit + chmod 600
 sudo chmod 600 /etc/raidplans/env
 sudo cp deploy/caddy/Caddyfile /etc/caddy/Caddyfile
@@ -80,7 +83,32 @@ sudo cp deploy/caddy/Caddyfile /etc/caddy/Caddyfile
 sudo systemctl daemon-reload
 sudo systemctl enable --now raidplans-api
 sudo systemctl enable --now caddy
+sudo systemctl enable --now raidplans-icon-sync.timer   # weekly refresh
 ```
+
+### WoW icon catalog (plan §11.1)
+
+The catalog starts empty. Populate it with a first sync — run the oneshot job
+directly rather than waiting for the timer (a first full pull can take minutes):
+
+```bash
+sudo systemctl start raidplans-icon-sync.service
+journalctl -u raidplans-icon-sync -f            # [icon-sync] progress + summary
+```
+
+The weekly timer keeps it current; it no-ops when the WoW build is unchanged, so
+it's cheap. To force a full re-fetch (e.g. after switching `ICON_SYNC_SOURCE`),
+run the CLI with `--force`:
+
+```bash
+sudo -u raidplans NODE_ENV=production node \
+  /srv/raidplans/apps/api/dist/jobs/syncIconsCli.js --force
+```
+
+An admin (a Discord id listed in `ICON_ADMIN_USER_IDS`) can also trigger a sync
+from the browser/curl: `POST /api/admin/icons/sync` → `{ runId }`, then poll
+`GET /api/admin/icons/sync/:runId`. Icons are served from `ICON_DIR` at
+`/icons/*` (Caddy proxies it, same as `/uploads/*`).
 
 Verify:
 
@@ -97,6 +125,11 @@ Storage (S3-compatible), or a nightly `sqlite3 app.db '.backup backup.db'`
 copied off-box. Back up `/var/lib/raidplans/uploads` too — uploaded backgrounds
 live on disk, and the database only stores their paths, so a DB-only restore
 leaves every custom map broken. **Test restore before go-live.**
+
+`/var/lib/raidplans/icons` (synced WoW icons) need not be backed up: a sync
+regenerates them from the source. But restoring the DB without them means every
+synced-icon token is broken until the next sync runs — trigger one after a
+restore, or back the directory up too.
 
 > Phase 0 scope: this repo ships the configs and this runbook. Actual VM
 > provisioning happens on the Oracle host and is not exercised by CI.

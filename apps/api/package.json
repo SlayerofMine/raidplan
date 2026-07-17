@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate.ts"
+    "db:migrate": "tsx src/db/migrate.ts",
+    "icons:sync": "tsx --env-file-if-exists=.env src/jobs/syncIconsCli.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
@@ -27,6 +28,7 @@
     "drizzle-orm": "^0.45.2",
     "hono": "^4.6.14",
     "pino": "^9.5.0",
+    "sharp": "^0.34.5",
     "zod": "^4.4.3",
     "@resvg/resvg-js": "^2.6.2"
   },

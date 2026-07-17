@@ -4,7 +4,9 @@ import { defineConfig } from "tsup";
 // the exact path the systemd unit's ExecStart expects
 // (deploy/systemd/raidplans-api.service).
 export default defineConfig({
-  entry: ["src/server.ts"],
+  // The server plus the one-shot icon-sync job the systemd timer runs
+  // (deploy/systemd/raidplans-icon-sync.service → dist/jobs/syncIconsCli.js).
+  entry: ["src/server.ts", "src/jobs/syncIconsCli.ts"],
   format: ["esm"],
   target: "node20",
   outDir: "dist",

@@ -1,9 +1,15 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ICONS } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
 import { IconPalette } from "./IconPalette";
+
+// The WoW grid is server-backed; stub it so the palette's own tests stay
+// hermetic (its behaviour is covered in WowIconGrid.test.tsx).
+vi.mock("./WowIconGrid", () => ({
+  WowIconGrid: () => <div data-testid="wow-grid-stub" />,
+}));
 
 /** Only the icon tiles — excludes the category chips. */
 const iconButtons = () => screen.getAllByRole("button", { name: /^Add / });
@@ -52,5 +58,24 @@ describe("IconPalette", () => {
     await user.type(screen.getByTestId("icon-search"), "zzzz-nope");
     expect(screen.getByTestId("palette-empty")).toBeInTheDocument();
     expect(screen.queryAllByRole("button", { name: /^Add / })).toHaveLength(0);
+  });
+
+  it("defaults to the bundled Tokens tab, not the WoW grid", () => {
+    render(<IconPalette />);
+    expect(iconButtons().length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("wow-grid-stub")).not.toBeInTheDocument();
+  });
+
+  it("switches to the WoW grid and back", async () => {
+    const user = userEvent.setup();
+    render(<IconPalette />);
+
+    await user.click(screen.getByRole("tab", { name: "WoW" }));
+    expect(screen.getByTestId("wow-grid-stub")).toBeInTheDocument();
+    // The bundled search box is gone while the WoW tab is active.
+    expect(screen.queryByTestId("icon-search")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Tokens" }));
+    expect(screen.getByTestId("icon-search")).toBeInTheDocument();
   });
 });

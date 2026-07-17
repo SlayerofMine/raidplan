@@ -26,6 +26,29 @@ test("adds markers from the palette and deletes via toolbar and keyboard", async
   await expect(count).toHaveText("9");
 });
 
+test("the WoW icon tab mounts and degrades gracefully with no catalog", async ({
+  page,
+}) => {
+  await page.goto("/plan/local/edit");
+
+  // Default tab is the bundled tokens — its search box is present.
+  await expect(page.getByTestId("icon-search")).toBeVisible();
+
+  await page.getByRole("tab", { name: "WoW" }).click();
+  // The server-backed search box replaces the bundled one.
+  await expect(page.getByTestId("wow-icon-search")).toBeVisible();
+  await expect(page.getByTestId("icon-search")).toHaveCount(0);
+  // With no API behind the preview server the feed can't load; the tab shows a
+  // message instead of crashing the editor.
+  await expect(page.getByTestId("wow-error")).toBeVisible();
+
+  // And back to the working tokens palette.
+  await page.getByRole("tab", { name: "Tokens" }).click();
+  await expect(
+    page.getByRole("button", { name: /^Add Marker/ }).first(),
+  ).toBeVisible();
+});
+
 test("copy/paste, duplicate and select-all work from the keyboard", async ({
   page,
 }) => {

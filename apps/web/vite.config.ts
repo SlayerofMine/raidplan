@@ -29,6 +29,9 @@ export default defineConfig({
       // answers with index.html, and the browser fails to decode HTML as an
       // image — the upload looks broken even though the file is fine.
       "^/uploads/": { target: "http://localhost:4000", changeOrigin: false },
+      // Synced WoW icons (plan §11.1) — served by the API from ICON_DIR. Same
+      // reason as /uploads: without this the SPA fallback shadows them.
+      "^/icons/": { target: "http://localhost:4000", changeOrigin: false },
     },
   },
   preview: {

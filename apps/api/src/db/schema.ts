@@ -133,3 +133,67 @@ export const assets = sqliteTable("assets", {
   height: integer("height").notNull(),
   createdAt: integer("created_at").notNull().default(now),
 });
+
+/**
+ * The synced WoW icon catalog (plan §11.1). One row per icon that exists in the
+ * game, populated and kept current by the Icon Sync Service.
+ *
+ * `category` is stored as plain text, not a typed enum: the categoriser
+ * (`categorizeIconName`) may gain buckets over time, and a new bucket should
+ * never require a schema migration — the closed set lives in the shared
+ * contract and is enforced when rows are written, not by the column.
+ */
+export const ICON_SOURCES = ["bnet", "tact", "pack", "wowhead"] as const;
+export type IconSourceName = (typeof ICON_SOURCES)[number];
+
+export const icons = sqliteTable(
+  "icons",
+  {
+    /** Stable slug = the WoW icon name, e.g. `spell_fire_fireball02`. */
+    id: text("id").primaryKey(),
+    /** WoW FileDataID; null for name-only sources (Wowhead, a pack). */
+    fileDataId: integer("file_data_id"),
+    displayName: text("display_name").notNull(),
+    category: text("category").notNull(),
+    /** JSON array of free-text search terms derived from the name. */
+    tags: text("tags").notNull().default("[]"),
+    /** Our storage URLs (content-hashed → immutable, cacheable forever). */
+    url56: text("url_56").notNull(),
+    url112: text("url_112").notNull(),
+    /** Hash of the source image bytes; drives the incremental "changed?" diff. */
+    contentHash: text("content_hash").notNull(),
+    source: text("source", { enum: ICON_SOURCES }).notNull(),
+    firstSeenBuild: text("first_seen_build"),
+    /**
+     * Removed-from-game icons are retained and flagged, never deleted, so a
+     * historical plan that references one never renders a broken image (§11.1
+     * "stability contract").
+     */
+    deprecated: integer("deprecated").notNull().default(0),
+    updatedAt: integer("updated_at").notNull().default(now),
+  },
+  (t) => ({
+    categoryIdx: index("icons_category_idx").on(t.category),
+    // Live icons are the common query; keep them cheap to filter.
+    deprecatedIdx: index("icons_deprecated_idx").on(t.deprecated),
+  }),
+);
+
+/** Status of a sync run. */
+export const ICON_SYNC_STATUSES = ["running", "ok", "error"] as const;
+
+/** One audit record per sync attempt (plan §11.1 `icon_sync_runs`). */
+export const iconSyncRuns = sqliteTable("icon_sync_runs", {
+  id: text("id").primaryKey(),
+  startedAt: integer("started_at").notNull().default(now),
+  finishedAt: integer("finished_at"),
+  /** WoW build the run targeted; null if detection failed before diffing. */
+  build: text("build"),
+  added: integer("added").notNull().default(0),
+  updated: integer("updated").notNull().default(0),
+  removed: integer("removed").notNull().default(0),
+  status: text("status", { enum: ICON_SYNC_STATUSES })
+    .notNull()
+    .default("running"),
+  error: text("error"),
+});

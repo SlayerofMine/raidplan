@@ -9,3 +9,6 @@ export * from "./resolve.js";
 export * from "./assets/svg.js";
 export * from "./assets/icons.js";
 export * from "./assets/backgrounds.js";
+// The synced WoW icon catalog contract (plan §11.1). Distinct from the bundled
+// manifest above: this is the shape of the server's searchable icon feed.
+export * from "./iconCatalog.js";

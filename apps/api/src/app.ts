@@ -8,6 +8,7 @@ import type { Viewer } from "./auth/access.js";
 import type { Fetch } from "./auth/discordIdentity.js";
 import { createShareRoutes } from "./og/shareRoutes.js";
 import { createUploadRoutes } from "./uploads/uploadRoutes.js";
+import { createIconRoutes } from "./icons/iconRoutes.js";
 import { appRouter } from "./trpc/appRouter.js";
 
 export interface AppDeps {
@@ -131,6 +132,13 @@ export function createApp({ db, config, getUserId, fetchImpl }: AppDeps) {
 
   // Custom background uploads (plan §4.8).
   app.route("/", createUploadRoutes({ db, config, getUserId: resolveUserId }));
+
+  // WoW icon catalog: sync trigger/status, palette search feed, and serving
+  // (plan §11.1 / §4.9). Caddy proxies /api/* and /icons/* here in production.
+  app.route(
+    "/",
+    createIconRoutes({ db, config, getUserId: resolveUserId, viewerFor }),
+  );
 
   app.use(
     "/trpc/*",

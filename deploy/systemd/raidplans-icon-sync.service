@@ -1,0 +1,34 @@
+[Unit]
+Description=RaidPlans WoW icon catalog sync (plan §11.1)
+Documentation=https://raidplans.mamzer.dev
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# oneshot: run to completion and exit — the timer schedules it, not Restart.
+Type=oneshot
+User=raidplans
+Group=raidplans
+WorkingDirectory=/srv/raidplans
+# Same config as the API: DATABASE_PATH, ICON_DIR, ICON_SYNC_SOURCE, and (for
+# the wowhead source) nothing extra. chmod 600.
+EnvironmentFile=/etc/raidplans/env
+# Reads the current WoW build, diffs the listfile against the catalog, fetches
+# only what changed, converts to WebP and writes it under ICON_DIR. A first run
+# can take minutes; steady-state runs are near-instant when the build is
+# unchanged. Pass --force to re-fetch everything.
+ExecStart=/usr/bin/node /srv/raidplans/apps/api/dist/jobs/syncIconsCli.js
+# A first full pull fetches tens of thousands of icons; give it room.
+TimeoutStartSec=1800
+
+# Hardening — mirrors the API unit. The job only needs the state dir (SQLite +
+# ICON_DIR) writable.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+StateDirectory=raidplans
+ReadWritePaths=/var/lib/raidplans
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=Weekly RaidPlans WoW icon catalog refresh (plan §11.1)
+Documentation=https://raidplans.mamzer.dev
+
+[Timer]
+# Weekly, a few minutes past a quiet hour. The job no-ops when the WoW build
+# hasn't changed, so a frequent schedule is cheap; weekly is plenty to catch a
+# patch within days of it shipping.
+OnCalendar=Mon *-*-* 04:07:00
+# If the box was off at the scheduled time, run once it's back up.
+Persistent=true
+# Avoid every host firing at the same instant (harmless here, good hygiene).
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target
