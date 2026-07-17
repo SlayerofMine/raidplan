@@ -5,7 +5,9 @@ raid/arena plans — drag predefined icons onto a map, arrange them, and animate
 them PowerPoint-style across steps. Deployed at **https://raidplans.mamzer.dev**.
 
 See [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md) for the full design and
-phase plan, and [`deploy/README.md`](./deploy/README.md) for the deploy runbook.
+phase plan, [`deploy/README.md`](./deploy/README.md) for the deploy runbook, and
+[`docs/BUILD_LOG.md`](./docs/BUILD_LOG.md) for the build log & decision record
+(per-phase decisions and the traps hit along the way).
 
 ## Monorepo layout
 
