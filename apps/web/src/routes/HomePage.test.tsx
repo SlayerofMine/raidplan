@@ -142,6 +142,12 @@ describe("HomePage — signed in", () => {
     expect(await screen.findByTestId("plans-empty")).toBeInTheDocument();
   });
 
+  it("shows a loading skeleton while the list is in flight", async () => {
+    planList.mockReturnValue(new Promise(() => {}) as never); // never resolves
+    renderPage();
+    expect(await screen.findByTestId("plans-loading")).toBeInTheDocument();
+  });
+
   it("surfaces a failure to load plans instead of spinning forever", async () => {
     planList.mockRejectedValue(trpcError("INTERNAL_SERVER_ERROR"));
     renderPage();

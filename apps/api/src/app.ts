@@ -10,6 +10,7 @@ import { createShareRoutes } from "./og/shareRoutes.js";
 import { createUploadRoutes } from "./uploads/uploadRoutes.js";
 import { createIconRoutes } from "./icons/iconRoutes.js";
 import { appRouter } from "./trpc/appRouter.js";
+import { logger } from "./logger.js";
 
 export interface AppDeps {
   db: Db;
@@ -34,6 +35,22 @@ export interface AppDeps {
  */
 export function createApp({ db, config, getUserId, fetchImpl }: AppDeps) {
   const app = new Hono();
+
+  // Structured request logging (plan §5.4). Registered first so it wraps every
+  // route; silent under `test` (see logger.ts).
+  app.use("*", async (c, next) => {
+    const start = Date.now();
+    await next();
+    logger.info(
+      {
+        method: c.req.method,
+        path: new URL(c.req.url).pathname,
+        status: c.res.status,
+        ms: Date.now() - start,
+      },
+      "request",
+    );
+  });
 
   // Auth is optional so the API still boots for local canvas work before
   // Discord credentials exist. `loadConfig` refuses this in production.

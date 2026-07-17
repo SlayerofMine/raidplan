@@ -5,6 +5,7 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { openDb } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
+import { logger } from "./logger.js";
 
 /**
  * Process entry point: load config, open and migrate the database, then bind.
@@ -26,10 +27,9 @@ runMigrations(db);
 const app = createApp({ db, config });
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
-  console.log(
-    `raidplans-api listening on http://localhost:${info.port} (auth ${
-      config.authEnabled ? "enabled" : "disabled"
-    })`,
+  logger.info(
+    { port: info.port, authEnabled: config.authEnabled },
+    "raidplans-api listening",
   );
 });
 

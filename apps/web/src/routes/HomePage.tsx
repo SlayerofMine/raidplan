@@ -99,6 +99,27 @@ export function HomePage() {
   );
 }
 
+/** Placeholder cards shown while the plan list loads (plan §5.4). */
+function PlanListSkeleton() {
+  return (
+    <ul
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+      data-testid="plans-loading"
+      aria-hidden="true"
+    >
+      {[0, 1, 2].map((i) => (
+        <li
+          key={i}
+          className="overflow-hidden rounded border border-panelborder"
+        >
+          <div className="aspect-[1200/630] w-full animate-pulse bg-neutral-800" />
+          <div className="m-3 h-4 w-2/3 animate-pulse rounded bg-neutral-800" />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function PlanList() {
   const navigate = useNavigate();
   const [plans, setPlans] = useState<PlanRow[] | null>(null);
@@ -213,7 +234,7 @@ function PlanList() {
           {error}
         </p>
       )}
-      {!plans && !error && <p className="text-sm text-neutral-500">Loading…</p>}
+      {!plans && !error && <PlanListSkeleton />}
       {plans?.length === 0 && (
         <p data-testid="plans-empty" className="text-sm text-neutral-500">
           No plans yet.

@@ -12,6 +12,7 @@ import {
   exportStepFileName,
 } from "./pngExport";
 import { uploadBackground } from "./uploadBackground";
+import { useToast } from "../ui/toastContext";
 
 /**
  * Top toolbar (plan §2). Document actions (title, import/export), history,
@@ -47,6 +48,7 @@ export function Toolbar({
   const getPlan = useEditorStore((s) => s.getPlan);
 
   const { canUndo, canRedo, undo, redo } = useTemporal();
+  const { toast } = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
   const mapInput = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -61,9 +63,9 @@ export function Toolbar({
     if (result.ok) {
       loadPlan(result.plan);
       clearHistory(); // undo must not step back across an import
+      toast("Plan imported.", "success");
     } else {
-      // Phase 5.4 replaces this with a proper toast.
-      window.alert(result.error);
+      toast(result.error, "error");
     }
     e.target.value = ""; // let the same file be picked again
   };
@@ -78,7 +80,9 @@ export function Toolbar({
     // One frame for Konva to redraw without the handles, then capture.
     requestAnimationFrame(() => {
       const url = capturePlanPng(stage, s.background, s.view);
-      downloadDataUrl(url, exportStepFileName(s.title, s.currentStepIndex));
+      const filename = exportStepFileName(s.title, s.currentStepIndex);
+      downloadDataUrl(url, filename);
+      toast(`Exported ${filename}`, "success");
     });
   };
 
@@ -89,10 +93,11 @@ export function Toolbar({
     setUploading(true);
     try {
       setBackground(await uploadBackground(file));
+      toast("Map uploaded.", "success");
     } catch (error) {
-      // Phase 5.4 replaces this with a proper toast.
-      window.alert(
+      toast(
         error instanceof Error ? error.message : "That upload failed.",
+        "error",
       );
     } finally {
       setUploading(false);

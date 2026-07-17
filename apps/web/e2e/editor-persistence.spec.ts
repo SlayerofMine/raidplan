@@ -55,13 +55,15 @@ test("importing a non-plan JSON file is rejected", async ({ page }) => {
   await page.goto("/plan/local/edit");
   await page.getByRole("button", { name: "Add Marker 1" }).click();
 
-  page.on("dialog", (d) => d.dismiss());
   await page.getByTestId("import-input").setInputFiles({
     name: "junk.json",
     mimeType: "application/json",
     buffer: Buffer.from('{"hello":"world"}'),
   });
 
-  // The board is left untouched.
+  // An error toast explains why, and the board is left untouched.
+  await expect(page.getByTestId("toast")).toContainText(
+    /valid RaidPlans plan/i,
+  );
   await expect(page.getByTestId("object-count")).toHaveText("1");
 });
