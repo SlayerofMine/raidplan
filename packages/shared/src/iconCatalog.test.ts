@@ -12,7 +12,8 @@ describe("IconCatalogEntrySchema", () => {
       id: "spell_fire_fireball02",
       displayName: "Fireball",
       category: "spell" as const,
-      url: "/icons/abc123.webp",
+      url56: "/icons/abc123_56.webp",
+      url112: "/icons/abc123_112.webp",
     };
     expect(IconCatalogEntrySchema.parse(entry)).toEqual(entry);
   });
@@ -23,7 +24,8 @@ describe("IconCatalogEntrySchema", () => {
         id: "x",
         displayName: "X",
         category: "mount",
-        url: "/icons/x.webp",
+        url56: "/icons/x_56.webp",
+        url112: "/icons/x_112.webp",
       }),
     ).toThrow();
   });
@@ -34,7 +36,8 @@ describe("IconCatalogEntrySchema", () => {
         id: "",
         displayName: "X",
         category: "misc",
-        url: "/icons/x.webp",
+        url56: "/icons/x_56.webp",
+        url112: "/icons/x_112.webp",
       }),
     ).toThrow();
   });

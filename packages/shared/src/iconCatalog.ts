@@ -40,8 +40,10 @@ export const IconCatalogEntrySchema = z.object({
   id: z.string().min(1),
   displayName: z.string(),
   category: z.enum(ICON_CATALOG_CATEGORIES),
-  /** Our storage URL for the 56px thumbnail — for the palette grid. */
-  url: z.string().min(1),
+  /** 56px thumbnail — the palette grid tiles. */
+  url56: z.string().min(1),
+  /** 112px — what a token draws at on the canvas (crisper when scaled up). */
+  url112: z.string().min(1),
 });
 export type IconCatalogEntry = z.infer<typeof IconCatalogEntrySchema>;
 

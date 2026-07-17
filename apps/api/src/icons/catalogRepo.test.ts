@@ -76,7 +76,8 @@ describe("createIconCatalogRepo", () => {
           id: "spell_fire_fireball02",
           displayName: "Fire Fireball 02",
           category: "spell",
-          url: "/icons/spell_fire_fireball02_56.webp",
+          url56: "/icons/spell_fire_fireball02_56.webp",
+          url112: "/icons/spell_fire_fireball02_112.webp",
         },
       ]);
     });
@@ -86,7 +87,7 @@ describe("createIconCatalogRepo", () => {
       repo.upsertIcon(icon("inv_sword_04", { url56: "/icons/new_56.webp" }));
       const page = repo.search({});
       expect(page.items).toHaveLength(1);
-      expect(page.items[0]?.url).toBe("/icons/new_56.webp");
+      expect(page.items[0]?.url56).toBe("/icons/new_56.webp");
     });
 
     it("filters by category and free-text query", () => {

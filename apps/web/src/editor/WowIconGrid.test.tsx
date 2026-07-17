@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEditorStore } from "../store/editorStore";
 import { WowIconGrid } from "./WowIconGrid";
+import { clearSyncedIconUrls, useSyncedIcons } from "./iconSrc";
 import { fetchIconCatalog, IconCatalogError } from "../api/iconCatalog";
 
 // Mock the network client but keep the real error class for the 401 branch.
@@ -17,15 +18,32 @@ const entry = (id: string, displayName: string) => ({
   id,
   displayName,
   category: "spell" as const,
-  url: `/icons/${id}_56.webp`,
+  url56: `/icons/${id}_56.webp`,
+  url112: `/icons/${id}_112.webp`,
 });
 
 beforeEach(() => {
   useEditorStore.getState().reset();
+  clearSyncedIconUrls();
   mockFetch.mockReset();
 });
 
 describe("WowIconGrid", () => {
+  it("shows the 56px thumbnail but registers the 112px for the canvas", async () => {
+    mockFetch.mockResolvedValueOnce({
+      items: [entry("spell_fire_a", "Fire A")],
+      nextCursor: null,
+    });
+    render(<WowIconGrid />);
+
+    const tile = await screen.findByRole("img", { name: "Fire A" });
+    expect(tile).toHaveAttribute("src", "/icons/spell_fire_a_56.webp");
+    // The canvas resolver gets the larger variant.
+    expect(useSyncedIcons.getState().urls["spell_fire_a"]).toBe(
+      "/icons/spell_fire_a_112.webp",
+    );
+  });
+
   it("renders a tile per icon from the first page", async () => {
     mockFetch.mockResolvedValueOnce({
       items: [entry("spell_fire_a", "Fire A")],

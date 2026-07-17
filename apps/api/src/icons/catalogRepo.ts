@@ -228,6 +228,7 @@ export function createIconCatalogRepo(db: Db): IconCatalogRepo {
           displayName: icons.displayName,
           category: icons.category,
           url56: icons.url56,
+          url112: icons.url112,
         })
         .from(icons)
         .where(and(...filters))
@@ -237,12 +238,7 @@ export function createIconCatalogRepo(db: Db): IconCatalogRepo {
 
       const hasMore = rows.length > limit;
       const page = hasMore ? rows.slice(0, limit) : rows;
-      const items: IconCatalogEntry[] = page.map((r) => ({
-        id: r.id,
-        displayName: r.displayName,
-        category: r.category as IconCatalogEntry["category"],
-        url: r.url56,
-      }));
+      const items: IconCatalogEntry[] = page.map(toEntry);
       return {
         items,
         nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
@@ -257,16 +253,29 @@ export function createIconCatalogRepo(db: Db): IconCatalogRepo {
           displayName: icons.displayName,
           category: icons.category,
           url56: icons.url56,
+          url112: icons.url112,
         })
         .from(icons)
         .where(inArray(icons.id, [...ids]))
         .all();
-      return rows.map((r) => ({
-        id: r.id,
-        displayName: r.displayName,
-        category: r.category as IconCatalogEntry["category"],
-        url: r.url56,
-      }));
+      return rows.map(toEntry);
     },
+  };
+}
+
+/** Map a catalog row to the shared search-feed entry (both thumbnail sizes). */
+function toEntry(row: {
+  id: string;
+  displayName: string;
+  category: string;
+  url56: string;
+  url112: string;
+}): IconCatalogEntry {
+  return {
+    id: row.id,
+    displayName: row.displayName,
+    category: row.category as IconCatalogEntry["category"],
+    url56: row.url56,
+    url112: row.url112,
   };
 }

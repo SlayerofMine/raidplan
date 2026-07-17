@@ -59,7 +59,9 @@ export function WowIconGrid() {
         });
         if (seq !== loadSeq.current) return; // superseded by a newer load
         for (const item of page.items) {
-          registerSyncedIconUrl(item.id, item.url);
+          // The grid tiles show the 56px thumbnail, but a placed token draws at
+          // 112px on the canvas — register the larger one for the resolver.
+          registerSyncedIconUrl(item.id, item.url112);
         }
         setItems((prev) => (reset ? page.items : [...prev, ...page.items]));
         setCursor(page.nextCursor);
@@ -135,7 +137,7 @@ export function WowIconGrid() {
                   className="flex aspect-square items-center justify-center rounded border border-transparent bg-neutral-800/40 p-1 hover:border-accent"
                 >
                   <img
-                    src={icon.url}
+                    src={icon.url56}
                     alt={icon.displayName}
                     loading="lazy"
                     className="pointer-events-none h-full w-full"

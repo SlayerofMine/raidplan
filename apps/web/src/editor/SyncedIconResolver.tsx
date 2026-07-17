@@ -19,7 +19,7 @@ import { registerSyncedIcons, useSyncedIcons } from "./iconSrc";
  * quiesces the moment everything is known. Bundled ids are skipped — they need
  * no server round-trip.
  */
-export function useResolveSyncedIcons(): void {
+function useResolveSyncedIcons(): void {
   const objectIds = useEditorStore((s) => s.objectIds);
   const resolved = useSyncedIcons((s) => s.urls);
 
@@ -38,7 +38,12 @@ export function useResolveSyncedIcons(): void {
     let cancelled = false;
     resolveIcons([...missing])
       .then((entries) => {
-        if (!cancelled) registerSyncedIcons(entries);
+        // The canvas draws tokens at 112px — register the larger variant.
+        if (!cancelled) {
+          registerSyncedIcons(
+            entries.map((e) => ({ id: e.id, url: e.url112 })),
+          );
+        }
       })
       .catch(() => {
         // Offline, or the catalog isn't synced: leave the tokens unresolved

@@ -5,6 +5,8 @@ import { isUploadedAsset, type Plan } from "@raidplan/shared";
 import { canView } from "../auth/access.js";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
+import { createIconCatalogRepo } from "../icons/catalogRepo.js";
+import { inlineSyncedIconsForOg } from "../icons/ogIcons.js";
 import { findPlanRowBySlug, getPlanWithDoc, toAcl } from "../plans/planRepo.js";
 import { isValidSlug } from "../plans/slug.js";
 import { escapeXml } from "./renderPlanSvg.js";
@@ -39,6 +41,7 @@ export function createShareRoutes({
   viewerFor,
 }: ShareDeps) {
   const app = new Hono();
+  const iconRepo = createIconCatalogRepo(db);
 
   /** Load a plan by slug, applying the access rules. */
   const loadShared = async (
@@ -67,6 +70,9 @@ export function createShareRoutes({
         plan.background.assetId,
         config.UPLOAD_DIR,
       ),
+      // Synced WoW tokens live as files under ICON_DIR; inline them or they're
+      // blank in the preview (see inlineSyncedIconsForOg).
+      iconImages: await inlineSyncedIconsForOg(plan, iconRepo, config.ICON_DIR),
     });
     return c.body(new Uint8Array(png), 200, {
       "content-type": "image/png",

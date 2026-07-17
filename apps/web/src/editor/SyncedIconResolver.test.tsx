@@ -51,7 +51,8 @@ describe("SyncedIconResolver", () => {
         id: "spell_fire_fireball02",
         displayName: "Fire",
         category: "spell",
-        url: "/icons/x_56.webp",
+        url56: "/icons/x_56.webp",
+        url112: "/icons/x_112.webp",
       },
     ]);
     useEditorStore
@@ -66,9 +67,10 @@ describe("SyncedIconResolver", () => {
     await waitFor(() =>
       expect(mockResolve).toHaveBeenCalledWith(["spell_fire_fireball02"]),
     );
+    // The canvas draws at 112px, so the 112 URL is what gets registered.
     await waitFor(() =>
       expect(useSyncedIcons.getState().urls["spell_fire_fireball02"]).toBe(
-        "/icons/x_56.webp",
+        "/icons/x_112.webp",
       ),
     );
   });

@@ -11,7 +11,8 @@ const page = {
       id: "spell_fire_a",
       displayName: "Fire A",
       category: "spell",
-      url: "/icons/a_56.webp",
+      url56: "/icons/a_56.webp",
+      url112: "/icons/a_112.webp",
     },
   ],
   nextCursor: null,
@@ -74,7 +75,8 @@ describe("resolveIcons", () => {
     id,
     displayName: id,
     category: "spell" as const,
-    url: `/icons/${id}_56.webp`,
+    url56: `/icons/${id}_56.webp`,
+    url112: `/icons/${id}_112.webp`,
   });
 
   it("requests the ids and returns the resolved entries", async () => {

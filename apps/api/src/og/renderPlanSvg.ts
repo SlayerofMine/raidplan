@@ -35,7 +35,11 @@ export function escapeXml(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
-function renderObject(object: PlanObject, state: ObjectState): string {
+function renderObject(
+  object: PlanObject,
+  state: ObjectState,
+  iconImages: Record<string, string>,
+): string {
   if (!state.visible || state.opacity === 0) return "";
 
   const { x, y, w, h, rotation, opacity } = state;
@@ -78,6 +82,7 @@ function renderObject(object: PlanObject, state: ObjectState): string {
     default: {
       // token / marker / image
       const icon = object.iconId ? getIconById(object.iconId) : undefined;
+      const syncedImage = object.iconId ? iconImages[object.iconId] : undefined;
       if (icon) {
         // Inline the icon's markup rather than `<image href={icon.src}>`:
         // resvg drops <text> inside an embedded SVG image, which would render
@@ -86,6 +91,11 @@ function renderObject(object: PlanObject, state: ObjectState): string {
         body +=
           `<g transform="scale(${w / ICON_VIEWBOX} ${h / ICON_VIEWBOX})">` +
           `${icon.body}</g>`;
+      } else if (syncedImage) {
+        // A synced WoW icon: a raster the caller already transcoded to PNG
+        // (resvg renders PNG, not the WebP we store). Without this a reopened
+        // plan's WoW tokens are blank in the Discord preview.
+        body += `<image href="${syncedImage}" width="${w}" height="${h}"/>`;
       }
       if (object.base.tint) {
         body += `<circle cx="${w / 2}" cy="${h / 2}" r="${Math.min(w, h) / 2 - 2}" fill="none" stroke="${object.base.tint}" stroke-width="4"/>`;
@@ -128,6 +138,15 @@ export interface RenderOptions {
    * on an empty floor, byte-identical to having no map at all.
    */
   backgroundSrc?: string | undefined;
+  /**
+   * Inline images for synced WoW icon tokens, keyed by icon id (PNG data URIs).
+   *
+   * Bundled tokens draw from their SVG markup, but synced icons live only as
+   * files under `ICON_DIR`; resvg reads no network and doesn't decode WebP, so
+   * the caller reads and transcodes them to PNG. Absent → those tokens don't
+   * draw (the preview still renders everything else).
+   */
+  iconImages?: Record<string, string> | undefined;
 }
 
 export function renderPlanSvg(
@@ -138,13 +157,18 @@ export function renderPlanSvg(
   const { width, height } = plan.background;
   const background =
     options.backgroundSrc ?? getBackgroundSrc(plan.background.assetId);
+  const iconImages = options.iconImages ?? {};
 
   const objects = plan.objects
     // Draw in z-order so the preview stacks like the board does.
     .slice()
     .sort((a, b) => a.base.z - b.base.z)
     .map((object) =>
-      renderObject(object, resolveObjectState(object, plan.steps, stepIndex)),
+      renderObject(
+        object,
+        resolveObjectState(object, plan.steps, stepIndex),
+        iconImages,
+      ),
     )
     .join("");
 
