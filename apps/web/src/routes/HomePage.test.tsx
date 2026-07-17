@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { HomePage } from "./HomePage";
 import { LOCAL_PLAN_ID } from "../editor/planScope";
@@ -14,7 +15,11 @@ vi.mock("../api/client", () => {
   return {
     api: {
       me: { get: { query: vi.fn() } },
-      plan: { list: { query: vi.fn() }, create: { mutate: vi.fn() } },
+      plan: {
+        list: { query: vi.fn() },
+        create: { mutate: vi.fn() },
+        duplicate: { mutate: vi.fn() },
+      },
     },
     errorCode: code,
     isUnauthorized: (e: unknown) => code(e) === "UNAUTHORIZED",
@@ -25,6 +30,7 @@ vi.mock("../api/client", () => {
 const { api } = await import("../api/client");
 const meGet = vi.mocked(api.me.get.query);
 const planList = vi.mocked(api.plan.list.query);
+const planDuplicate = vi.mocked(api.plan.duplicate.mutate);
 
 /** A tRPC-shaped rejection, as the client surfaces it. */
 function trpcError(code: string) {
@@ -148,5 +154,53 @@ describe("HomePage — signed in", () => {
     await waitFor(() =>
       expect(screen.getByTestId("new-plan")).toBeInTheDocument(),
     );
+  });
+
+  it("shows an OG-rendered thumbnail for each plan", async () => {
+    planList.mockResolvedValue([summary({ slug: "abcdefghij" })]);
+    renderPage();
+    const thumb = await screen.findByTestId("plan-thumb");
+    expect(thumb).toHaveAttribute("src", "/p/abcdefghij/og.png");
+  });
+
+  it("filters plans by the search box", async () => {
+    const user = userEvent.setup();
+    planList.mockResolvedValue([
+      summary({ id: "p1", title: "Mythic Council" }),
+      summary({ id: "p2", title: "Heroic Ansurek", slug: "slug2" }),
+    ]);
+    renderPage();
+    await screen.findByText("Mythic Council");
+
+    await user.type(screen.getByTestId("plan-search"), "ansurek");
+    expect(screen.queryByText("Mythic Council")).not.toBeInTheDocument();
+    expect(screen.getByText("Heroic Ansurek")).toBeInTheDocument();
+  });
+
+  it("offers a raid filter only when plans have raids", async () => {
+    planList.mockResolvedValue([
+      summary({ id: "p1", title: "A", raid: "Nerub-ar Palace" }),
+      summary({ id: "p2", title: "B", slug: "slug2", raid: "" }),
+    ]);
+    renderPage();
+    await screen.findByText("A");
+    expect(screen.getByTestId("raid-filter")).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Nerub-ar Palace" }),
+    ).toBeInTheDocument();
+  });
+
+  it("duplicates a plan and refreshes the list", async () => {
+    const user = userEvent.setup();
+    planList.mockResolvedValue([summary({ title: "Mythic Council" })]);
+    planDuplicate.mockResolvedValue({ id: "p2" } as never);
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Duplicate Mythic Council" }),
+    );
+    expect(planDuplicate).toHaveBeenCalledWith({ id: "p1" });
+    // list() is re-queried: once on mount, once after duplicating.
+    await waitFor(() => expect(planList).toHaveBeenCalledTimes(2));
   });
 });

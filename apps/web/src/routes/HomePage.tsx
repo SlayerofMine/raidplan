@@ -2,15 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { loginUrl, logoutUrl, useSession } from "../api/useSession";
-import { DEFAULT_BACKGROUND } from "@raidplan/shared";
+import {
+  BACKGROUNDS,
+  DEFAULT_BACKGROUND,
+  toBackground,
+} from "@raidplan/shared";
 import { LOCAL_PLAN_ID } from "../editor/planScope";
+import { filterPlans, planRaids, relativeTime } from "./planFilters";
 
-interface PlanSummary {
-  id: string;
-  title: string;
-  slug: string;
-  updatedAt: number;
-}
+/** One row of `plan.list`, with every field the server sends. */
+type PlanRow = Awaited<ReturnType<typeof api.plan.list.query>>[number];
 
 /**
  * Landing page (plan §5.2's dashboard in miniature): sign in, list your plans,
@@ -100,9 +101,12 @@ export function HomePage() {
 
 function PlanList() {
   const navigate = useNavigate();
-  const [plans, setPlans] = useState<PlanSummary[] | null>(null);
+  const [plans, setPlans] = useState<PlanRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState("");
+  const [raid, setRaid] = useState("");
+  const [startMap, setStartMap] = useState(DEFAULT_BACKGROUND.assetId);
 
   const load = useCallback(() => {
     api.plan.list
@@ -116,8 +120,10 @@ function PlanList() {
   const create = async () => {
     setCreating(true);
     try {
+      // A "starter": begin on the chosen bundled map (plan §5.2).
+      const def = BACKGROUNDS.find((b) => b.assetId === startMap);
       const plan = await api.plan.create.mutate({
-        background: DEFAULT_BACKGROUND,
+        background: def ? toBackground(def) : DEFAULT_BACKGROUND,
       });
       navigate(`/plan/${plan.id}/edit`);
     } catch {
@@ -126,20 +132,81 @@ function PlanList() {
     }
   };
 
+  const duplicate = async (id: string) => {
+    try {
+      await api.plan.duplicate.mutate({ id });
+      load(); // the copy appears without a page refresh
+    } catch {
+      setError("Could not duplicate that plan.");
+    }
+  };
+
+  const raids = plans ? planRaids(plans) : [];
+  const visible = plans ? filterPlans(plans, { query, raid }) : [];
+
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-sm font-semibold text-neutral-300">Your plans</h2>
-        <button
-          type="button"
-          onClick={create}
-          disabled={creating}
-          data-testid="new-plan"
-          className="ml-auto rounded bg-accent px-3 py-1 text-sm font-medium text-neutral-950 hover:opacity-90 disabled:opacity-50"
-        >
-          {creating ? "Creating…" : "New plan"}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <label className="sr-only" htmlFor="start-map">
+            Starting map
+          </label>
+          <select
+            id="start-map"
+            aria-label="Starting map for a new plan"
+            data-testid="start-map"
+            value={startMap}
+            onChange={(e) => setStartMap(e.target.value)}
+            className="rounded border border-panelborder bg-neutral-900 px-2 py-1 text-sm"
+          >
+            {BACKGROUNDS.map((b) => (
+              <option key={b.assetId} value={b.assetId}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={create}
+            disabled={creating}
+            data-testid="new-plan"
+            className="rounded bg-accent px-3 py-1 text-sm font-medium text-neutral-950 hover:opacity-90 disabled:opacity-50"
+          >
+            {creating ? "Creating…" : "New plan"}
+          </button>
+        </div>
       </div>
+
+      {plans && plans.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <input
+            type="search"
+            placeholder="Search plans…"
+            aria-label="Search plans"
+            data-testid="plan-search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="min-w-40 flex-1 rounded border border-panelborder bg-neutral-900 px-2 py-1 text-sm"
+          />
+          {raids.length > 0 && (
+            <select
+              aria-label="Filter by raid"
+              data-testid="raid-filter"
+              value={raid}
+              onChange={(e) => setRaid(e.target.value)}
+              className="rounded border border-panelborder bg-neutral-900 px-2 py-1 text-sm"
+            >
+              <option value="">All raids</option>
+              {raids.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
 
       {error && (
         <p data-testid="plans-error" className="text-sm text-amber-400">
@@ -152,19 +219,55 @@ function PlanList() {
           No plans yet.
         </p>
       )}
+      {plans && plans.length > 0 && visible.length === 0 && (
+        <p data-testid="plans-no-match" className="text-sm text-neutral-500">
+          No plans match your search.
+        </p>
+      )}
 
-      <ul className="flex flex-col gap-1" data-testid="plan-list">
-        {plans?.map((plan) => (
-          <li key={plan.id}>
+      <ul
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        data-testid="plan-list"
+      >
+        {visible.map((plan) => (
+          <li
+            key={plan.id}
+            className="flex flex-col overflow-hidden rounded border border-panelborder"
+          >
             <Link
               to={`/plan/${plan.id}/edit`}
-              className="flex items-center gap-3 rounded border border-panelborder px-3 py-2 hover:border-accent"
+              className="flex flex-col hover:opacity-90"
             >
-              <span className="text-neutral-100">{plan.title}</span>
-              <span className="ml-auto text-xs text-neutral-500">
-                /p/{plan.slug}
+              <img
+                // The OG renderer doubles as a live thumbnail (plan §4.7/§5.2);
+                // decorative, so the link's name stays just the title.
+                src={`/p/${plan.slug}/og.png`}
+                alt=""
+                loading="lazy"
+                data-testid="plan-thumb"
+                className="aspect-[1200/630] w-full bg-neutral-900 object-cover"
+              />
+              <span className="truncate px-3 pt-2 text-neutral-100">
+                {plan.title}
               </span>
             </Link>
+            <div className="flex flex-wrap items-center gap-2 px-3 pb-2 pt-1 text-xs text-neutral-500">
+              {plan.raid && (
+                <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-300">
+                  {plan.raid}
+                </span>
+              )}
+              <span className="capitalize">{plan.visibility}</span>
+              <span>· {relativeTime(plan.updatedAt)}</span>
+              <button
+                type="button"
+                onClick={() => duplicate(plan.id)}
+                aria-label={`Duplicate ${plan.title}`}
+                className="ml-auto rounded border border-panelborder px-1.5 py-0.5 hover:border-accent"
+              >
+                Duplicate
+              </button>
+            </div>
           </li>
         ))}
       </ul>
