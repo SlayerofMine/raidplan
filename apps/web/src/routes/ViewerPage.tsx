@@ -9,7 +9,6 @@ import { isLocalPlan, LOCAL_PLAN_ID } from "../editor/planScope";
 import { clearHistory, useEditorStore } from "../store/editorStore";
 import { loadPlan } from "../store/persistence";
 import { PlaybackControls } from "../viewer/PlaybackControls";
-import { useStageRecorder } from "../viewer/useStageRecorder";
 import { ViewerStage } from "../viewer/ViewerStage";
 
 type LoadState = "loading" | "ready" | "missing";
@@ -35,20 +34,6 @@ export function ViewerPage() {
   const steps = useEditorStore((s) => s.steps);
   const playback = usePlayback(stageRef);
   const fps = useFps(playback.isPlaying);
-  const recorder = useStageRecorder(stageRef, title);
-
-  /**
-   * Recording captures whatever the board does, so starting one replays the
-   * current step from the top — otherwise the clip would open mid-animation.
-   * Advance steps while it runs to capture more than one.
-   */
-  const toggleRecording = () => {
-    if (recorder.isRecording) {
-      recorder.stop();
-      return;
-    }
-    if (recorder.start()) playback.restart();
-  };
 
   // Load once, before playback builds its first timeline.
   useEffect(() => {
@@ -157,11 +142,6 @@ export function ViewerPage() {
         playback={playback}
         onFullscreen={toggleFullscreen}
         stepName={stepName}
-        recording={{
-          isRecording: recorder.isRecording,
-          supported: recorder.supported,
-          toggle: toggleRecording,
-        }}
       />
     </div>
   );

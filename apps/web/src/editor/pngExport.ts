@@ -11,9 +11,8 @@ import { slugify } from "./planFile";
  * pixel ratio, so the output is deterministic: `background.width × height`,
  * whatever the current zoom.
  *
- * For motion rather than a still, the viewer records a WebM clip — see
- * `viewer/webmExport.ts`. That one captures the screen as drawn, because video
- * can't be re-rendered at native resolution the way a single frame can.
+ * For motion rather than a still, `videoExport.ts` exports the whole plan as a
+ * WebM using this same native-rect trick, one frame at a time.
  */
 
 /** The slice of Konva's `Stage` we use — narrowed so tests can pass a fake. */

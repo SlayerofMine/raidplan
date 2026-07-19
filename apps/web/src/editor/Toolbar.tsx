@@ -11,6 +11,14 @@ import {
   downloadDataUrl,
   exportStepFileName,
 } from "./pngExport";
+import { createFrameRenderer } from "./planFrameRenderer";
+import {
+  browserVideoDeps,
+  canEncodeWebm,
+  encodePlanVideo,
+  planFrames,
+  videoFileName,
+} from "./videoExport";
 import { uploadBackground } from "./uploadBackground";
 import { useToast } from "../ui/toastContext";
 
@@ -54,6 +62,10 @@ export function Toolbar({
   const fileInput = useRef<HTMLInputElement>(null);
   const mapInput = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [exportingVideo, setExportingVideo] = useState(false);
+  const [videoProgress, setVideoProgress] = useState(0);
+  // Fixed for the life of the page; drives whether the WebM button is offered.
+  const [canExportVideo] = useState(canEncodeWebm);
 
   const zoomCentre = (factor: number) =>
     zoomAtPoint({ x: stageSize.width / 2, y: stageSize.height / 2 }, factor);
@@ -86,6 +98,56 @@ export function Toolbar({
       downloadDataUrl(url, filename);
       toast(`Exported ${filename}`, "success");
     });
+  };
+
+  /**
+   * One click → the whole plan as a WebM. Frames are rendered deterministically
+   * off the live stage (see `planFrameRenderer`), so the clip is the plan's
+   * native pixels and matches playback exactly.
+   */
+  const handleExportWebm = async () => {
+    const stage = getStageNode();
+    if (!stage || exportingVideo) return;
+    const s = useEditorStore.getState();
+    if (s.steps.length === 0) {
+      toast("Add a step before exporting a video.", "error");
+      return;
+    }
+
+    s.clearSelection();
+    setExportingVideo(true);
+    const renderer = createFrameRenderer({
+      stage,
+      steps: s.steps,
+      objects: s.objects,
+      objectIds: s.objectIds,
+      background: s.background,
+      view: s.view,
+    });
+
+    try {
+      // One frame for Konva to drop the transformer handles before capturing.
+      await new Promise(requestAnimationFrame);
+      const filename = videoFileName(s.title);
+      await encodePlanVideo({
+        frames: planFrames(s.steps),
+        renderFrame: renderer.renderFrame,
+        size: renderer.size,
+        filename,
+        deps: browserVideoDeps(),
+        onProgress: setVideoProgress,
+      });
+      toast(`Exported ${filename}`, "success");
+    } catch (error) {
+      toast(
+        error instanceof Error ? error.message : "That video export failed.",
+        "error",
+      );
+    } finally {
+      renderer.restore(s.currentStepIndex);
+      setExportingVideo(false);
+      setVideoProgress(0);
+    }
   };
 
   const handleUploadMap = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -282,6 +344,17 @@ export function Toolbar({
         ariaLabel="Export JSON"
       />
       <Btn onClick={handleExportPng} label="PNG" ariaLabel="Export PNG" />
+      <Btn
+        onClick={() => void handleExportWebm()}
+        label={exportingVideo ? `${Math.round(videoProgress * 100)}%` : "WebM"}
+        ariaLabel="Export WebM video"
+        disabled={!canExportVideo || exportingVideo}
+        title={
+          canExportVideo
+            ? "Export the whole plan as a WebM video"
+            : "This browser can't encode WebM video"
+        }
+      />
       <Btn onClick={() => fileInput.current?.click()} label="Import" />
       <input
         ref={fileInput}

@@ -8,6 +8,7 @@ import {
   type ResolvedStates,
 } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
+import { applyObjectState } from "./applyToStage";
 import { collidingAnimIds, collisionRules, type RectLookup } from "./collision";
 import { compileStep } from "./compileStep";
 import { compileOneShot, deferredAnimsFor } from "./oneShot";
@@ -68,17 +69,8 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
 
   /** Write a resolved state straight onto its Konva node. */
   const applyToNode = useCallback(
-    (objectId: string, props: ObjectState) => {
-      const node = stageRef.current?.findOne(`#${objectId}`);
-      if (!node) return;
-      node.setAttrs({
-        x: props.x,
-        y: props.y,
-        rotation: props.rotation,
-        opacity: props.opacity,
-        visible: props.visible,
-      });
-    },
+    (objectId: string, props: ObjectState) =>
+      applyObjectState(stageRef.current, objectId, props),
     [stageRef],
   );
 

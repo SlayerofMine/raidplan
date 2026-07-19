@@ -23,87 +23,49 @@ function playback(over: Partial<PlaybackApi> = {}): PlaybackApi {
   };
 }
 
-const recording = (
-  over: Partial<
-    Parameters<typeof PlaybackControls>[0]["recording"] & object
-  > = {},
-) => ({
-  isRecording: false,
-  supported: true,
-  toggle: vi.fn(),
-  ...over,
-});
+const renderControls = (api: PlaybackApi) =>
+  render(
+    <PlaybackControls playback={api} onFullscreen={vi.fn()} stepName="Pull" />,
+  );
 
-describe("PlaybackControls — recording", () => {
-  it("has no record button when recording isn't wired up", () => {
-    render(
+describe("PlaybackControls — transport", () => {
+  it("toggles play and shows the matching affordance", () => {
+    const api = playback();
+    const { rerender } = renderControls(api);
+    const toggle = screen.getByTestId("play-toggle");
+    expect(toggle).toHaveAccessibleName("Play");
+    fireEvent.click(toggle);
+    expect(api.toggle).toHaveBeenCalledOnce();
+
+    rerender(
       <PlaybackControls
-        playback={playback()}
+        playback={playback({ isPlaying: true })}
         onFullscreen={vi.fn()}
         stepName="Pull"
       />,
     );
-    expect(screen.queryByTestId("record-toggle")).not.toBeInTheDocument();
+    expect(screen.getByTestId("play-toggle")).toHaveAccessibleName("Pause");
   });
 
-  it("starts a recording when clicked", () => {
-    const rec = recording();
-    render(
-      <PlaybackControls
-        playback={playback()}
-        onFullscreen={vi.fn()}
-        stepName="Pull"
-        recording={rec}
-      />,
-    );
-    const button = screen.getByTestId("record-toggle");
-    expect(button).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(button);
-    expect(rec.toggle).toHaveBeenCalledOnce();
+  it("pins step navigation at the ends of the plan", () => {
+    renderControls(playback({ stepIndex: 0 }));
+    expect(screen.getByLabelText("Previous step")).toBeDisabled();
+    expect(screen.getByLabelText("Next step")).toBeEnabled();
+
+    renderControls(playback({ stepIndex: 2, stepCount: 3 }));
+    expect(screen.getAllByLabelText("Next step")[1]).toBeDisabled();
   });
 
-  it("reads as pressed, and offers to stop, while recording", () => {
-    render(
-      <PlaybackControls
-        playback={playback()}
-        onFullscreen={vi.fn()}
-        stepName="Pull"
-        recording={recording({ isRecording: true })}
-      />,
-    );
-    const button = screen.getByTestId("record-toggle");
-    expect(button).toHaveAttribute("aria-pressed", "true");
-    expect(button).toHaveAccessibleName("Stop recording");
+  it("disables play for a plan with no steps", () => {
+    renderControls(playback({ stepCount: 0 }));
+    expect(screen.getByTestId("play-toggle")).toBeDisabled();
+    expect(screen.getByTestId("viewer-step")).toHaveTextContent("No steps");
   });
 
-  it("is disabled, with a reason, where WebM can't be recorded", () => {
-    // Safari records MP4, not WebM — the button explains itself rather than
-    // failing when pressed.
-    render(
-      <PlaybackControls
-        playback={playback()}
-        onFullscreen={vi.fn()}
-        stepName="Pull"
-        recording={recording({ supported: false })}
-      />,
-    );
-    const button = screen.getByTestId("record-toggle");
-    expect(button).toBeDisabled();
-    expect(button).toHaveAttribute(
-      "title",
-      expect.stringContaining("can't record WebM"),
-    );
-  });
-
-  it("is disabled when the plan has no steps to record", () => {
-    render(
-      <PlaybackControls
-        playback={playback({ stepCount: 0 })}
-        onFullscreen={vi.fn()}
-        stepName=""
-        recording={recording()}
-      />,
-    );
-    expect(screen.getByTestId("record-toggle")).toBeDisabled();
+  it("scrubs to a position within the step", () => {
+    const api = playback();
+    renderControls(api);
+    fireEvent.change(screen.getByTestId("scrub"), { target: { value: "0.4" } });
+    expect(api.seek).toHaveBeenCalledWith(0.4);
   });
 });

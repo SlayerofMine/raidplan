@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "RaidPlans SPA \u2014 React + Vite editor & viewer.",
+  "description": "RaidPlans SPA — React + Vite editor & viewer.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -16,6 +16,7 @@
   "dependencies": {
     "@raidplan/shared": "workspace:*",
     "@tanstack/react-virtual": "^3.11.2",
+    "@trpc/client": "^11.0.0-rc.660",
     "gsap": "^3.12.5",
     "immer": "^10.1.1",
     "konva": "^9.3.16",
@@ -23,12 +24,13 @@
     "react-dom": "^18.3.1",
     "react-konva": "^18.2.10",
     "react-router-dom": "^6.28.0",
+    "webm-muxer": "^5.1.4",
     "zundo": "^2.3.0",
-    "zustand": "^5.0.2",
-    "@trpc/client": "^11.0.0-rc.660"
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",
+    "@raidplan/api": "workspace:*",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",
@@ -42,7 +44,6 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "vite": "^5.4.11",
-    "vitest": "^2.1.8",
-    "@raidplan/api": "workspace:*"
+    "vitest": "^2.1.8"
   }
 }
