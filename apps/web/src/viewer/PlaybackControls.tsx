@@ -8,10 +8,17 @@ export function PlaybackControls({
   playback,
   onFullscreen,
   stepName,
+  recording,
 }: {
   playback: PlaybackApi;
   onFullscreen: () => void;
   stepName: string;
+  /** WebM recording state, when the browser supports it (plan §5.1). */
+  recording?: {
+    isRecording: boolean;
+    supported: boolean;
+    toggle: () => void;
+  };
 }) {
   const { stepIndex, stepCount, isPlaying, progress } = playback;
 
@@ -57,6 +64,33 @@ export function PlaybackControls({
         onChange={(e) => playback.seek(Number(e.target.value))}
         className="mx-2 flex-1 accent-accent"
       />
+
+      {recording && (
+        <button
+          type="button"
+          aria-label={
+            recording.isRecording ? "Stop recording" : "Record WebM video"
+          }
+          aria-pressed={recording.isRecording}
+          title={
+            recording.supported
+              ? recording.isRecording
+                ? "Stop and save the clip"
+                : "Record the board to a WebM video"
+              : "This browser can't record WebM video"
+          }
+          onClick={recording.toggle}
+          disabled={!recording.supported || stepCount === 0}
+          data-testid="record-toggle"
+          className={`rounded border px-2 py-1 text-sm disabled:opacity-40 ${
+            recording.isRecording
+              ? "border-red-500 text-red-400"
+              : "border-panelborder hover:border-accent"
+          }`}
+        >
+          {recording.isRecording ? "■" : "●"}
+        </button>
+      )}
 
       <Btn label="Fullscreen" glyph="⛶" onClick={onFullscreen} />
     </div>

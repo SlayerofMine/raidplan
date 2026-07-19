@@ -11,8 +11,9 @@ import { slugify } from "./planFile";
  * pixel ratio, so the output is deterministic: `background.width × height`,
  * whatever the current zoom.
  *
- * (An animated WebM export is the plan's explicit "nice-to-have"; PNG-per-step
- * is the shippable core.)
+ * For motion rather than a still, the viewer records a WebM clip — see
+ * `viewer/webmExport.ts`. That one captures the screen as drawn, because video
+ * can't be re-rendered at native resolution the way a single frame can.
  */
 
 /** The slice of Konva's `Stage` we use — narrowed so tests can pass a fake. */
