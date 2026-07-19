@@ -27,7 +27,12 @@ import {
   type View,
 } from "../editor/canvas/coords";
 import { DEFAULT_GRID_SIZE, snapValue } from "../editor/canvas/snapping";
-import { createIconObject, createObject } from "./objectFactory";
+import {
+  createIconObject,
+  createObject,
+  createTether,
+  TETHER_DEFAULT_TINT,
+} from "./objectFactory";
 import { fromPlan, toPlan, type PlanDoc } from "./planSerialization";
 
 /**
@@ -57,6 +62,8 @@ export interface EditorState extends PlanDoc {
   // --- creation ---
   addIcon: (iconId: string, native?: Point) => string;
   addPrimitive: (type: ObjectType, shape?: ShapeKind) => string;
+  /** Link two existing objects with a tether. Returns its id, or undefined. */
+  addTether: (fromId: string, toId: string) => string | undefined;
 
   // --- mutation ---
   updateObject: (id: string, patch: Partial<ObjectBase>) => void;
@@ -285,6 +292,26 @@ export const useEditorStore = create<EditorState>()(
         return object.id;
       },
 
+      addTether: (fromId, toId) => {
+        const state = get();
+        // Both endpoints must exist and be distinct — a tether needs two objects.
+        if (!state.objects[fromId] || !state.objects[toId] || fromId === toId) {
+          return undefined;
+        }
+        const object = createTether({
+          fromId,
+          toId,
+          z: state.objectIds.length,
+          tint: TETHER_DEFAULT_TINT,
+        });
+        set((s) => {
+          s.objects[object.id] = object;
+          s.objectIds.push(object.id);
+          s.selectedIds = [object.id];
+        });
+        return object.id;
+      },
+
       updateObject: (id, patch) =>
         set((s) => {
           const object = s.objects[id];
@@ -338,6 +365,17 @@ export const useEditorStore = create<EditorState>()(
         set((s) => {
           const doomed = new Set(ids.filter((id) => s.objects[id]));
           if (doomed.size === 0) return;
+          // Deleting an endpoint deletes any tether hanging off it — a tether
+          // with a missing end has nothing to draw and would just be dead data.
+          for (const id of s.objectIds) {
+            const object = s.objects[id];
+            if (
+              object?.type === "tether" &&
+              (doomed.has(object.fromId ?? "") || doomed.has(object.toId ?? ""))
+            ) {
+              doomed.add(id);
+            }
+          }
           for (const id of doomed) delete s.objects[id];
           s.objectIds = s.objectIds.filter((id) => !doomed.has(id));
           s.selectedIds = s.selectedIds.filter((id) => !doomed.has(id));

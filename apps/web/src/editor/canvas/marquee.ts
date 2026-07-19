@@ -78,6 +78,8 @@ export function rectsIntersect(a: Rect, b: Rect): boolean {
  * enough, which matches how Figma/Excalidraw behave and is far more forgiving on
  * a dense board. Hidden and locked objects are skipped: a lock exists precisely
  * so a stray sweep can't grab something, and you can't select what you can't see.
+ * Tethers are skipped too — they have no box (their geometry is their endpoints),
+ * so they're selected by clicking the line, not by a sweep.
  */
 export function objectsInMarquee(
   objects: readonly PlanObject[],
@@ -88,6 +90,7 @@ export function objectsInMarquee(
       (object) =>
         object.base.visible &&
         !object.locked &&
+        object.type !== "tether" &&
         rectsIntersect(objectBounds(object), marquee),
     )
     .map((object) => object.id);

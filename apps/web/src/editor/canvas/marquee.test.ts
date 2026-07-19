@@ -147,6 +147,15 @@ describe("objectsInMarquee", () => {
     );
   });
 
+  it("skips tethers (their degenerate box would false-positive at the origin)", () => {
+    const tether = obj(
+      "t",
+      { x: 0, y: 0, w: 0, h: 0 },
+      { type: "tether", fromId: "a", toId: "b" },
+    );
+    expect(objectsInMarquee([tether], marquee)).toEqual([]);
+  });
+
   it("accounts for rotation when deciding what was swept", () => {
     // Unrotated this sits clear of the marquee; rotated, a corner swings into it.
     const outside = obj("a", { x: 160, y: 0, w: 100, h: 100 });

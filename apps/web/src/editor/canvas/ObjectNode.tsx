@@ -2,25 +2,23 @@ import { memo, useRef } from "react";
 import {
   Arrow,
   Circle,
-  Ellipse,
   Group,
   Image as KonvaImage,
   Rect,
   Text,
-  Wedge,
 } from "react-konva";
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
 import { useShallow } from "zustand/react/shallow";
-import type { ObjectType, ShapeKind } from "@raidplan/shared";
+import { mechanicOps, type ObjectType, type ShapeKind } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { selectObjectState } from "../../store/selectors";
 import { useIconSrc } from "../iconSrc";
 import { labelLayout, LABEL_COLOUR, LABEL_FONT_SIZE } from "./objectLabel";
+import { MechArtwork } from "./MechArtwork";
+import { TetherNode } from "./TetherNode";
 import { useImageElement } from "./useImageElement";
 
 const DEFAULT_TINT = "#4f9dff";
-/** Shapes get a translucent fill of their own tint. */
-const FILL_ALPHA = "33";
 
 /**
  * One plan object → one Konva node (plan §6). Subscribes to just its own slice
@@ -60,6 +58,8 @@ export const ObjectNode = memo(function ObjectNode({
   } | null>(null);
 
   if (!object || !state || !state.visible) return null;
+  // A tether has no transform of its own — it's drawn from its endpoints.
+  if (object.type === "tether") return <TetherNode objectId={objectId} />;
   // Transforms come from the resolved step state; tint/label are step-independent.
   const { x, y, w, h, rotation, opacity } = state;
   const { tint, label } = object.base;
@@ -279,41 +279,14 @@ function ObjectArtwork({
       );
 
     case "shape":
-      if (shape === "circle") {
-        return (
-          <Ellipse
-            x={w / 2}
-            y={h / 2}
-            radiusX={w / 2}
-            radiusY={h / 2}
-            stroke={colour}
-            strokeWidth={3}
-            fill={`${colour}${FILL_ALPHA}`}
-          />
-        );
-      }
-      if (shape === "cone") {
-        // A 60° wedge opening upward from the box's bottom-centre.
-        return (
-          <Wedge
-            x={w / 2}
-            y={h}
-            radius={h}
-            angle={60}
-            rotation={-120}
-            stroke={colour}
-            strokeWidth={3}
-            fill={`${colour}${FILL_ALPHA}`}
-          />
-        );
-      }
+      // Every shape — generic rect/circle and the WoW mechanics — is drawn from
+      // the shared draw-ops, so the editor matches the OG preview exactly.
       return (
-        <Rect
-          width={w}
-          height={h}
-          stroke={colour}
-          strokeWidth={3}
-          fill={`${colour}${FILL_ALPHA}`}
+        <MechArtwork
+          ops={mechanicOps(shape ?? "rect", w, h)}
+          tint={colour}
+          w={w}
+          h={h}
         />
       );
 

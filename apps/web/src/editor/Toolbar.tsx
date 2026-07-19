@@ -29,7 +29,8 @@ export function Toolbar({
   viewHref?: string | null;
 }) {
   const objectCount = useEditorStore((s) => s.objectIds.length);
-  const hasSelection = useEditorStore((s) => s.selectedIds.length > 0);
+  const selectedIds = useEditorStore((s) => s.selectedIds);
+  const hasSelection = selectedIds.length > 0;
   const title = useEditorStore((s) => s.title);
   const backgroundId = useEditorStore((s) => s.background.assetId);
   const snapEnabled = useEditorStore((s) => s.snapEnabled);
@@ -44,6 +45,7 @@ export function Toolbar({
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
   const duplicateSelected = useEditorStore((s) => s.duplicateSelected);
   const addPrimitive = useEditorStore((s) => s.addPrimitive);
+  const addTether = useEditorStore((s) => s.addTether);
   const loadPlan = useEditorStore((s) => s.loadPlan);
   const getPlan = useEditorStore((s) => s.getPlan);
 
@@ -125,9 +127,55 @@ export function Toolbar({
       <Divider />
 
       <Btn onClick={() => addPrimitive("text")} label="Text" />
+
+      <Divider />
+
+      {/* WoW mechanics — distinguished by form, recoloured via the tint prop. */}
+      <Btn
+        onClick={() => addPrimitive("shape", "cone")}
+        label="Cone"
+        title="Frontal (cone)"
+      />
+      <Btn
+        onClick={() => addPrimitive("shape", "line")}
+        label="Beam"
+        title="Frontal (line / beam)"
+      />
+      <Btn
+        onClick={() => addPrimitive("shape", "soak")}
+        label="Soak"
+        title="Soak / stack marker"
+      />
+      <Btn
+        onClick={() => addPrimitive("shape", "voidzone")}
+        label="Void"
+        title="Voidzone / puddle (avoid)"
+      />
+      <Btn
+        onClick={() => addPrimitive("shape", "pickup")}
+        label="Pickup"
+        title="Pickup / collectible"
+      />
+      <Btn
+        onClick={() => {
+          if (selectedIds.length === 2) {
+            addTether(selectedIds[0]!, selectedIds[1]!);
+          }
+        }}
+        disabled={selectedIds.length !== 2}
+        label="Tether"
+        title={
+          selectedIds.length === 2
+            ? "Link the two selected objects"
+            : "Select exactly two objects to tether them"
+        }
+      />
+
+      <Divider />
+
+      {/* Generic zones + arrow. */}
       <Btn onClick={() => addPrimitive("shape", "rect")} label="Rect" />
       <Btn onClick={() => addPrimitive("shape", "circle")} label="Circle" />
-      <Btn onClick={() => addPrimitive("shape", "cone")} label="Cone" />
       <Btn onClick={() => addPrimitive("arrow")} label="Arrow" />
 
       <Divider />
@@ -263,11 +311,13 @@ function Btn({
   onClick,
   label,
   ariaLabel,
+  title,
   disabled,
 }: {
   onClick: () => void;
   label: string;
   ariaLabel?: string;
+  title?: string;
   disabled?: boolean;
 }) {
   return (
@@ -276,6 +326,7 @@ function Btn({
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel ?? label}
+      title={title}
       className="rounded border border-panelborder px-2 py-1 text-sm hover:border-accent disabled:opacity-40"
     >
       {label}

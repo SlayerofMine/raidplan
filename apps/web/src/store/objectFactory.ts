@@ -13,6 +13,21 @@ const DEFAULT_SIZES: Record<string, { w: number; h: number }> = {
   arrow: { w: 200, h: 24 },
 };
 
+/**
+ * Default footprints per *shape* kind, where the mechanic wants a shape other
+ * than the square `shape` default: a beam is long and thin, a pickup is small.
+ * Anything not listed falls back to `DEFAULT_SIZES.shape`.
+ */
+const SHAPE_SIZES: Partial<Record<ShapeKind, { w: number; h: number }>> = {
+  line: { w: 260, h: 48 },
+  soak: { w: 120, h: 120 },
+  voidzone: { w: 140, h: 140 },
+  pickup: { w: 56, h: 56 },
+};
+
+/** Tethers get a distinct default tint so a fresh link stands out; still editable. */
+export const TETHER_DEFAULT_TINT = "#b36bff";
+
 interface CreateParams {
   type: ObjectType;
   center: Point;
@@ -31,6 +46,7 @@ interface CreateParams {
  */
 export function createObject(params: CreateParams): PlanObject {
   const size = params.size ??
+    (params.shape ? SHAPE_SIZES[params.shape] : undefined) ??
     DEFAULT_SIZES[params.type] ?? {
       w: DEFAULT_ICON_SIZE,
       h: DEFAULT_ICON_SIZE,
@@ -51,6 +67,36 @@ export function createObject(params: CreateParams): PlanObject {
       visible: true,
       ...(params.tint ? { tint: params.tint } : {}),
       ...(params.label ? { label: params.label } : {}),
+    },
+  };
+}
+
+/**
+ * A tether object linking two others. Its geometry is derived from its
+ * endpoints (see `mechanics.ts` `tetherOps`), so its own transform is
+ * degenerate — `x/y/w/h` are never read.
+ */
+export function createTether(params: {
+  fromId: string;
+  toId: string;
+  z: number;
+  tint?: string;
+}): PlanObject {
+  return {
+    id: nextObjectId(),
+    type: "tether",
+    fromId: params.fromId,
+    toId: params.toId,
+    base: {
+      x: 0,
+      y: 0,
+      w: 0,
+      h: 0,
+      rotation: 0,
+      opacity: 1,
+      z: params.z,
+      visible: true,
+      ...(params.tint ? { tint: params.tint } : {}),
     },
   };
 }

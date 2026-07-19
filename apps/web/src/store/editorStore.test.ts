@@ -52,12 +52,58 @@ describe("editorStore — creation", () => {
     expect(state().objects[text]!.base.label).toBe("Text");
   });
 
+  it("addPrimitive creates each mechanic with a sensible default footprint", () => {
+    const beamId = state().addPrimitive("shape", "line");
+    const pickupId = state().addPrimitive("shape", "pickup");
+    const beam = state().objects[beamId]!;
+    const pickup = state().objects[pickupId]!;
+    // A beam is long and thin; a pickup is small — not the square shape default.
+    expect(beam.base.w).toBeGreaterThan(beam.base.h);
+    expect(pickup.base.w).toBeLessThan(100);
+    for (const shape of ["cone", "soak", "voidzone"] as const) {
+      const id = state().addPrimitive("shape", shape);
+      expect(state().objects[id]).toMatchObject({ type: "shape", shape });
+    }
+  });
+
   it("stacks objects with increasing z in insertion order", () => {
     const a = state().addIcon(iconId);
     const b = state().addIcon(iconId);
     expect(state().objects[a]!.base.z).toBe(0);
     expect(state().objects[b]!.base.z).toBe(1);
     expect(state().objectIds).toEqual([a, b]);
+  });
+});
+
+describe("editorStore — tethers", () => {
+  it("addTether links two existing objects and selects the tether", () => {
+    const a = state().addIcon(iconId);
+    const b = state().addIcon(iconId);
+    const t = state().addTether(a, b)!;
+    expect(state().objects[t]).toMatchObject({
+      type: "tether",
+      fromId: a,
+      toId: b,
+    });
+    expect(state().selectedIds).toEqual([t]);
+  });
+
+  it("refuses a tether to a missing object or to itself", () => {
+    const a = state().addIcon(iconId);
+    expect(state().addTether(a, "ghost")).toBeUndefined();
+    expect(state().addTether(a, a)).toBeUndefined();
+    // Only the one real object exists.
+    expect(state().objectIds).toEqual([a]);
+  });
+
+  it("deleting an endpoint deletes the tether hanging off it", () => {
+    const a = state().addIcon(iconId);
+    const b = state().addIcon(iconId);
+    const t = state().addTether(a, b)!;
+    state().deleteObjects([a]);
+    expect(state().objects[a]).toBeUndefined();
+    expect(state().objects[t]).toBeUndefined(); // orphaned tether cleaned up
+    expect(state().objects[b]).toBeDefined(); // the other endpoint survives
   });
 });
 

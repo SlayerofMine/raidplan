@@ -26,7 +26,12 @@ export function SelectionTransformer() {
 
     const { objects } = useEditorStore.getState();
     const nodes = selectedIds
-      .filter((id) => !objects[id]?.locked)
+      // Skip locked objects and tethers — neither is resizable (a tether has no
+      // transform of its own; you move its endpoints).
+      .filter((id) => {
+        const object = objects[id];
+        return object && !object.locked && object.type !== "tether";
+      })
       .map((id) => stage.findOne(`#${id}`))
       .filter((node): node is KonvaNode => node !== undefined);
 
