@@ -133,6 +133,9 @@ function AnimationRow({ anim, stepIndex }: { anim: Anim; stepIndex: number }) {
         options={ANIM_TRIGGERS}
         onChange={(v) => patch({ trigger: v as Anim["trigger"] })}
       />
+      {anim.trigger === "onCollision" && (
+        <ColliderPicker anim={anim} onChange={patch} />
+      )}
       <Picker
         label="Easing"
         testId="anim-easing"
@@ -153,6 +156,74 @@ function AnimationRow({ anim, stepIndex }: { anim: Anim; stepIndex: number }) {
         onChange={(v) => patch({ durationMs: Math.max(0, v) })}
       />
     </li>
+  );
+}
+
+/**
+ * Which objects can set an `onCollision` animation off by touching this one
+ * (plan §7) — the "able to pick up" group. Collision is checked with bounding
+ * boxes during playback only, so this is purely authoring.
+ */
+function ColliderPicker({
+  anim,
+  onChange,
+}: {
+  anim: Anim;
+  onChange: (patch: Partial<Omit<Anim, "id">>) => void;
+}) {
+  const objectIds = useEditorStore((s) => s.objectIds);
+  const objects = useEditorStore((s) => s.objects);
+
+  const selected = anim.collideWith ?? [];
+  // An object can't collide with itself — that would fire on frame one.
+  const candidates = objectIds.filter((id) => id !== anim.objectId);
+
+  const toggle = (id: string, on: boolean) =>
+    onChange({
+      collideWith: on ? [...selected, id] : selected.filter((x) => x !== id),
+    });
+
+  return (
+    <div className="flex flex-col gap-1" data-testid="anim-colliders">
+      <span className="text-sm text-neutral-500">Collides with</span>
+      {candidates.length === 0 ? (
+        <p
+          className="text-xs text-neutral-600"
+          data-testid="anim-colliders-none"
+        >
+          Add another object to collide with.
+        </p>
+      ) : (
+        <>
+          <div className="max-h-32 overflow-y-auto rounded border border-panelborder">
+            {candidates.map((id) => (
+              <label
+                key={id}
+                className="flex items-center gap-2 px-2 py-0.5 text-sm text-neutral-300"
+              >
+                <input
+                  type="checkbox"
+                  data-testid={`anim-collider-${id}`}
+                  checked={selected.includes(id)}
+                  onChange={(e) => toggle(id, e.target.checked)}
+                />
+                <span className="truncate">
+                  {objectDisplayName(objects[id])}
+                </span>
+              </label>
+            ))}
+          </div>
+          {selected.length === 0 && (
+            <p
+              className="text-xs text-amber-500/80"
+              data-testid="anim-colliders-empty"
+            >
+              Pick at least one — it can&apos;t trigger otherwise.
+            </p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
