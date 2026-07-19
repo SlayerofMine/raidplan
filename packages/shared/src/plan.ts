@@ -7,6 +7,7 @@ import {
   ObjectTypeSchema,
   ShapeKindSchema,
 } from "./effects.js";
+import { ObjectStyleSchema } from "./mechanics.js";
 
 /**
  * The Plan document (plan §5) — the single source of truth for a raid plan.
@@ -50,6 +51,12 @@ export const PlanObjectSchema = z.object({
   iconId: z.string().min(1).optional(),
   /** Which primitive to draw — only meaningful when `type` is `"shape"`. */
   shape: ShapeKindSchema.optional(),
+  /**
+   * Per-object visual customization for shapes/tethers (fill, outline, edge,
+   * line). Optional — absent keeps the shape's built-in look. Distinct from
+   * `base.tint`, which is colour; this is form.
+   */
+  style: ObjectStyleSchema.optional(),
   /**
    * Tether endpoints — the ids of the two objects a `type: "tether"` connects.
    * A tether's line is derived from these objects' resolved positions, so its

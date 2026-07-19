@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { ShapeKind } from "./effects.js";
 import type { Point } from "./transform.js";
 
@@ -20,9 +21,36 @@ import type { Point } from "./transform.js";
  */
 
 /** How a shape's interior is filled — resolved to a real colour by the renderer. */
-export type MechFill = "none" | "soft" | "hazard";
+export type MechFill = "none" | "soft" | "solid" | "hazard";
 /** How a shape's outline is stroked. */
 export type MechStroke = "none" | "solid" | "dashed";
+
+/**
+ * Per-object style customization (plan §2.4). All optional — an absent field
+ * keeps the shape's built-in default, so old plans are unchanged. Composable
+ * with `tint`: colour stays separate, this changes *form*.
+ */
+/** Interior treatment the user can pick for area shapes. */
+export const MECH_FILL_STYLES = [
+  "soft",
+  "solid",
+  "striped",
+  "hazard",
+  "none",
+] as const;
+export type MechFillStyle = (typeof MECH_FILL_STYLES)[number];
+/** Silhouette for blob shapes (voidzone). */
+export const MECH_EDGES = ["scalloped", "round"] as const;
+/** Line style for tethers. */
+export const MECH_LINES = ["squiggly", "straight"] as const;
+
+export const ObjectStyleSchema = z.object({
+  fill: z.enum(MECH_FILL_STYLES).optional(),
+  outline: z.boolean().optional(),
+  edge: z.enum(MECH_EDGES).optional(),
+  line: z.enum(MECH_LINES).optional(),
+});
+export type ObjectStyle = z.infer<typeof ObjectStyleSchema>;
 
 interface OpStyle {
   fill: MechFill;
@@ -117,17 +145,109 @@ function wedgePath(w: number, h: number): string {
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
+const STRIPE_STROKE = 2;
+
+/**
+ * Diagonal hatch lines clipped to an ellipse — the "striped" fill. Each stripe
+ * is a chord solved exactly against the ellipse (line ∩ ellipse), so the fill
+ * stays inside the outline in both renderers with no clip-path support needed.
+ */
+function ellipseStripes(
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+): MechOp[] {
+  const angle = -Math.PI / 4; // 45° diagonal
+  const ux = Math.cos(angle);
+  const uy = Math.sin(angle);
+  const nx = -uy;
+  const ny = ux;
+  const spacing = Math.max(9, Math.min(rx, ry) * 0.34);
+  const reach = Math.hypot(rx, ry);
+  const a = (ux * ux) / (rx * rx) + (uy * uy) / (ry * ry);
+
+  const ops: MechOp[] = [];
+  for (let c = -reach; c <= reach; c += spacing) {
+    const ox = c * nx;
+    const oy = c * ny;
+    const b = 2 * ((ox * ux) / (rx * rx) + (oy * uy) / (ry * ry));
+    const cc = (ox * ox) / (rx * rx) + (oy * oy) / (ry * ry) - 1;
+    const disc = b * b - 4 * a * cc;
+    if (disc <= 0) continue;
+    const sq = Math.sqrt(disc);
+    const t1 = (-b - sq) / (2 * a);
+    const t2 = (-b + sq) / (2 * a);
+    ops.push({
+      t: "polyline",
+      points: [
+        round(cx + ox + t1 * ux),
+        round(cy + oy + t1 * uy),
+        round(cx + ox + t2 * ux),
+        round(cy + oy + t2 * uy),
+      ],
+      closed: false,
+      fill: "none",
+      stroke: "solid",
+      strokeWidth: STRIPE_STROKE,
+    });
+  }
+  return ops;
+}
+
+/**
+ * Apply per-object {@link ObjectStyle} to a shape's ops. The `fill`/`outline`
+ * choices act on the shape's *primary* op (its silhouette, always `ops[0]`);
+ * `striped` turns that fill off and lays hatch lines clipped to the given
+ * ellipse behind the marks. `edge`/`line` change geometry and are handled by the
+ * builders, not here.
+ */
+function applyStyle(
+  ops: MechOp[],
+  style: ObjectStyle | undefined,
+  clip: { cx: number; cy: number; rx: number; ry: number },
+): MechOp[] {
+  const primary = ops[0];
+  if (!style || !primary) return ops;
+
+  if (style.outline === false) primary.stroke = "none";
+
+  if (!style.fill) return ops;
+  if (style.fill === "striped") {
+    primary.fill = "none";
+    if (primary.stroke === "none" && style.outline !== false) {
+      primary.stroke = "solid";
+    }
+    return [
+      primary,
+      ...ellipseStripes(clip.cx, clip.cy, clip.rx, clip.ry),
+      ...ops.slice(1),
+    ];
+  }
+  primary.fill = style.fill;
+  return ops;
+}
+
 /**
  * The draw-ops for a mechanic (or generic) shape, in the object's local box.
- * Drawn in order, so fills come before the marks that sit on top.
+ * Drawn in order, so fills come before the marks that sit on top. `style`
+ * customizes fill/outline/edge without changing what the shape *means*.
  */
-export function mechanicOps(shape: ShapeKind, w: number, h: number): MechOp[] {
+export function mechanicOps(
+  shape: ShapeKind,
+  w: number,
+  h: number,
+  style?: ObjectStyle,
+): MechOp[] {
   const cx = w / 2;
   const cy = h / 2;
+  // The ellipse the "striped" fill is clipped to — the shape's round extent.
+  let clip = { cx, cy, rx: w / 2, ry: h / 2 };
+  let ops: MechOp[];
 
   switch (shape) {
     case "rect":
-      return [
+      ops = [
         {
           t: "rect",
           x: 0,
@@ -139,9 +259,10 @@ export function mechanicOps(shape: ShapeKind, w: number, h: number): MechOp[] {
           strokeWidth: STROKE,
         },
       ];
+      break;
 
     case "circle":
-      return [
+      ops = [
         {
           t: "ellipse",
           cx,
@@ -153,10 +274,11 @@ export function mechanicOps(shape: ShapeKind, w: number, h: number): MechOp[] {
           strokeWidth: STROKE,
         },
       ];
+      break;
 
     case "cone": {
       // Frontal: a wedge with chevrons marching from the apex toward the edge.
-      const ops: MechOp[] = [
+      ops = [
         {
           t: "path",
           d: wedgePath(w, h),
@@ -176,12 +298,12 @@ export function mechanicOps(shape: ShapeKind, w: number, h: number): MechOp[] {
           strokeWidth: MARK,
         });
       }
-      return ops;
+      break;
     }
 
     case "line": {
       // Beam/frontal: a bar with chevrons pointing along its length (+x).
-      const ops: MechOp[] = [
+      ops = [
         {
           t: "rect",
           x: 0,
@@ -203,12 +325,12 @@ export function mechanicOps(shape: ShapeKind, w: number, h: number): MechOp[] {
           strokeWidth: MARK,
         });
       }
-      return ops;
+      break;
     }
 
     case "soak": {
       // Stack-here target: concentric rings + chevrons pointing *inward*.
-      const ops: MechOp[] = [
+      ops = [
         {
           t: "ellipse",
           cx,
@@ -251,19 +373,36 @@ export function mechanicOps(shape: ShapeKind, w: number, h: number): MechOp[] {
           strokeWidth: MARK,
         });
       }
-      return ops;
+      break;
     }
 
     case "voidzone": {
-      // Hazard puddle: a bubbly silhouette with a radial "danger" fill.
-      return [
-        {
-          t: "path",
-          d: scallopedPath(cx, cy, w * 0.46, h * 0.46, 8, 0.12),
-          fill: "hazard",
-          stroke: "solid",
-          strokeWidth: STROKE,
-        },
+      // Hazard puddle: a bubbly (or, if `edge:"round"`, clean) silhouette with a
+      // radial "danger" fill. Striped forces a round outline so the hatch reads.
+      const rx = w * 0.46;
+      const ry = h * 0.46;
+      clip = { cx, cy, rx, ry };
+      const rounded = style?.edge === "round" || style?.fill === "striped";
+      const silhouette: MechOp = rounded
+        ? {
+            t: "ellipse",
+            cx,
+            cy,
+            rx,
+            ry,
+            fill: "hazard",
+            stroke: "solid",
+            strokeWidth: STROKE,
+          }
+        : {
+            t: "path",
+            d: scallopedPath(cx, cy, rx, ry, 8, 0.12),
+            fill: "hazard",
+            stroke: "solid",
+            strokeWidth: STROKE,
+          };
+      ops = [
+        silhouette,
         {
           t: "ellipse",
           cx: cx - w * 0.14,
@@ -285,11 +424,12 @@ export function mechanicOps(shape: ShapeKind, w: number, h: number): MechOp[] {
           strokeWidth: 0,
         },
       ];
+      break;
     }
 
     case "pickup":
       // Collectible: a four-point sparkle with a bright centre.
-      return [
+      ops = [
         {
           t: "polyline",
           points: starPoints(cx, cy, w / 2, h / 2, 4, 0.4),
@@ -309,9 +449,10 @@ export function mechanicOps(shape: ShapeKind, w: number, h: number): MechOp[] {
           strokeWidth: MARK,
         },
       ];
+      break;
 
     default:
-      return [
+      ops = [
         {
           t: "rect",
           x: 0,
@@ -324,6 +465,8 @@ export function mechanicOps(shape: ShapeKind, w: number, h: number): MechOp[] {
         },
       ];
   }
+
+  return applyStyle(ops, style, clip);
 }
 
 /** How far a tether wobbles off the straight line, and its bead radius. */
@@ -333,11 +476,16 @@ const TETHER_ANCHOR = 5;
 
 /**
  * The draw-ops for a tether between two world-space points (object centres).
- * A wavy line reads as a "link/pull" and is distinct from the straight arrow;
- * anchor dots mark the two ends. Points are absolute, so the renderer draws
- * these with no per-object transform.
+ * Squiggly by default (reads as "link/pull", distinct from the straight arrow);
+ * `style.line === "straight"` draws a plain line instead. Anchor dots mark the
+ * two ends. Points are absolute, so the renderer draws these with no per-object
+ * transform.
  */
-export function tetherOps(from: Point, to: Point): MechOp[] {
+export function tetherOps(
+  from: Point,
+  to: Point,
+  style?: ObjectStyle,
+): MechOp[] {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -346,17 +494,22 @@ export function tetherOps(from: Point, to: Point): MechOp[] {
   // Perpendicular, for the lateral wobble.
   const px = -uy;
   const py = ux;
-  const waves = Math.max(1, Math.round(len / 60));
-  const samples = Math.max(12, waves * 8);
 
-  let d = "";
-  for (let i = 0; i <= samples; i++) {
-    const s = i / samples;
-    const along = s * len;
-    const off = TETHER_AMP * Math.sin(s * waves * Math.PI * 2);
-    const x = from.x + ux * along + px * off;
-    const y = from.y + uy * along + py * off;
-    d += `${i === 0 ? "M" : "L"}${round(x)} ${round(y)}`;
+  let d: string;
+  if (style?.line === "straight") {
+    d = `M${round(from.x)} ${round(from.y)}L${round(to.x)} ${round(to.y)}`;
+  } else {
+    const waves = Math.max(1, Math.round(len / 60));
+    const samples = Math.max(12, waves * 8);
+    d = "";
+    for (let i = 0; i <= samples; i++) {
+      const s = i / samples;
+      const along = s * len;
+      const off = TETHER_AMP * Math.sin(s * waves * Math.PI * 2);
+      const x = from.x + ux * along + px * off;
+      const y = from.y + uy * along + py * off;
+      d += `${i === 0 ? "M" : "L"}${round(x)} ${round(y)}`;
+    }
   }
 
   return [

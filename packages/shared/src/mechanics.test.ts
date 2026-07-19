@@ -80,6 +80,57 @@ describe("mechanicOps — the visual language distinguishes mechanics", () => {
   });
 });
 
+describe("mechanicOps — style customization", () => {
+  it("overrides the fill of the primary silhouette", () => {
+    expect(mechanicOps("circle", W, H)[0]!.fill).toBe("soft"); // default
+    expect(mechanicOps("circle", W, H, { fill: "solid" })[0]!.fill).toBe(
+      "solid",
+    );
+    expect(mechanicOps("circle", W, H, { fill: "none" })[0]!.fill).toBe("none");
+  });
+
+  it("drops the outline stroke when outline is false", () => {
+    const ops = mechanicOps("rect", W, H, { outline: false });
+    expect(ops[0]!.stroke).toBe("none");
+  });
+
+  it("makes a voidzone round instead of scalloped", () => {
+    // Default silhouette is a bumpy path...
+    expect(mechanicOps("voidzone", W, H)[0]!.t).toBe("path");
+    // ...round makes it a clean ellipse.
+    expect(mechanicOps("voidzone", W, H, { edge: "round" })[0]!.t).toBe(
+      "ellipse",
+    );
+  });
+
+  it("striped fill lays hatch lines behind a hollow outline", () => {
+    const ops = mechanicOps("circle", W, H, { fill: "striped" });
+    expect(ops[0]!.fill).toBe("none"); // the outline is now hollow
+    expect(ops[0]!.stroke).toBe("solid");
+    // Several clipped stripe segments, all inside the box.
+    const stripes = polylines(ops).filter((o) => !o.closed);
+    expect(stripes.length).toBeGreaterThan(2);
+    for (const s of stripes) {
+      for (let i = 0; i < s.points.length; i += 2) {
+        expect(s.points[i]!).toBeGreaterThanOrEqual(-0.01);
+        expect(s.points[i]!).toBeLessThanOrEqual(W + 0.01);
+      }
+    }
+  });
+
+  it("striped voidzone becomes a clean striped circle", () => {
+    const ops = mechanicOps("voidzone", W, H, { fill: "striped" });
+    expect(ops[0]!.t).toBe("ellipse"); // striped forces the round outline
+    expect(polylines(ops).some((o) => !o.closed)).toBe(true); // the stripes
+  });
+
+  it("leaves the shape untouched when no style is given", () => {
+    expect(mechanicOps("voidzone", W, H)).toEqual(
+      mechanicOps("voidzone", W, H, {}),
+    );
+  });
+});
+
 describe("tetherOps", () => {
   it("spans the two endpoints and caps each with an anchor", () => {
     const from = { x: 100, y: 100 };
@@ -111,5 +162,15 @@ describe("tetherOps", () => {
 
   it("does not divide by zero for coincident endpoints", () => {
     expect(() => tetherOps({ x: 5, y: 5 }, { x: 5, y: 5 })).not.toThrow();
+  });
+
+  it("draws a straight two-point line when asked", () => {
+    const from = { x: 40, y: 60 };
+    const to = { x: 260, y: 140 };
+    const path = tetherOps(from, to, { line: "straight" }).find(
+      (o): o is Extract<MechOp, { t: "path" }> => o.t === "path",
+    )!;
+    // Exactly one segment: M<from>L<to>, no intermediate wobble points.
+    expect(path.d).toBe(`M${from.x} ${from.y}L${to.x} ${to.y}`);
   });
 });
