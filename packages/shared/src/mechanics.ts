@@ -8,11 +8,15 @@ import type { Point } from "./transform.js";
  *
  * Why here and not in the editor: the plan is drawn by *two* renderers — Konva
  * in the browser (`ObjectNode.tsx`) and a hand-written SVG string server-side
- * for Discord previews (`renderPlanSvg.ts`). A Konva-only `sceneFunc` couldn't
- * be reproduced in SVG, so the geometry lives here as a small list of
- * primitives (ellipse / rect / path / polyline) that each renderer interprets.
- * Same discipline as `resolveObjectState`: the maths is shared, only the
- * drawing differs — so the board and its preview can't drift.
+ * for Discord previews (`renderPlanSvg.ts`). Geometry computed inside a Konva
+ * `sceneFunc` could never be reproduced in SVG, so it lives here instead as a
+ * small list of primitives (ellipse / rect / path / polyline) that each renderer
+ * interprets. Same discipline as `resolveObjectState`: the maths is shared, only
+ * the drawing differs — so the board and its preview can't drift.
+ *
+ * A renderer is still free to *draw* this geometry imperatively — `TetherNode`
+ * paints `tetherGeometry` in a `sceneFunc` so it can re-read its endpoints every
+ * frame — but it must not invent geometry the other renderer can't reproduce.
  *
  * Shapes are laid out in the object's own box `(0,0)‥(w,h)`; colour is applied
  * by the renderer from the object's `tint`, so form (not colour) is what tells
@@ -474,18 +478,28 @@ const TETHER_AMP = 8;
 const TETHER_STROKE = 4;
 const TETHER_ANCHOR = 5;
 
+/** A tether's raw geometry: a polyline plus the two anchor beads. */
+export interface TetherGeometry {
+  /** Flat `[x0,y0,x1,y1,…]` polyline for the connecting line. */
+  points: number[];
+  anchors: { x: number; y: number; r: number }[];
+  strokeWidth: number;
+}
+
 /**
- * The draw-ops for a tether between two world-space points (object centres).
+ * The raw geometry of a tether between two world-space points (object centres).
  * Squiggly by default (reads as "link/pull", distinct from the straight arrow);
- * `style.line === "straight"` draws a plain line instead. Anchor dots mark the
- * two ends. Points are absolute, so the renderer draws these with no per-object
- * transform.
+ * `style.line === "straight"` draws a plain line instead.
+ *
+ * This is the primitive: {@link tetherOps} turns it into draw-ops for the SVG
+ * preview, while the editor's `TetherNode` draws these points straight onto the
+ * canvas each frame from its endpoints' *live* positions.
  */
-export function tetherOps(
+export function tetherGeometry(
   from: Point,
   to: Point,
   style?: ObjectStyle,
-): MechOp[] {
+): TetherGeometry {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -495,44 +509,68 @@ export function tetherOps(
   const px = -uy;
   const py = ux;
 
-  let d: string;
+  const points: number[] = [];
   if (style?.line === "straight") {
-    d = `M${round(from.x)} ${round(from.y)}L${round(to.x)} ${round(to.y)}`;
+    points.push(round(from.x), round(from.y), round(to.x), round(to.y));
   } else {
     const waves = Math.max(1, Math.round(len / 60));
     const samples = Math.max(12, waves * 8);
-    d = "";
     for (let i = 0; i <= samples; i++) {
       const s = i / samples;
       const along = s * len;
       const off = TETHER_AMP * Math.sin(s * waves * Math.PI * 2);
-      const x = from.x + ux * along + px * off;
-      const y = from.y + uy * along + py * off;
-      d += `${i === 0 ? "M" : "L"}${round(x)} ${round(y)}`;
+      points.push(
+        round(from.x + ux * along + px * off),
+        round(from.y + uy * along + py * off),
+      );
     }
   }
 
+  return {
+    points,
+    anchors: [
+      { x: round(from.x), y: round(from.y), r: TETHER_ANCHOR },
+      { x: round(to.x), y: round(to.y), r: TETHER_ANCHOR },
+    ],
+    strokeWidth: TETHER_STROKE,
+  };
+}
+
+/**
+ * The draw-ops for a tether — {@link tetherGeometry} expressed as a path plus
+ * anchor ellipses, for the server-side SVG preview. Points are absolute, so the
+ * renderer draws these with no per-object transform.
+ */
+export function tetherOps(
+  from: Point,
+  to: Point,
+  style?: ObjectStyle,
+): MechOp[] {
+  const geometry = tetherGeometry(from, to, style);
+  const { points, anchors } = geometry;
+
+  let d = "";
+  for (let i = 0; i < points.length; i += 2) {
+    d += `${i === 0 ? "M" : "L"}${points[i]} ${points[i + 1]}`;
+  }
+
   return [
-    { t: "path", d, fill: "none", stroke: "solid", strokeWidth: TETHER_STROKE },
     {
+      t: "path",
+      d,
+      fill: "none",
+      stroke: "solid",
+      strokeWidth: geometry.strokeWidth,
+    },
+    ...anchors.map((a): MechOp => ({
       t: "ellipse",
-      cx: from.x,
-      cy: from.y,
-      rx: TETHER_ANCHOR,
-      ry: TETHER_ANCHOR,
+      cx: a.x,
+      cy: a.y,
+      rx: a.r,
+      ry: a.r,
       fill: "soft",
       stroke: "solid",
       strokeWidth: 2,
-    },
-    {
-      t: "ellipse",
-      cx: to.x,
-      cy: to.y,
-      rx: TETHER_ANCHOR,
-      ry: TETHER_ANCHOR,
-      fill: "soft",
-      stroke: "solid",
-      strokeWidth: 2,
-    },
+    })),
   ];
 }

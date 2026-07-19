@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { mechanicOps, tetherOps, type MechOp } from "./mechanics.js";
+import {
+  mechanicOps,
+  tetherGeometry,
+  tetherOps,
+  type MechOp,
+} from "./mechanics.js";
 import { SHAPE_KINDS } from "./effects.js";
 
 const W = 120;
@@ -128,6 +133,36 @@ describe("mechanicOps — style customization", () => {
     expect(mechanicOps("voidzone", W, H)).toEqual(
       mechanicOps("voidzone", W, H, {}),
     );
+  });
+});
+
+describe("tetherGeometry — the primitive both renderers share", () => {
+  it("returns a polyline that starts and ends on the endpoints", () => {
+    const from = { x: 40, y: 60 };
+    const to = { x: 260, y: 60 };
+    const g = tetherGeometry(from, to);
+    expect(g.points.length).toBeGreaterThan(4); // squiggly = many samples
+    expect(g.points.slice(0, 2)).toEqual([from.x, from.y]);
+    expect(g.points.slice(-2)).toEqual([to.x, to.y]);
+  });
+
+  it("collapses to a single segment when straight", () => {
+    const g = tetherGeometry(
+      { x: 0, y: 0 },
+      { x: 100, y: 50 },
+      {
+        line: "straight",
+      },
+    );
+    expect(g.points).toEqual([0, 0, 100, 50]);
+  });
+
+  it("caps both ends with an anchor bead", () => {
+    const g = tetherGeometry({ x: 10, y: 20 }, { x: 90, y: 80 });
+    expect(g.anchors).toHaveLength(2);
+    expect(g.anchors[0]).toMatchObject({ x: 10, y: 20 });
+    expect(g.anchors[1]).toMatchObject({ x: 90, y: 80 });
+    expect(g.anchors[0]!.r).toBeGreaterThan(0);
   });
 });
 
