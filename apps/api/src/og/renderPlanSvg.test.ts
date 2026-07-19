@@ -26,11 +26,13 @@ const token = (iconId: string): PlanObject => ({
 const shape = (
   shapeKind: PlanObject["shape"],
   tint: string,
+  style?: PlanObject["style"],
   id = "s1",
 ): PlanObject => ({
   id,
   type: "shape",
   shape: shapeKind,
+  ...(style ? { style } : {}),
   base: {
     x: 0,
     y: 0,
@@ -106,6 +108,31 @@ describe("renderPlanSvg — mechanic shapes", () => {
     expect(svg).toContain("stroke-dasharray");
     expect(svg).toContain("<polyline"); // the inward chevrons
   });
+
+  it("honours the object's style — round + striped voidzone", () => {
+    const scalloped = renderPlanSvg(plan([shape("voidzone", "#ff4444")]), -1);
+    expect(scalloped).toContain("<path"); // bumpy silhouette by default
+
+    const striped = renderPlanSvg(
+      plan([shape("voidzone", "#ff4444", { fill: "striped" })]),
+      -1,
+    );
+    // Striped ⇒ round ellipse outline + hatch lines, no hazard gradient.
+    expect(striped).toContain("<ellipse");
+    expect(striped).toContain("<polyline");
+    expect(striped).not.toContain("radialGradient");
+  });
+
+  it("drops the outline when style.outline is false", () => {
+    const withOutline = renderPlanSvg(plan([shape("rect", "#22cc88")]), -1);
+    expect(withOutline).toContain("stroke=");
+    const noOutline = renderPlanSvg(
+      plan([shape("rect", "#22cc88", { outline: false })]),
+      -1,
+    );
+    // The rect's only stroke was its outline.
+    expect(noOutline).not.toContain("stroke=");
+  });
 });
 
 describe("renderPlanSvg — tethers", () => {
@@ -154,5 +181,18 @@ describe("renderPlanSvg — tethers", () => {
     // The tether itself contributes no path; the surviving marker still renders.
     expect(svg).not.toContain("<path");
     expect(svg).toContain("</svg>");
+  });
+
+  it("draws a straight two-point line when styled straight", () => {
+    // a→centre (42,52), b→centre (232,52).
+    const svg = renderPlanSvg(
+      plan([
+        at("a", 10, 20),
+        at("b", 200, 20),
+        { ...tether, style: { line: "straight" } },
+      ]),
+      -1,
+    );
+    expect(svg).toContain("M42 52L232 52");
   });
 });

@@ -26,6 +26,8 @@ import {
  */
 const DEFAULT_TINT = "#4f9dff";
 const FILL_ALPHA = "33";
+/** Stronger alpha for the `solid` fill — matches MechArtwork's SOLID_ALPHA. */
+const SOLID_ALPHA = "cc";
 const LABEL_FONT_SIZE = 14;
 
 /** XML-escape text that came from a user (labels, titles). */
@@ -64,7 +66,9 @@ function opToSvg(op: MechOp, tint: string, gradientId: string): string {
       ? `fill="none"`
       : op.fill === "soft"
         ? `fill="${tint}${FILL_ALPHA}"`
-        : `fill="url(#${gradientId})"`;
+        : op.fill === "solid"
+          ? `fill="${tint}${SOLID_ALPHA}"`
+          : `fill="url(#${gradientId})"`;
   const stroke =
     op.stroke === "none"
       ? ""
@@ -115,6 +119,7 @@ function renderObject(
     const ops = tetherOps(
       { x: from.x + from.w / 2, y: from.y + from.h / 2 },
       { x: to.x + to.w / 2, y: to.y + to.h / 2 },
+      object.style,
     );
     const alpha = state.opacity < 1 ? ` opacity="${state.opacity}"` : "";
     return `<g${alpha}>${opsToSvg(ops, colour, `hz-${object.id}`)}</g>`;
@@ -143,7 +148,7 @@ function renderObject(
       // Every shape — generic and mechanic — is drawn from the shared draw-ops,
       // the same ones the Konva editor renders, so the preview can't drift.
       body = opsToSvg(
-        mechanicOps(object.shape ?? "rect", w, h),
+        mechanicOps(object.shape ?? "rect", w, h, object.style),
         colour,
         `hz-${object.id}`,
       );
