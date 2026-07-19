@@ -2,7 +2,10 @@ import {
   getBackgroundSrc,
   getIconById,
   ICON_VIEWBOX,
+  mechanicOps,
   resolveObjectState,
+  tetherOps,
+  type MechOp,
   type ObjectState,
   type Plan,
   type PlanObject,
@@ -35,16 +38,89 @@ export function escapeXml(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
+/** `[x0,y0,x1,y1,…]` → an SVG `points` string. */
+function pointsToStr(points: number[]): string {
+  const out: string[] = [];
+  for (let i = 0; i < points.length; i += 2) {
+    out.push(`${points[i]},${points[i + 1]}`);
+  }
+  return out.join(" ");
+}
+
+/** The radial "danger" fill for hazard ops (voidzone), matching MechArtwork. */
+function hazardDefs(gradientId: string, tint: string): string {
+  return (
+    `<defs><radialGradient id="${gradientId}" cx="50%" cy="50%" r="50%">` +
+    `<stop offset="0%" stop-color="${tint}" stop-opacity="0.53"/>` +
+    `<stop offset="100%" stop-color="${tint}" stop-opacity="0.067"/>` +
+    `</radialGradient></defs>`
+  );
+}
+
+/** One shared mechanic draw-op → an SVG element, coloured by `tint`. */
+function opToSvg(op: MechOp, tint: string, gradientId: string): string {
+  const fill =
+    op.fill === "none"
+      ? `fill="none"`
+      : op.fill === "soft"
+        ? `fill="${tint}${FILL_ALPHA}"`
+        : `fill="url(#${gradientId})"`;
+  const stroke =
+    op.stroke === "none"
+      ? ""
+      : ` stroke="${tint}" stroke-width="${op.strokeWidth}"` +
+        (op.stroke === "dashed" ? ` stroke-dasharray="8 6"` : "");
+
+  switch (op.t) {
+    case "ellipse":
+      return `<ellipse cx="${op.cx}" cy="${op.cy}" rx="${op.rx}" ry="${op.ry}" ${fill}${stroke}/>`;
+    case "rect":
+      return `<rect x="${op.x}" y="${op.y}" width="${op.w}" height="${op.h}" ${fill}${stroke}/>`;
+    case "path":
+      return `<path d="${op.d}" ${fill}${stroke}/>`;
+    case "polyline": {
+      const pts = pointsToStr(op.points);
+      return op.closed
+        ? `<polygon points="${pts}" ${fill}${stroke}/>`
+        : `<polyline points="${pts}" ${fill}${stroke}/>`;
+    }
+  }
+}
+
+/** Render a list of mechanic ops, injecting a hazard gradient if any op needs it. */
+function opsToSvg(ops: MechOp[], tint: string, gradientId: string): string {
+  const defs = ops.some((o) => o.fill === "hazard")
+    ? hazardDefs(gradientId, tint)
+    : "";
+  return defs + ops.map((op) => opToSvg(op, tint, gradientId)).join("");
+}
+
 function renderObject(
   object: PlanObject,
-  state: ObjectState,
+  states: ReadonlyMap<string, ObjectState>,
   iconImages: Record<string, string>,
 ): string {
-  if (!state.visible || state.opacity === 0) return "";
+  const state = states.get(object.id);
+  if (!state || !state.visible || state.opacity === 0) return "";
 
-  const { x, y, w, h, rotation, opacity } = state;
   const colour = object.base.tint ?? DEFAULT_TINT;
   const label = object.base.label;
+
+  // A tether is drawn in absolute space from its endpoints' centres, not from
+  // its own (degenerate) transform — mirrors TetherNode in the editor.
+  if (object.type === "tether") {
+    const from = object.fromId ? states.get(object.fromId) : undefined;
+    const to = object.toId ? states.get(object.toId) : undefined;
+    if (!from || !to || !from.visible || !to.visible) return "";
+    const ops = tetherOps(
+      { x: from.x + from.w / 2, y: from.y + from.h / 2 },
+      { x: to.x + to.w / 2, y: to.y + to.h / 2 },
+    );
+    const alpha = state.opacity < 1 ? ` opacity="${state.opacity}"` : "";
+    return `<g${alpha}>${opsToSvg(ops, colour, `hz-${object.id}`)}</g>`;
+  }
+
+  const { x, y, w, h, rotation, opacity } = state;
   // Rotate about the object's own origin, matching Konva (plan §2.6 / marquee).
   const transform = `translate(${x} ${y})${rotation ? ` rotate(${rotation})` : ""}`;
 
@@ -64,19 +140,13 @@ function renderObject(
       break;
 
     case "shape":
-      if (object.shape === "circle") {
-        body = `<ellipse cx="${w / 2}" cy="${h / 2}" rx="${w / 2}" ry="${h / 2}" fill="${colour}${FILL_ALPHA}" stroke="${colour}" stroke-width="3"/>`;
-      } else if (object.shape === "cone") {
-        // A 60° wedge opening upward from the bottom-centre, as Konva draws it.
-        const half = (60 * Math.PI) / 180 / 2;
-        const cx = w / 2;
-        const left = cx - Math.sin(half) * h;
-        const right = cx + Math.sin(half) * h;
-        const tipY = h - Math.cos(half) * h;
-        body = `<polygon points="${cx},${h} ${left},${tipY} ${right},${tipY}" fill="${colour}${FILL_ALPHA}" stroke="${colour}" stroke-width="3"/>`;
-      } else {
-        body = `<rect width="${w}" height="${h}" fill="${colour}${FILL_ALPHA}" stroke="${colour}" stroke-width="3"/>`;
-      }
+      // Every shape — generic and mechanic — is drawn from the shared draw-ops,
+      // the same ones the Konva editor renders, so the preview can't drift.
+      body = opsToSvg(
+        mechanicOps(object.shape ?? "rect", w, h),
+        colour,
+        `hz-${object.id}`,
+      );
       break;
 
     default: {
@@ -159,17 +229,20 @@ export function renderPlanSvg(
     options.backgroundSrc ?? getBackgroundSrc(plan.background.assetId);
   const iconImages = options.iconImages ?? {};
 
+  // Resolve every object once up front, so a tether can look up its endpoints'
+  // states (not just its own) when it draws.
+  const states = new Map<string, ObjectState>(
+    plan.objects.map((object) => [
+      object.id,
+      resolveObjectState(object, plan.steps, stepIndex),
+    ]),
+  );
+
   const objects = plan.objects
     // Draw in z-order so the preview stacks like the board does.
     .slice()
     .sort((a, b) => a.base.z - b.base.z)
-    .map((object) =>
-      renderObject(
-        object,
-        resolveObjectState(object, plan.steps, stepIndex),
-        iconImages,
-      ),
-    )
+    .map((object) => renderObject(object, states, iconImages))
     .join("");
 
   return (
