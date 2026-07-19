@@ -108,19 +108,28 @@ describe("mechanicOps — style customization", () => {
     );
   });
 
-  it("striped fill lays hatch lines behind a hollow outline", () => {
+  it("striped fill lays dense hatch lines over a soft wash", () => {
     const ops = mechanicOps("circle", W, H, { fill: "striped" });
-    expect(ops[0]!.fill).toBe("none"); // the outline is now hollow
+    // The shape keeps a translucent fill — the hatch sits on top of it.
+    expect(ops[0]!.fill).toBe("soft");
     expect(ops[0]!.stroke).toBe("solid");
-    // Several clipped stripe segments, all inside the box.
+    // Dense enough to read as a pattern, and every segment clipped to the box.
     const stripes = polylines(ops).filter((o) => !o.closed);
-    expect(stripes.length).toBeGreaterThan(2);
+    expect(stripes.length).toBeGreaterThanOrEqual(10);
     for (const s of stripes) {
       for (let i = 0; i < s.points.length; i += 2) {
         expect(s.points[i]!).toBeGreaterThanOrEqual(-0.01);
         expect(s.points[i]!).toBeLessThanOrEqual(W + 0.01);
       }
     }
+  });
+
+  it("keeps a small striped shape from collapsing into a solid block", () => {
+    // The pixel floor on spacing means stripes stay distinguishable.
+    const ops = mechanicOps("circle", 24, 24, { fill: "striped" });
+    const stripes = polylines(ops).filter((o) => !o.closed);
+    expect(stripes.length).toBeGreaterThan(1);
+    expect(stripes.length).toBeLessThan(12);
   });
 
   it("striped voidzone becomes a clean striped circle", () => {

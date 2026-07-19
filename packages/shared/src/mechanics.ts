@@ -150,6 +150,13 @@ function wedgePath(w: number, h: number): string {
 const round = (n: number) => Math.round(n * 100) / 100;
 
 const STRIPE_STROKE = 2;
+/**
+ * Hatch spacing, as a fraction of the shape's smaller radius with a pixel
+ * floor. Tight enough to read as a filled pattern rather than a few stray
+ * lines, while the floor stops a small shape turning into a solid block.
+ */
+const STRIPE_GAP_RATIO = 0.16;
+const STRIPE_MIN_GAP = 6;
 
 /**
  * Diagonal hatch lines clipped to an ellipse — the "striped" fill. Each stripe
@@ -167,7 +174,7 @@ function ellipseStripes(
   const uy = Math.sin(angle);
   const nx = -uy;
   const ny = ux;
-  const spacing = Math.max(9, Math.min(rx, ry) * 0.34);
+  const spacing = Math.max(STRIPE_MIN_GAP, Math.min(rx, ry) * STRIPE_GAP_RATIO);
   const reach = Math.hypot(rx, ry);
   const a = (ux * ux) / (rx * rx) + (uy * uy) / (ry * ry);
 
@@ -202,9 +209,9 @@ function ellipseStripes(
 /**
  * Apply per-object {@link ObjectStyle} to a shape's ops. The `fill`/`outline`
  * choices act on the shape's *primary* op (its silhouette, always `ops[0]`);
- * `striped` turns that fill off and lays hatch lines clipped to the given
- * ellipse behind the marks. `edge`/`line` change geometry and are handled by the
- * builders, not here.
+ * `striped` keeps a translucent `soft` wash under the hatch lines, which are
+ * clipped to the given ellipse and drawn behind the marks. `edge`/`line` change
+ * geometry and are handled by the builders, not here.
  */
 function applyStyle(
   ops: MechOp[],
@@ -218,7 +225,8 @@ function applyStyle(
 
   if (!style.fill) return ops;
   if (style.fill === "striped") {
-    primary.fill = "none";
+    // A wash under the hatch, so the shape still reads as a filled area.
+    primary.fill = "soft";
     if (primary.stroke === "none" && style.outline !== false) {
       primary.stroke = "solid";
     }
