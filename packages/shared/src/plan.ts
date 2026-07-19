@@ -29,6 +29,12 @@ export const ObjectBaseSchema = TransformSchema.extend({
   opacity: OpacitySchema,
   /** Class colour / custom tint, if any. */
   tint: z.string().optional(),
+  /**
+   * Editor-side identifier shown in the Animation panel and Timeline. Distinct
+   * from `label`, which is the text drawn *on the canvas* — an object can be
+   * named "Tank 1" for the author's benefit without printing that on the board.
+   */
+  name: z.string().optional(),
   label: z.string().optional(),
   /** Stacking order within the interactive layer. */
   z: z.number().finite(),

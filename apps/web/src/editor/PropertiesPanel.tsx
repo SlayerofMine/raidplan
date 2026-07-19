@@ -106,6 +106,20 @@ export function PropertiesPanel() {
           />
 
           <label className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-neutral-500">Name</span>
+            <input
+              type="text"
+              data-testid="prop-name"
+              placeholder="e.g. Tank 1"
+              className="w-28 rounded border border-panelborder bg-neutral-900 px-2 py-1"
+              value={object.base.name ?? ""}
+              onChange={(e) =>
+                updateObject(object.id, { name: e.target.value })
+              }
+            />
+          </label>
+
+          <label className="flex items-center justify-between gap-2 text-sm">
             <span className="text-neutral-500">Label</span>
             <input
               type="text"

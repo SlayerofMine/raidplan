@@ -1,5 +1,9 @@
 import gsap from "gsap";
 import type { Anim, ObjectState, ResolvedStates, Step } from "@raidplan/shared";
+import {
+  isClickTriggered as isClickTrigger,
+  layoutStepTimeline,
+} from "./stepTimeline";
 
 /**
  * Compile a step into a GSAP timeline (plan §3.5 / §7 "Playback engine").
@@ -49,7 +53,7 @@ export interface CompiledStep {
 
 /** Animations that are advanced by a click rather than the step timeline. */
 export function isClickTriggered(anim: Anim): boolean {
-  return anim.trigger === "onClick";
+  return isClickTrigger(anim.trigger);
 }
 
 const MS = 1000;
@@ -93,13 +97,16 @@ export function compileStep({
     return proxy;
   };
 
-  let previousStart = 0;
-  let previousEnd = 0;
+  // The trigger/delay/duration math lives in one place (`stepTimeline`) so the
+  // interactive Gantt view and this player can never disagree on where a bar
+  // sits. `animations` is already onClick- and ghost-free, so its spans chain
+  // plainly in document order.
+  const spanById = new Map(
+    layoutStepTimeline(animations).spans.map((s) => [s.animId, s]),
+  );
 
   for (const anim of animations) {
-    const at =
-      triggerPosition(anim, previousStart, previousEnd) + anim.delayMs / MS;
-    const duration = anim.durationMs / MS;
+    const span = spanById.get(anim.id)!;
 
     addTween({
       timeline,
@@ -107,13 +114,10 @@ export function compileStep({
       proxy: proxyFor(anim.objectId),
       initial: initial[anim.objectId]!,
       end: end[anim.objectId]!,
-      at,
-      duration,
+      at: span.startMs / MS,
+      duration: anim.durationMs / MS,
       apply,
     });
-
-    previousStart = at;
-    previousEnd = at + tweenSpan(anim, duration);
   }
 
   return { timeline, initial };
@@ -141,28 +145,6 @@ function entranceOffset(anim: Anim, from: ObjectState): Partial<ObjectState> {
     default:
       return {};
   }
-}
-
-/** Where an animation starts, before its own delay is added. */
-function triggerPosition(
-  anim: Anim,
-  previousStart: number,
-  previousEnd: number,
-): number {
-  switch (anim.trigger) {
-    case "onEnter":
-      return 0;
-    case "withPrevious":
-      return previousStart;
-    default:
-      return previousEnd;
-  }
-}
-
-/** How long an animation occupies the timeline (out-and-back included). */
-function tweenSpan(anim: Anim, duration: number): number {
-  if (anim.effect === "pulse" || anim.effect === "blink") return duration * 2;
-  return duration;
 }
 
 interface TweenParams {

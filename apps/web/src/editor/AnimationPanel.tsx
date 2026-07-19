@@ -5,6 +5,7 @@ import {
   type Anim,
 } from "@raidplan/shared";
 import { BASE_STEP_INDEX, useEditorStore } from "../store/editorStore";
+import { objectDisplayName } from "./objectName";
 
 /** GSAP eases offered in the picker (plan §7: easing is a GSAP ease name). */
 const EASINGS = [
@@ -77,8 +78,8 @@ export function AnimationPanel() {
 }
 
 function AnimationRow({ anim, stepIndex }: { anim: Anim; stepIndex: number }) {
-  const label = useEditorStore(
-    (s) => s.objects[anim.objectId]?.base.label ?? anim.objectId,
+  const label = useEditorStore((s) =>
+    objectDisplayName(s.objects[anim.objectId]),
   );
   const updateAnimation = useEditorStore((s) => s.updateAnimation);
   const deleteAnimation = useEditorStore((s) => s.deleteAnimation);

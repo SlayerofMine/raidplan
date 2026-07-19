@@ -6,6 +6,7 @@ import { PropertiesPanel } from "./PropertiesPanel";
 import { SaveStatus } from "./SaveStatus";
 import { SyncedIconResolver } from "./SyncedIconResolver";
 import { StepStrip } from "./StepStrip";
+import { TimelineDock } from "./timeline/TimelineDock";
 import { Toolbar } from "./Toolbar";
 import { useEditorHotkeys } from "./useEditorHotkeys";
 import { useLocalPersistence } from "./useLocalPersistence";
@@ -65,8 +66,9 @@ export function EditorLayout({ planId }: { planId: string }) {
         <PropertiesPanel />
         <AnimationPanel />
       </div>
-      <div style={{ gridArea: "steps" }}>
+      <div style={{ gridArea: "steps" }} className="flex min-h-0 flex-col">
         <StepStrip />
+        <TimelineDock />
       </div>
     </div>
   );
