@@ -107,6 +107,24 @@ describe("editorStore — tethers", () => {
   });
 });
 
+describe("editorStore — style", () => {
+  it("updateStyle merges patches so toggles compose", () => {
+    const id = state().addPrimitive("shape", "voidzone");
+    state().updateStyle(id, { edge: "round" });
+    state().updateStyle(id, { fill: "striped" });
+    expect(state().objects[id]!.style).toEqual({
+      edge: "round",
+      fill: "striped",
+    });
+    // A later patch overrides only its own key.
+    state().updateStyle(id, { edge: "scalloped" });
+    expect(state().objects[id]!.style).toMatchObject({
+      edge: "scalloped",
+      fill: "striped",
+    });
+  });
+});
+
 describe("editorStore — mutation", () => {
   it("updateObject patches only the given properties", () => {
     const id = state().addIcon(iconId);

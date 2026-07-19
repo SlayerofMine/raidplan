@@ -46,7 +46,7 @@ export function TetherNode({ objectId }: { objectId: string }) {
   const fromCentre = { x: from.x + from.w / 2, y: from.y + from.h / 2 };
   const toCentre = { x: to.x + to.w / 2, y: to.y + to.h / 2 };
   const tint = object.base.tint ?? TETHER_DEFAULT_TINT;
-  const ops = tetherOps(fromCentre, toCentre);
+  const ops = tetherOps(fromCentre, toCentre, object.style);
   const linePath = ops.find((o) => o.t === "path")?.d;
 
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {

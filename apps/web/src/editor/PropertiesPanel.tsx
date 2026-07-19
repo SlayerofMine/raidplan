@@ -1,4 +1,5 @@
 import { useShallow } from "zustand/react/shallow";
+import type { MechFillStyle, ObjectStyle, PlanObject } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
 import { selectObjectState } from "../store/selectors";
 
@@ -28,6 +29,7 @@ export function PropertiesPanel() {
     ),
   );
   const updateObject = useEditorStore((s) => s.updateObject);
+  const updateStyle = useEditorStore((s) => s.updateStyle);
   const setLocked = useEditorStore((s) => s.setLocked);
   const bringForward = useEditorStore((s) => s.bringForward);
   const sendBackward = useEditorStore((s) => s.sendBackward);
@@ -145,6 +147,8 @@ export function PropertiesPanel() {
             />
           </label>
 
+          <StyleControls object={object} updateStyle={updateStyle} />
+
           <label className="flex items-center justify-between gap-2 text-sm">
             <span className="text-neutral-500">Visible</span>
             <input
@@ -232,6 +236,122 @@ function NumberField({
           if (Number.isFinite(next)) onChange(next);
         }}
       />
+    </label>
+  );
+}
+
+/** Fill choices offered per shape — curated so odd combos stay out of the UI. */
+const FILL_OPTIONS: Record<string, MechFillStyle[]> = {
+  voidzone: ["soft", "solid", "striped", "hazard", "none"],
+  circle: ["soft", "solid", "striped", "none"],
+  rect: ["soft", "solid", "none"],
+  cone: ["soft", "solid", "none"],
+  line: ["soft", "solid", "none"],
+  soak: ["soft", "solid", "none"],
+  pickup: ["soft", "solid", "none"],
+};
+
+/**
+ * Form customization for the selected shape or tether (plan §2.4): fill,
+ * outline, a voidzone's edge, a tether's line. Only shows what's relevant to
+ * the selection; colour stays the Tint control above.
+ */
+function StyleControls({
+  object,
+  updateStyle,
+}: {
+  object: PlanObject;
+  updateStyle: (id: string, patch: Partial<ObjectStyle>) => void;
+}) {
+  if (object.type === "tether") {
+    return (
+      <SelectRow
+        label="Line"
+        testId="style-line"
+        value={object.style?.line ?? "squiggly"}
+        options={["squiggly", "straight"]}
+        onChange={(line) =>
+          updateStyle(object.id, { line: line as "squiggly" | "straight" })
+        }
+      />
+    );
+  }
+
+  if (object.type !== "shape") return null;
+
+  const fills = FILL_OPTIONS[object.shape ?? "rect"] ?? [
+    "soft",
+    "solid",
+    "none",
+  ];
+  const fillValue =
+    object.style?.fill ?? (object.shape === "voidzone" ? "hazard" : "soft");
+
+  return (
+    <>
+      <SelectRow
+        label="Fill"
+        testId="style-fill"
+        value={fillValue}
+        options={fills}
+        onChange={(fill) =>
+          updateStyle(object.id, { fill: fill as MechFillStyle })
+        }
+      />
+      {object.shape === "voidzone" && (
+        <SelectRow
+          label="Edge"
+          testId="style-edge"
+          value={object.style?.edge ?? "scalloped"}
+          options={["scalloped", "round"]}
+          onChange={(edge) =>
+            updateStyle(object.id, { edge: edge as "scalloped" | "round" })
+          }
+        />
+      )}
+      <label className="flex items-center justify-between gap-2 text-sm">
+        <span className="text-neutral-500">Outline</span>
+        <input
+          type="checkbox"
+          data-testid="style-outline"
+          checked={object.style?.outline !== false}
+          onChange={(e) =>
+            updateStyle(object.id, { outline: e.target.checked })
+          }
+        />
+      </label>
+    </>
+  );
+}
+
+function SelectRow({
+  label,
+  value,
+  options,
+  onChange,
+  testId,
+}: {
+  label: string;
+  value: string;
+  options: readonly string[];
+  onChange: (value: string) => void;
+  testId: string;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-2 text-sm">
+      <span className="text-neutral-500">{label}</span>
+      <select
+        data-testid={testId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-28 rounded border border-panelborder bg-neutral-900 px-1 py-1"
+      >
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }

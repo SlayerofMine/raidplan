@@ -14,6 +14,8 @@ import type { MechFill, MechOp, MechStroke } from "@raidplan/shared";
 
 /** Translucent fill alpha for `soft` (matches the historic shape fill). */
 const SOFT_ALPHA = "33";
+/** Stronger alpha for `solid` — reads as filled but still lets the map show. */
+const SOLID_ALPHA = "cc";
 
 function strokeProps(stroke: MechStroke, tint: string, width: number) {
   if (stroke === "none") return {};
@@ -31,6 +33,7 @@ function fillProps(
 ) {
   if (fill === "none") return {};
   if (fill === "soft") return { fill: `${tint}${SOFT_ALPHA}` };
+  if (fill === "solid") return { fill: `${tint}${SOLID_ALPHA}` };
   // hazard — opaque-ish centre fading out, so a voidzone reads as "avoid".
   return {
     fillRadialGradientStartPoint: { x: hazard.cx, y: hazard.cy },

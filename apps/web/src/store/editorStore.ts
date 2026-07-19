@@ -8,6 +8,7 @@ import {
   type Background,
   type ObjectBase,
   type ObjectState,
+  type ObjectStyle,
   type ObjectType,
   type Plan,
   type PlanObject,
@@ -67,6 +68,8 @@ export interface EditorState extends PlanDoc {
 
   // --- mutation ---
   updateObject: (id: string, patch: Partial<ObjectBase>) => void;
+  /** Merge a patch into an object's visual style (fill/outline/edge/line). */
+  updateStyle: (id: string, patch: Partial<ObjectStyle>) => void;
   moveObject: (id: string, x: number, y: number) => void;
   nudgeSelected: (dx: number, dy: number, big?: boolean) => void;
   setLocked: (id: string, locked: boolean) => void;
@@ -322,6 +325,15 @@ export const useEditorStore = create<EditorState>()(
             Object.assign(object.base, baseOnly);
           }
           writeOverridable(s, id, override);
+        }),
+
+      updateStyle: (id, patch) =>
+        set((s) => {
+          const object = s.objects[id];
+          if (!object) return;
+          // Style is step-independent (like tint) — it lives on the object,
+          // never in a step's overrides. Merge so toggles compose.
+          object.style = { ...object.style, ...patch };
         }),
 
       moveObject: (id, x, y) =>

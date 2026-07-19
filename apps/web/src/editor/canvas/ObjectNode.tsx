@@ -9,7 +9,12 @@ import {
 } from "react-konva";
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
 import { useShallow } from "zustand/react/shallow";
-import { mechanicOps, type ObjectType, type ShapeKind } from "@raidplan/shared";
+import {
+  mechanicOps,
+  type ObjectStyle,
+  type ObjectType,
+  type ShapeKind,
+} from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { selectObjectState } from "../../store/selectors";
 import { useIconSrc } from "../iconSrc";
@@ -139,6 +144,7 @@ export const ObjectNode = memo(function ObjectNode({
       <ObjectContent
         type={object.type}
         shape={object.shape}
+        style={object.style}
         w={w}
         h={h}
         colour={colour}
@@ -165,6 +171,7 @@ export const ObjectNode = memo(function ObjectNode({
 function ObjectContent({
   type,
   shape,
+  style,
   w,
   h,
   colour,
@@ -174,6 +181,7 @@ function ObjectContent({
 }: {
   type: ObjectType;
   shape: ShapeKind | undefined;
+  style: ObjectStyle | undefined;
   w: number;
   h: number;
   /** Tint with a fallback applied — safe to use as a stroke/fill. */
@@ -205,6 +213,7 @@ function ObjectContent({
       <ObjectArtwork
         type={type}
         shape={shape}
+        style={style}
         w={w}
         h={h}
         colour={colour}
@@ -250,6 +259,7 @@ function ObjectLabel({
 function ObjectArtwork({
   type,
   shape,
+  style,
   w,
   h,
   colour,
@@ -258,6 +268,7 @@ function ObjectArtwork({
 }: {
   type: ObjectType;
   shape: ShapeKind | undefined;
+  style: ObjectStyle | undefined;
   w: number;
   h: number;
   colour: string;
@@ -283,7 +294,7 @@ function ObjectArtwork({
       // the shared draw-ops, so the editor matches the OG preview exactly.
       return (
         <MechArtwork
-          ops={mechanicOps(shape ?? "rect", w, h)}
+          ops={mechanicOps(shape ?? "rect", w, h, style)}
           tint={colour}
           w={w}
           h={h}
