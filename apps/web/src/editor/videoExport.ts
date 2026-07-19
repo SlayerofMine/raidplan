@@ -1,6 +1,6 @@
 import { Muxer, ArrayBufferTarget } from "webm-muxer";
 import type { Step } from "@raidplan/shared";
-import { layoutStepTimeline } from "../anim/stepTimeline";
+import { layoutStepTimeline, occupiedMs } from "../anim/stepTimeline";
 import { slugify } from "./planFile";
 
 /**
@@ -43,12 +43,30 @@ export interface PlanFramesOptions {
 }
 
 /**
+ * Extra time a step needs beyond its own timeline so a collision that fires at
+ * the very last moment still plays out on screen instead of being cut off.
+ *
+ * `onClick` is excluded: nobody is clicking during an export, so those never
+ * fire and would only pad the clip.
+ */
+export function collisionTailMs(step: Step): number {
+  let tail = 0;
+  for (const anim of step.animations) {
+    if (anim.trigger !== "onCollision") continue;
+    // A one-shot drops the authored delay — the collision decided when.
+    tail = Math.max(tail, occupiedMs(anim.effect, anim.durationMs));
+  }
+  return tail;
+}
+
+/**
  * The complete script of the export: every frame to render, in order.
  *
  * Step lengths come from {@link layoutStepTimeline}, the same source playback
  * and the Gantt use, so the video runs for exactly as long as the plan plays.
  * A step with no animations still gets `holdMs` of frames — otherwise a mostly
- * static plan would export as a zero-length file.
+ * static plan would export as a zero-length file — and a step with collision
+ * triggers gets {@link collisionTailMs} on the end.
  *
  * Pure, so the whole shape of an export is testable without a canvas.
  */
@@ -61,7 +79,7 @@ export function planFrames(
 
   steps.forEach((step, stepIndex) => {
     const playMs = layoutStepTimeline(step.animations).totalMs;
-    const durationMs = Math.max(playMs, holdMs);
+    const durationMs = Math.max(playMs, holdMs) + collisionTailMs(step);
     // `<=` so the settled end state is the last frame of every step.
     const count = Math.max(1, Math.round(durationMs / frameMs));
     for (let i = 0; i <= count; i++) {

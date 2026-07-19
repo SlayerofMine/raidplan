@@ -26,3 +26,36 @@ export function applyObjectState(
     visible: props.visible,
   });
 }
+
+/**
+ * An object's state *right now*, read back off its Konva node.
+ *
+ * A triggered animation starts from where the object actually is rather than
+ * snapping back to the step's start. `w`/`h` come from `fallback` because
+ * {@link applyObjectState} never writes them.
+ */
+export function readObjectState(
+  stage: Stage | null,
+  objectId: string,
+  fallback: ObjectState,
+): ObjectState {
+  const node = stage?.findOne(`#${objectId}`);
+  if (!node) return fallback;
+  return {
+    ...fallback,
+    x: node.x(),
+    y: node.y(),
+    rotation: node.rotation(),
+    opacity: node.opacity(),
+    visible: node.visible(),
+  };
+}
+
+/** An object's current bounding box in native coords, for collision tests. */
+export function objectRect(stage: Stage | null, objectId: string) {
+  const node = stage?.findOne(`#${objectId}`);
+  // A hidden object can't be hit — a consumed pickup stays consumed.
+  if (!node || !node.visible()) return null;
+  const layer = node.getLayer();
+  return layer ? node.getClientRect({ relativeTo: layer }) : null;
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Anim, Step } from "@raidplan/shared";
 import {
+  collisionTailMs,
   DEFAULT_HOLD_MS,
   encodePlanVideo,
   evenSize,
@@ -95,6 +96,68 @@ describe("planFrames", () => {
 
   it("produces nothing for a plan with no steps", () => {
     expect(planFrames([])).toEqual([]);
+  });
+
+  it("leaves room for a collision that fires at the last moment", () => {
+    // Without the tail, an orb hit on the final frame would never be seen to
+    // disappear in the exported clip.
+    const collide = anim({
+      id: "hit",
+      trigger: "onCollision",
+      collideWith: ["tank"],
+      durationMs: 400,
+    });
+    const withCollision = planFrames(
+      [step("s", [anim({ durationMs: 1000 }), collide])],
+      { fps: 10, holdMs: 0 },
+    );
+    expect(withCollision.at(-1)!.timeMs).toBe(1400);
+  });
+
+  it("doesn't pad for onClick, which can't fire during an export", () => {
+    const frames = planFrames(
+      [
+        step("s", [
+          anim({ durationMs: 1000 }),
+          anim({ id: "c", trigger: "onClick", durationMs: 400 }),
+        ]),
+      ],
+      { fps: 10, holdMs: 0 },
+    );
+    expect(frames.at(-1)!.timeMs).toBe(1000);
+  });
+});
+
+describe("collisionTailMs", () => {
+  it("is the longest collision animation on the step", () => {
+    expect(
+      collisionTailMs(
+        step("s", [
+          anim({ id: "a", trigger: "onCollision", durationMs: 300 }),
+          anim({ id: "b", trigger: "onCollision", durationMs: 700 }),
+        ]),
+      ),
+    ).toBe(700);
+  });
+
+  it("counts pulse/blink at their out-and-back length", () => {
+    expect(
+      collisionTailMs(
+        step("s", [
+          anim({
+            trigger: "onCollision",
+            kind: "emphasis",
+            effect: "pulse",
+            durationMs: 300,
+          }),
+        ]),
+      ),
+    ).toBe(600);
+  });
+
+  it("is zero without collision triggers", () => {
+    expect(collisionTailMs(step("s", [anim()]))).toBe(0);
+    expect(collisionTailMs(step("empty"))).toBe(0);
   });
 });
 

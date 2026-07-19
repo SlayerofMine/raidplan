@@ -2,12 +2,24 @@ import type { Stage } from "konva/lib/Stage";
 import {
   resolveObjectState,
   type Background,
+  type ObjectState,
   type PlanObject,
   type ResolvedStates,
   type Step,
 } from "@raidplan/shared";
-import { applyObjectState } from "../anim/applyToStage";
+import {
+  applyObjectState,
+  objectRect,
+  readObjectState,
+} from "../anim/applyToStage";
+import {
+  collisionRules,
+  isColliding,
+  type CollisionRule,
+  type RectLookup,
+} from "../anim/collision";
 import { compileStep, type CompiledStep } from "../anim/compileStep";
+import { compileOneShot } from "../anim/oneShot";
 import type { View } from "./canvas/coords";
 import { evenSize, type Frame } from "./videoExport";
 
@@ -22,8 +34,15 @@ import { evenSize, type Frame } from "./videoExport";
  * zoom with `pixelRatio`, so frames are the map's native pixels whatever the
  * camera is doing.
  *
+ * **Collisions are simulated too.** `onCollision` animations sit outside the
+ * step timeline, so each frame re-tests the armed rules against the boxes the
+ * frame just produced and starts a one-shot the first time one connects — the
+ * same detection and the same `compileOneShot` playback uses. Without this a
+ * picked-up orb would never disappear in the exported video.
+ *
  * Konva can't render under jsdom, so this layer is verified by running the app;
- * the maths it stands on (`planFrames`, `evenSize`, `compileStep`) is unit-tested.
+ * the maths it stands on (`planFrames`, `collisionRules`, `compileStep`) is
+ * unit-tested.
  */
 export interface FrameRenderer {
   /** The clip's pixel size — the plan's native size, rounded even for VP9. */
@@ -31,6 +50,12 @@ export interface FrameRenderer {
   renderFrame: (frame: Frame) => HTMLCanvasElement | null;
   /** Put the board back the way we found it, and drop the timelines. */
   restore: (stepIndex: number) => void;
+}
+
+/** A collision animation that has fired, and when, so it can be seeked. */
+interface FiredShot {
+  timeline: gsap.core.Timeline;
+  startedMs: number;
 }
 
 export function createFrameRenderer(params: {
@@ -59,6 +84,10 @@ export function createFrameRenderer(params: {
     }
   };
 
+  const apply = (objectId: string, props: ObjectState) =>
+    applyObjectState(stage, objectId, props);
+  const rectOf: RectLookup = (objectId) => objectRect(stage, objectId);
+
   const compiled = new Map<number, CompiledStep>();
   const timelineFor = (stepIndex: number): CompiledStep | null => {
     const cached = compiled.get(stepIndex);
@@ -69,7 +98,7 @@ export function createFrameRenderer(params: {
       step,
       start: resolveAll(stepIndex - 1),
       end: resolveAll(stepIndex),
-      apply: (objectId, props) => applyObjectState(stage, objectId, props),
+      apply,
     });
     compiled.set(stepIndex, built);
     return built;
@@ -78,18 +107,70 @@ export function createFrameRenderer(params: {
   // Entering a step snaps to its start state, exactly as playback does — so a
   // frame never inherits stale attributes from the previous step.
   let currentStep: number | null = null;
+  let rules: CollisionRule[] = [];
+  let fired = new Set<string>();
+  let shots: FiredShot[] = [];
+
+  /** Start any collision that has just connected, once each (a pickup is consumed). */
+  const fireNewCollisions = (step: Step, stepIndex: number, timeMs: number) => {
+    for (const rule of rules) {
+      if (fired.has(rule.animId)) continue;
+      if (!isColliding(rule, rectOf)) continue;
+
+      const anim = step.animations.find((a) => a.id === rule.animId);
+      const end = resolveAll(stepIndex);
+      const target = anim && end[anim.objectId];
+      if (!anim || !target) continue;
+
+      fired.add(rule.animId);
+      const built = compileOneShot({
+        anim,
+        step,
+        start: {
+          [anim.objectId]: readObjectState(stage, anim.objectId, target),
+        },
+        end,
+        apply,
+      });
+      applyStates(built.initial);
+      shots.push({ timeline: built.timeline, startedMs: timeMs });
+    }
+  };
+
+  const killShots = () => {
+    for (const shot of shots) shot.timeline.kill();
+    shots = [];
+  };
 
   return {
     size,
     renderFrame: ({ stepIndex, timeMs }) => {
       const built = timelineFor(stepIndex);
-      if (!built) return null;
+      const step = steps[stepIndex];
+      if (!built || !step) return null;
 
       if (currentStep !== stepIndex) {
         currentStep = stepIndex;
+        killShots();
+        fired = new Set();
+        rules = collisionRules(step.animations);
         applyStates(built.initial);
       }
+
+      // `false` = don't suppress events, so `disappear`'s callback actually runs.
       built.timeline.seek(timeMs / 1000, false);
+
+      // Test collisions against the positions this frame just produced...
+      fireNewCollisions(step, stepIndex, timeMs);
+      // ...then let anything already firing advance. Applied after the step
+      // timeline so a triggered effect wins over the motion underneath it.
+      for (const shot of shots) {
+        shot.timeline.seek(
+          Math.max(0, (timeMs - shot.startedMs) / 1000),
+          false,
+        );
+      }
+
       stage.batchDraw();
 
       return stage.toCanvas({
@@ -101,9 +182,12 @@ export function createFrameRenderer(params: {
       });
     },
     restore: (stepIndex) => {
+      killShots();
       for (const built of compiled.values()) built.timeline.kill();
       compiled.clear();
       currentStep = null;
+      fired = new Set();
+      rules = [];
       applyStates(resolveAll(stepIndex));
       stage.batchDraw();
     },

@@ -8,7 +8,7 @@ import {
   type ResolvedStates,
 } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
-import { applyObjectState } from "./applyToStage";
+import { applyObjectState, objectRect, readObjectState } from "./applyToStage";
 import { collidingAnimIds, collisionRules, type RectLookup } from "./collision";
 import { compileStep } from "./compileStep";
 import { compileOneShot, deferredAnimsFor } from "./oneShot";
@@ -101,25 +101,9 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
     [objects, objectIds, steps],
   );
 
-  /**
-   * An object's state *right now*, read off its Konva node. A triggered
-   * animation continues from where the object actually is rather than snapping
-   * back to the step's start. `w`/`h` come from the resolved fallback because
-   * `applyToNode` never writes them.
-   */
   const liveStateOf = useCallback(
-    (objectId: string, fallback: ObjectState): ObjectState => {
-      const node = stageRef.current?.findOne(`#${objectId}`);
-      if (!node) return fallback;
-      return {
-        ...fallback,
-        x: node.x(),
-        y: node.y(),
-        rotation: node.rotation(),
-        opacity: node.opacity(),
-        visible: node.visible(),
-      };
-    },
+    (objectId: string, fallback: ObjectState): ObjectState =>
+      readObjectState(stageRef.current, objectId, fallback),
     [stageRef],
   );
 
@@ -231,13 +215,8 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
     const rules = collisionRules(animations);
     if (rules.length === 0) return;
 
-    const rectOf: RectLookup = (objectId) => {
-      const node = stageRef.current?.findOne(`#${objectId}`);
-      // A hidden object can't be hit — a consumed pickup stays consumed.
-      if (!node || !node.visible()) return null;
-      const layer = node.getLayer();
-      return layer ? node.getClientRect({ relativeTo: layer }) : null;
-    };
+    const rectOf: RectLookup = (objectId) =>
+      objectRect(stageRef.current, objectId);
 
     const tick = () => {
       for (const animId of collidingAnimIds(rules, rectOf)) {
