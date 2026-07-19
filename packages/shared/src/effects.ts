@@ -45,6 +45,12 @@ export const OBJECT_TYPES = [
   "text",
   "arrow",
   "image",
+  /**
+   * A tether draws a line between two *other* objects (`fromId`/`toId` on the
+   * plan object). Its geometry is derived from its endpoints, not from its own
+   * transform — see `tetherOps` in `mechanics.ts`.
+   */
+  "tether",
 ] as const;
 export const ObjectTypeSchema = z.enum(OBJECT_TYPES);
 export type ObjectType = z.infer<typeof ObjectTypeSchema>;
@@ -53,8 +59,21 @@ export type ObjectType = z.infer<typeof ObjectTypeSchema>;
  * Which primitive a `type: "shape"` object draws (plan §2.4). Optional on the
  * object, so it only carries meaning for shapes and older documents that
  * predate primitives stay valid without a migration.
+ *
+ * `rect`/`circle` are generic zones; the rest are WoW **mechanics** with a
+ * distinguishing visual language (`mechanics.ts`): `cone` (frontal), `line`
+ * (beam/frontal), `soak` (stack-here target), `voidzone` (hazard puddle),
+ * `pickup` (collectible). Extending this list is additive — old plans stay valid.
  */
-export const SHAPE_KINDS = ["rect", "circle", "cone"] as const;
+export const SHAPE_KINDS = [
+  "rect",
+  "circle",
+  "cone",
+  "line",
+  "soak",
+  "voidzone",
+  "pickup",
+] as const;
 export const ShapeKindSchema = z.enum(SHAPE_KINDS);
 export type ShapeKind = z.infer<typeof ShapeKindSchema>;
 

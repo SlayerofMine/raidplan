@@ -173,6 +173,69 @@ describe("PlanObjectSchema — shape primitives", () => {
     const parsed = PlanSchema.parse(validPlan());
     expect(parsed.objects[0]!.shape).toBeUndefined();
   });
+
+  it("accepts the new mechanic shape kinds", () => {
+    for (const shape of ["cone", "line", "soak", "voidzone", "pickup"]) {
+      const plan = validPlan();
+      plan.objects.push({
+        id: `obj_${shape}`,
+        type: "shape",
+        shape: shape as "cone",
+        base: {
+          x: 0,
+          y: 0,
+          w: 80,
+          h: 80,
+          rotation: 0,
+          opacity: 1,
+          z: 2,
+          visible: true,
+        },
+      });
+      expect(PlanSchema.safeParse(plan).success).toBe(true);
+    }
+  });
+});
+
+describe("PlanObjectSchema — tethers", () => {
+  it("accepts a tether linking two objects and round-trips its endpoints", () => {
+    const plan = validPlan();
+    plan.objects.push({
+      id: "obj_2",
+      type: "marker",
+      base: {
+        x: 400,
+        y: 400,
+        w: 48,
+        h: 48,
+        rotation: 0,
+        opacity: 1,
+        z: 1,
+        visible: true,
+      },
+    });
+    plan.objects.push({
+      id: "obj_tether",
+      type: "tether",
+      fromId: "obj_1",
+      toId: "obj_2",
+      base: {
+        x: 0,
+        y: 0,
+        w: 0,
+        h: 0,
+        rotation: 0,
+        opacity: 1,
+        z: 2,
+        visible: true,
+      },
+    });
+    const parsed = PlanSchema.parse(plan);
+    const tether = parsed.objects.find((o) => o.id === "obj_tether")!;
+    expect(tether.type).toBe("tether");
+    expect(tether.fromId).toBe("obj_1");
+    expect(tether.toId).toBe("obj_2");
+  });
 });
 
 describe("StepOverrideSchema", () => {

@@ -50,6 +50,13 @@ export const PlanObjectSchema = z.object({
   iconId: z.string().min(1).optional(),
   /** Which primitive to draw — only meaningful when `type` is `"shape"`. */
   shape: ShapeKindSchema.optional(),
+  /**
+   * Tether endpoints — the ids of the two objects a `type: "tether"` connects.
+   * A tether's line is derived from these objects' resolved positions, so its
+   * own transform is degenerate (see `mechanics.ts` `tetherOps`).
+   */
+  fromId: z.string().min(1).optional(),
+  toId: z.string().min(1).optional(),
   base: ObjectBaseSchema,
   locked: z.boolean().optional(),
 });
