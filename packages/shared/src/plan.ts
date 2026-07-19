@@ -86,6 +86,13 @@ export const AnimSchema = z.object({
   kind: AnimKindSchema,
   effect: AnimEffectSchema,
   trigger: AnimTriggerSchema,
+  /**
+   * For `trigger: "onCollision"` — the ids of the objects that can set this
+   * animation off by overlapping `objectId`. A **trigger condition**, which is
+   * why it sits here rather than in `params` (effect-dependent tuning).
+   * Empty/absent means nothing can trigger it.
+   */
+  collideWith: z.array(z.string().min(1)).optional(),
   delayMs: z.number().finite().nonnegative(),
   durationMs: z.number().finite().nonnegative(),
   /** GSAP ease name, e.g. "power2.out". */

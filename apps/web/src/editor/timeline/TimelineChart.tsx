@@ -227,10 +227,17 @@ function Bar({
   const bodyW = msToPx(span.spanMs, pxPerMs);
   const left = msToPx(span.triggerMs, pxPerMs);
 
+  // Deferred bars sit on the timeline for reference only — they fire on a click
+  // or a collision, so say which rather than implying a time.
+  const deferredNote =
+    span.trigger === "onClick"
+      ? " · on click"
+      : span.trigger === "onCollision"
+        ? " · on collision"
+        : "";
   const describe =
     `${span.effect} (${span.kind}) · delay ${Math.round(span.delayMs)}ms · ` +
-    `${Math.round(span.durationMs)}ms` +
-    (span.clickTriggered ? " · on click" : "");
+    `${Math.round(span.durationMs)}ms${deferredNote}`;
 
   // Drag helper: attach window listeners so the pointer keeps controlling the
   // value even if it leaves the bar. `start` is captured at press, so re-renders
@@ -288,7 +295,7 @@ function Bar({
         }}
         className={`relative flex h-full min-w-[6px] items-center overflow-hidden rounded-sm text-[10px] text-black/80 ${
           KIND_BG[span.kind]
-        } ${span.clickTriggered ? "opacity-60 ring-1 ring-inset ring-white/40" : ""}`}
+        } ${span.deferred ? "opacity-60 ring-1 ring-inset ring-white/40" : ""}`}
         style={{ width: Math.max(bodyW, 6) }}
       >
         <span className="pointer-events-none truncate px-1">{span.effect}</span>

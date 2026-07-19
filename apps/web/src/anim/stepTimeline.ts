@@ -38,9 +38,14 @@ export function occupiedMs(effect: AnimEffect, durationMs: number): number {
   return isOutAndBack(effect) ? durationMs * 2 : durationMs;
 }
 
-/** `onClick` animations are advanced by the viewer, not the step timeline. */
-export function isClickTriggered(trigger: AnimTrigger): boolean {
-  return trigger === "onClick";
+/**
+ * **Deferred** triggers sit outside the step's auto-playing timeline and are
+ * fired on demand during playback: `onClick` when the object is clicked,
+ * `onCollision` when it overlaps one of its `collideWith` objects. They take no
+ * position in the chain and don't extend the step's length.
+ */
+export function isDeferredTrigger(trigger: AnimTrigger): boolean {
+  return trigger === "onClick" || trigger === "onCollision";
 }
 
 /** One animation placed on a step's timeline. All fields are milliseconds. */
@@ -53,7 +58,7 @@ export interface AnimSpan {
   /**
    * Where this animation's trigger anchors it, *before* its own delay:
    * `onEnter` → 0, `withPrevious` → previous start, `afterPrevious` → previous
-   * end. `onClick` is anchored at the previous end for display only.
+   * end. Deferred triggers are anchored at the previous end for display only.
    */
   triggerMs: number;
   /** The animation's own `delayMs`. */
@@ -70,8 +75,11 @@ export interface AnimSpan {
   spanMs: number;
   /** `startMs + spanMs` — the visual end of the bar. */
   endMs: number;
-  /** `onClick` animations sit outside the step's auto-playing timeline. */
-  clickTriggered: boolean;
+  /**
+   * Fired on demand rather than by the step's timeline (`onClick` /
+   * `onCollision`) — see {@link isDeferredTrigger}.
+   */
+  deferred: boolean;
 }
 
 export interface StepTimeline {
@@ -93,7 +101,8 @@ function triggerMs(
     case "withPrevious":
       return previousStart;
     default:
-      // afterPrevious, and onClick (display-only) both anchor at previous end.
+      // afterPrevious, and the deferred triggers (display-only), anchor at the
+      // previous end.
       return previousEnd;
   }
 }
@@ -113,7 +122,7 @@ export function layoutStepTimeline(animations: readonly Anim[]): StepTimeline {
   let totalMs = 0;
 
   for (const anim of animations) {
-    const clickTriggered = isClickTriggered(anim.trigger);
+    const deferred = isDeferredTrigger(anim.trigger);
     const anchor = triggerMs(anim.trigger, previousStart, previousEnd);
     const startMs = anchor + anim.delayMs;
     const spanMs = anim.durationMs; // visual bar length (actual tween extent)
@@ -131,11 +140,11 @@ export function layoutStepTimeline(animations: readonly Anim[]): StepTimeline {
       durationMs: anim.durationMs,
       spanMs,
       endMs,
-      clickTriggered,
+      deferred,
     });
 
-    // Click-triggered animations don't participate in the auto-playing chain.
-    if (!clickTriggered) {
+    // Deferred animations don't participate in the auto-playing chain.
+    if (!deferred) {
       previousStart = startMs;
       // The chain reserves the out-and-back length; `totalMs` (the GSAP
       // timeline's real length) tracks actual tween extents instead.

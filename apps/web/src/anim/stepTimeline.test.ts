@@ -95,14 +95,27 @@ describe("layoutStepTimeline — trigger chaining", () => {
   });
 });
 
-describe("layoutStepTimeline — onClick", () => {
+describe("layoutStepTimeline — deferred triggers", () => {
+  it("flags onCollision as deferred, like onClick", () => {
+    const t = layoutStepTimeline([
+      anim({ id: "1", durationMs: 500 }),
+      anim({ id: "2", trigger: "onCollision", durationMs: 300 }),
+      anim({ id: "3", trigger: "afterPrevious", durationMs: 500 }),
+    ]);
+    expect(byId(t, "2").deferred).toBe(true);
+    // A collision animation fires on contact, so it neither takes a slot in the
+    // chain (#3 still follows #1) nor extends the step.
+    expect(byId(t, "3").startMs).toBe(500);
+    expect(t.totalMs).toBe(1000);
+  });
+
   it("returns onClick spans flagged but out of the chain and total", () => {
     const t = layoutStepTimeline([
       anim({ id: "1", durationMs: 500 }),
       anim({ id: "2", trigger: "onClick", durationMs: 300 }),
       anim({ id: "3", trigger: "afterPrevious", durationMs: 500 }),
     ]);
-    expect(byId(t, "2").clickTriggered).toBe(true);
+    expect(byId(t, "2").deferred).toBe(true);
     // The click span does not advance the chain: #3 follows #1, not #2.
     expect(byId(t, "3").startMs).toBe(500);
     // ...and it doesn't extend the auto-playing length.

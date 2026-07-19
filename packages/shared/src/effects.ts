@@ -27,12 +27,21 @@ export const ANIM_EFFECTS = [
 export const AnimEffectSchema = z.enum(ANIM_EFFECTS);
 export type AnimEffect = z.infer<typeof AnimEffectSchema>;
 
-/** When an animation starts, relative to the step timeline (plan §7). */
+/**
+ * When an animation starts, relative to the step timeline (plan §7).
+ *
+ * The first three chain off the step's start and are compiled into its
+ * timeline. `onClick` and `onCollision` are **deferred**: they sit outside that
+ * timeline and are fired on demand during playback (see `anim/stepTimeline.ts`
+ * `isDeferredTrigger`) — a click on the object, or it overlapping one of the
+ * objects listed in the animation's `collideWith`.
+ */
 export const ANIM_TRIGGERS = [
   "onEnter",
   "withPrevious",
   "afterPrevious",
   "onClick",
+  "onCollision",
 ] as const;
 export const AnimTriggerSchema = z.enum(ANIM_TRIGGERS);
 export type AnimTrigger = z.infer<typeof AnimTriggerSchema>;

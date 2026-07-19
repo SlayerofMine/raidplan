@@ -1,9 +1,6 @@
 import gsap from "gsap";
 import type { Anim, ObjectState, ResolvedStates, Step } from "@raidplan/shared";
-import {
-  isClickTriggered as isClickTrigger,
-  layoutStepTimeline,
-} from "./stepTimeline";
+import { isDeferredTrigger, layoutStepTimeline } from "./stepTimeline";
 
 /**
  * Compile a step into a GSAP timeline (plan §3.5 / §7 "Playback engine").
@@ -19,7 +16,8 @@ import {
  *  - `onEnter`       → starts at t=0
  *  - `withPrevious`  → starts with the previous animation
  *  - `afterPrevious` → starts when the previous one ends
- *  - `onClick`       → excluded here; advanced separately by the viewer
+ *  - `onClick` / `onCollision` → excluded here; fired on demand during
+ *    playback via `oneShot.ts`
  *
  * Each animation's `delayMs` is added on top of its trigger position.
  */
@@ -51,9 +49,12 @@ export interface CompiledStep {
   initial: ResolvedStates;
 }
 
-/** Animations that are advanced by a click rather than the step timeline. */
-export function isClickTriggered(anim: Anim): boolean {
-  return isClickTrigger(anim.trigger);
+/**
+ * Animations fired on demand (click / collision) rather than by the step
+ * timeline. They're excluded here and played individually — see `oneShot.ts`.
+ */
+export function isDeferred(anim: Anim): boolean {
+  return isDeferredTrigger(anim.trigger);
 }
 
 const MS = 1000;
@@ -72,7 +73,7 @@ export function compileStep({
 
   // Stale animations (object deleted) must never break playback.
   const animations = step.animations.filter(
-    (a) => !isClickTriggered(a) && start[a.objectId] && end[a.objectId],
+    (a) => !isDeferred(a) && start[a.objectId] && end[a.objectId],
   );
 
   const initial: ResolvedStates = {};
@@ -99,7 +100,7 @@ export function compileStep({
 
   // The trigger/delay/duration math lives in one place (`stepTimeline`) so the
   // interactive Gantt view and this player can never disagree on where a bar
-  // sits. `animations` is already onClick- and ghost-free, so its spans chain
+  // sits. `animations` is already deferred- and ghost-free, so its spans chain
   // plainly in document order.
   const spanById = new Map(
     layoutStepTimeline(animations).spans.map((s) => [s.animId, s]),

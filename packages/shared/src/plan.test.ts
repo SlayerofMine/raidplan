@@ -197,6 +197,38 @@ describe("PlanObjectSchema — shape primitives", () => {
   });
 });
 
+describe("AnimSchema — collision triggers", () => {
+  it("accepts an onCollision animation and round-trips its collider group", () => {
+    const plan = validPlan();
+    plan.steps[0]!.animations.push({
+      id: "anim_hit",
+      objectId: "obj_1",
+      kind: "exit",
+      effect: "disappear",
+      trigger: "onCollision",
+      collideWith: ["obj_2", "obj_3"],
+      delayMs: 0,
+      durationMs: 300,
+      easing: "none",
+    });
+    const parsed = PlanSchema.parse(plan);
+    const hit = parsed.steps[0]!.animations.find((a) => a.id === "anim_hit")!;
+    expect(hit.trigger).toBe("onCollision");
+    expect(hit.collideWith).toEqual(["obj_2", "obj_3"]);
+  });
+
+  it("leaves collideWith optional, so ordinary animations are unchanged", () => {
+    const parsed = PlanSchema.parse(validPlan());
+    expect(parsed.steps[0]!.animations[0]!.collideWith).toBeUndefined();
+  });
+
+  it("rejects an empty collider id", () => {
+    const plan = validPlan();
+    plan.steps[0]!.animations[0]!.collideWith = [""];
+    expect(PlanSchema.safeParse(plan).success).toBe(false);
+  });
+});
+
 describe("PlanObjectSchema — tethers", () => {
   it("accepts a tether linking two objects and round-trips its endpoints", () => {
     const plan = validPlan();

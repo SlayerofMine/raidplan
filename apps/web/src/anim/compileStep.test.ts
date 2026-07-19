@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Anim, ObjectState, ResolvedStates, Step } from "@raidplan/shared";
-import { compileStep, isClickTriggered } from "./compileStep";
+import { compileStep, isDeferred } from "./compileStep";
 
 function state(over: Partial<ObjectState> = {}): ObjectState {
   return {
@@ -117,13 +117,15 @@ describe("compileStep — timeline shape", () => {
     expect(timeline.duration()).toBeCloseTo(0.75);
   });
 
-  it("excludes onClick animations from the step timeline", () => {
-    const s = step([anim({ trigger: "onClick", durationMs: 500 })]);
+  it("excludes deferred (click/collision) animations from the step timeline", () => {
     const states = { a: state() };
-    const { timeline } = harness(s, states, states);
-    expect(timeline.duration()).toBe(0);
-    expect(isClickTriggered(anim({ trigger: "onClick" }))).toBe(true);
-    expect(isClickTriggered(anim({ trigger: "onEnter" }))).toBe(false);
+    for (const trigger of ["onClick", "onCollision"] as const) {
+      const s = step([anim({ trigger, durationMs: 500 })]);
+      expect(harness(s, states, states).timeline.duration()).toBe(0);
+    }
+    expect(isDeferred(anim({ trigger: "onClick" }))).toBe(true);
+    expect(isDeferred(anim({ trigger: "onCollision" }))).toBe(true);
+    expect(isDeferred(anim({ trigger: "onEnter" }))).toBe(false);
   });
 
   it("skips animations whose object no longer exists, without throwing", () => {
