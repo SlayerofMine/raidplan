@@ -1,0 +1,811 @@
+{
+  "id": "demo",
+  "title": "RaidPlans feature demo",
+  "raid": "Feature demo",
+  "background": {
+    "assetId": "arena",
+    "width": 1600,
+    "height": 900
+  },
+  "objects": [
+    {
+      "id": "title",
+      "type": "text",
+      "base": {
+        "x": 40,
+        "y": 24,
+        "w": 520,
+        "h": 44,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#e6e6e6",
+        "name": "Title",
+        "label": "RaidPlans feature demo",
+        "z": 0,
+        "visible": true
+      }
+    },
+    {
+      "id": "shape-rect",
+      "type": "shape",
+      "shape": "rect",
+      "base": {
+        "x": 60,
+        "y": 110,
+        "w": 140,
+        "h": 140,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#4f9dff",
+        "name": "Shape: rect",
+        "label": "rect",
+        "z": 1,
+        "visible": true
+      }
+    },
+    {
+      "id": "shape-circle",
+      "type": "shape",
+      "shape": "circle",
+      "base": {
+        "x": 270,
+        "y": 110,
+        "w": 140,
+        "h": 140,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#4f9dff",
+        "name": "Shape: circle",
+        "label": "circle",
+        "z": 2,
+        "visible": true
+      }
+    },
+    {
+      "id": "shape-cone",
+      "type": "shape",
+      "shape": "cone",
+      "base": {
+        "x": 480,
+        "y": 110,
+        "w": 140,
+        "h": 140,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#4f9dff",
+        "name": "Shape: cone",
+        "label": "cone",
+        "z": 3,
+        "visible": true
+      }
+    },
+    {
+      "id": "shape-line",
+      "type": "shape",
+      "shape": "line",
+      "base": {
+        "x": 690,
+        "y": 110,
+        "w": 190,
+        "h": 54,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#4f9dff",
+        "name": "Shape: line",
+        "label": "line",
+        "z": 4,
+        "visible": true
+      }
+    },
+    {
+      "id": "shape-soak",
+      "type": "shape",
+      "shape": "soak",
+      "base": {
+        "x": 900,
+        "y": 110,
+        "w": 140,
+        "h": 140,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#4f9dff",
+        "name": "Shape: soak",
+        "label": "soak",
+        "z": 5,
+        "visible": true
+      }
+    },
+    {
+      "id": "shape-voidzone",
+      "type": "shape",
+      "shape": "voidzone",
+      "base": {
+        "x": 1110,
+        "y": 110,
+        "w": 140,
+        "h": 140,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#4f9dff",
+        "name": "Shape: voidzone",
+        "label": "voidzone",
+        "z": 6,
+        "visible": true
+      }
+    },
+    {
+      "id": "shape-pickup",
+      "type": "shape",
+      "shape": "pickup",
+      "base": {
+        "x": 1320,
+        "y": 110,
+        "w": 90,
+        "h": 90,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#4f9dff",
+        "name": "Shape: pickup",
+        "label": "pickup",
+        "z": 7,
+        "visible": true
+      }
+    },
+    {
+      "id": "style-void-scalloped",
+      "type": "shape",
+      "shape": "voidzone",
+      "style": {
+        "edge": "scalloped"
+      },
+      "base": {
+        "x": 60,
+        "y": 300,
+        "w": 130,
+        "h": 130,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#ff6b6b",
+        "name": "Style: void-scalloped",
+        "label": "scalloped",
+        "z": 8,
+        "visible": true
+      }
+    },
+    {
+      "id": "style-void-round",
+      "type": "shape",
+      "shape": "voidzone",
+      "style": {
+        "edge": "round"
+      },
+      "base": {
+        "x": 270,
+        "y": 300,
+        "w": 130,
+        "h": 130,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#ff6b6b",
+        "name": "Style: void-round",
+        "label": "round",
+        "z": 9,
+        "visible": true
+      }
+    },
+    {
+      "id": "style-void-striped",
+      "type": "shape",
+      "shape": "voidzone",
+      "style": {
+        "fill": "striped"
+      },
+      "base": {
+        "x": 480,
+        "y": 300,
+        "w": 130,
+        "h": 130,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#ff6b6b",
+        "name": "Style: void-striped",
+        "label": "striped",
+        "z": 10,
+        "visible": true
+      }
+    },
+    {
+      "id": "style-circle-solid",
+      "type": "shape",
+      "shape": "circle",
+      "style": {
+        "fill": "solid"
+      },
+      "base": {
+        "x": 690,
+        "y": 300,
+        "w": 130,
+        "h": 130,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#ff6b6b",
+        "name": "Style: circle-solid",
+        "label": "solid",
+        "z": 11,
+        "visible": true
+      }
+    },
+    {
+      "id": "style-circle-hollow",
+      "type": "shape",
+      "shape": "circle",
+      "style": {
+        "fill": "none"
+      },
+      "base": {
+        "x": 900,
+        "y": 300,
+        "w": 130,
+        "h": 130,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#ff6b6b",
+        "name": "Style: circle-hollow",
+        "label": "hollow",
+        "z": 12,
+        "visible": true
+      }
+    },
+    {
+      "id": "style-rect-no-outline",
+      "type": "shape",
+      "shape": "rect",
+      "style": {
+        "fill": "soft",
+        "outline": false
+      },
+      "base": {
+        "x": 1110,
+        "y": 300,
+        "w": 130,
+        "h": 130,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#ff6b6b",
+        "name": "Style: rect-no-outline",
+        "label": "no-outline",
+        "z": 13,
+        "visible": true
+      }
+    },
+    {
+      "id": "style-soak-hazard",
+      "type": "shape",
+      "shape": "soak",
+      "style": {
+        "fill": "hazard"
+      },
+      "base": {
+        "x": 1320,
+        "y": 300,
+        "w": 130,
+        "h": 130,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#ff6b6b",
+        "name": "Style: soak-hazard",
+        "label": "hazard",
+        "z": 14,
+        "visible": true
+      }
+    },
+    {
+      "id": "fx-appear",
+      "type": "token",
+      "iconId": "class-mage",
+      "base": {
+        "x": 70,
+        "y": 500,
+        "w": 56,
+        "h": 56,
+        "rotation": 0,
+        "opacity": 1,
+        "name": "FX: appear",
+        "label": "appear",
+        "z": 15,
+        "visible": true
+      }
+    },
+    {
+      "id": "fx-disappear",
+      "type": "token",
+      "iconId": "class-warlock",
+      "base": {
+        "x": 190,
+        "y": 500,
+        "w": 56,
+        "h": 56,
+        "rotation": 0,
+        "opacity": 1,
+        "name": "FX: disappear",
+        "label": "disappear",
+        "z": 16,
+        "visible": true
+      }
+    },
+    {
+      "id": "fx-fade",
+      "type": "token",
+      "iconId": "class-priest",
+      "base": {
+        "x": 310,
+        "y": 500,
+        "w": 56,
+        "h": 56,
+        "rotation": 0,
+        "opacity": 1,
+        "name": "FX: fade",
+        "label": "fade",
+        "z": 17,
+        "visible": true
+      }
+    },
+    {
+      "id": "fx-fly",
+      "type": "token",
+      "iconId": "class-hunter",
+      "base": {
+        "x": 430,
+        "y": 500,
+        "w": 56,
+        "h": 56,
+        "rotation": 0,
+        "opacity": 1,
+        "name": "FX: fly",
+        "label": "fly",
+        "z": 18,
+        "visible": true
+      }
+    },
+    {
+      "id": "fx-move",
+      "type": "token",
+      "iconId": "class-rogue",
+      "base": {
+        "x": 550,
+        "y": 500,
+        "w": 56,
+        "h": 56,
+        "rotation": 0,
+        "opacity": 1,
+        "name": "FX: move",
+        "label": "move",
+        "z": 19,
+        "visible": true
+      }
+    },
+    {
+      "id": "fx-scale",
+      "type": "token",
+      "iconId": "class-druid",
+      "base": {
+        "x": 670,
+        "y": 500,
+        "w": 56,
+        "h": 56,
+        "rotation": 0,
+        "opacity": 1,
+        "name": "FX: scale",
+        "label": "scale",
+        "z": 20,
+        "visible": true
+      }
+    },
+    {
+      "id": "fx-pulse",
+      "type": "token",
+      "iconId": "class-paladin",
+      "base": {
+        "x": 790,
+        "y": 500,
+        "w": 56,
+        "h": 56,
+        "rotation": 0,
+        "opacity": 1,
+        "name": "FX: pulse",
+        "label": "pulse",
+        "z": 21,
+        "visible": true
+      }
+    },
+    {
+      "id": "fx-blink",
+      "type": "token",
+      "iconId": "class-shaman",
+      "base": {
+        "x": 910,
+        "y": 500,
+        "w": 56,
+        "h": 56,
+        "rotation": 0,
+        "opacity": 1,
+        "name": "FX: blink",
+        "label": "blink",
+        "z": 22,
+        "visible": true
+      }
+    },
+    {
+      "id": "tok-tank",
+      "type": "token",
+      "iconId": "role-tank",
+      "base": {
+        "x": 120,
+        "y": 700,
+        "w": 56,
+        "h": 56,
+        "rotation": 0,
+        "opacity": 1,
+        "name": "Tank",
+        "label": "MT",
+        "z": 23,
+        "visible": true
+      }
+    },
+    {
+      "id": "tok-healer",
+      "type": "token",
+      "iconId": "role-healer",
+      "base": {
+        "x": 120,
+        "y": 790,
+        "w": 56,
+        "h": 56,
+        "rotation": 0,
+        "opacity": 1,
+        "name": "Healer",
+        "label": "H1",
+        "z": 24,
+        "visible": true
+      }
+    },
+    {
+      "id": "tok-dps",
+      "type": "token",
+      "iconId": "role-dps",
+      "base": {
+        "x": 210,
+        "y": 745,
+        "w": 56,
+        "h": 56,
+        "rotation": 0,
+        "opacity": 1,
+        "name": "DPS",
+        "label": "D1",
+        "z": 25,
+        "visible": true
+      }
+    },
+    {
+      "id": "tok-runner",
+      "type": "token",
+      "iconId": "class-demonhunter",
+      "base": {
+        "x": 700,
+        "y": 700,
+        "w": 56,
+        "h": 56,
+        "rotation": 0,
+        "opacity": 1,
+        "name": "Runner",
+        "label": "grabs the orb",
+        "z": 26,
+        "visible": true
+      }
+    },
+    {
+      "id": "orb",
+      "type": "shape",
+      "shape": "pickup",
+      "base": {
+        "x": 1000,
+        "y": 690,
+        "w": 80,
+        "h": 80,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#ffd166",
+        "name": "Orb",
+        "label": "orb",
+        "z": 27,
+        "visible": true
+      }
+    },
+    {
+      "id": "secret",
+      "type": "shape",
+      "shape": "soak",
+      "style": {
+        "fill": "striped"
+      },
+      "base": {
+        "x": 1300,
+        "y": 690,
+        "w": 110,
+        "h": 110,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#8ce99a",
+        "name": "Click target",
+        "label": "click me",
+        "z": 28,
+        "visible": true
+      }
+    },
+    {
+      "id": "arrow-1",
+      "type": "arrow",
+      "base": {
+        "x": 700,
+        "y": 620,
+        "w": 300,
+        "h": 24,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#4f9dff",
+        "name": "Route arrow",
+        "z": 29,
+        "visible": true
+      }
+    },
+    {
+      "id": "tether-squiggly",
+      "type": "tether",
+      "fromId": "tok-tank",
+      "toId": "tok-healer",
+      "base": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#b36bff",
+        "name": "Tether (squiggly)",
+        "z": 30,
+        "visible": true
+      }
+    },
+    {
+      "id": "tether-straight",
+      "type": "tether",
+      "style": {
+        "line": "straight"
+      },
+      "fromId": "tok-healer",
+      "toId": "tok-dps",
+      "base": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "rotation": 0,
+        "opacity": 1,
+        "tint": "#66d9e8",
+        "name": "Tether (straight)",
+        "z": 31,
+        "visible": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "step-effects",
+      "name": "1 · Every effect",
+      "overrides": {
+        "fx-move": {
+          "x": 550,
+          "y": 580
+        },
+        "fx-scale": {
+          "w": 100.8,
+          "h": 100.8
+        }
+      },
+      "animations": [
+        {
+          "id": "a-fx-appear",
+          "objectId": "fx-appear",
+          "kind": "entrance",
+          "effect": "appear",
+          "trigger": "onEnter",
+          "delayMs": 0,
+          "durationMs": 700,
+          "easing": "power2.out"
+        },
+        {
+          "id": "a-fx-disappear",
+          "objectId": "fx-disappear",
+          "kind": "exit",
+          "effect": "disappear",
+          "trigger": "onEnter",
+          "delayMs": 250,
+          "durationMs": 700,
+          "easing": "power2.out"
+        },
+        {
+          "id": "a-fx-fade",
+          "objectId": "fx-fade",
+          "kind": "entrance",
+          "effect": "fade",
+          "trigger": "onEnter",
+          "delayMs": 500,
+          "durationMs": 700,
+          "easing": "power2.out"
+        },
+        {
+          "id": "a-fx-fly",
+          "objectId": "fx-fly",
+          "kind": "entrance",
+          "effect": "fly",
+          "trigger": "onEnter",
+          "delayMs": 750,
+          "durationMs": 700,
+          "easing": "power2.out",
+          "params": {
+            "toX": -200,
+            "toY": 500
+          }
+        },
+        {
+          "id": "a-fx-move",
+          "objectId": "fx-move",
+          "kind": "motion",
+          "effect": "move",
+          "trigger": "onEnter",
+          "delayMs": 1000,
+          "durationMs": 700,
+          "easing": "power2.out"
+        },
+        {
+          "id": "a-fx-scale",
+          "objectId": "fx-scale",
+          "kind": "emphasis",
+          "effect": "scale",
+          "trigger": "onEnter",
+          "delayMs": 1250,
+          "durationMs": 700,
+          "easing": "power2.out"
+        },
+        {
+          "id": "a-fx-pulse",
+          "objectId": "fx-pulse",
+          "kind": "emphasis",
+          "effect": "pulse",
+          "trigger": "onEnter",
+          "delayMs": 1500,
+          "durationMs": 700,
+          "easing": "power2.out"
+        },
+        {
+          "id": "a-fx-blink",
+          "objectId": "fx-blink",
+          "kind": "emphasis",
+          "effect": "blink",
+          "trigger": "onEnter",
+          "delayMs": 1750,
+          "durationMs": 700,
+          "easing": "power2.out"
+        }
+      ]
+    },
+    {
+      "id": "step-chaining",
+      "name": "2 · Trigger chaining",
+      "overrides": {
+        "tok-tank": {
+          "x": 620
+        },
+        "tok-healer": {
+          "x": 620
+        },
+        "tok-dps": {
+          "x": 700
+        }
+      },
+      "animations": [
+        {
+          "id": "a-chain-1",
+          "objectId": "tok-tank",
+          "kind": "motion",
+          "effect": "move",
+          "trigger": "onEnter",
+          "delayMs": 0,
+          "durationMs": 800,
+          "easing": "power2.out"
+        },
+        {
+          "id": "a-chain-2",
+          "objectId": "tok-healer",
+          "kind": "motion",
+          "effect": "move",
+          "trigger": "withPrevious",
+          "delayMs": 0,
+          "durationMs": 800,
+          "easing": "power2.out"
+        },
+        {
+          "id": "a-chain-3",
+          "objectId": "tok-dps",
+          "kind": "motion",
+          "effect": "move",
+          "trigger": "afterPrevious",
+          "delayMs": 0,
+          "durationMs": 800,
+          "easing": "power2.out"
+        }
+      ]
+    },
+    {
+      "id": "step-collision",
+      "name": "3 · Collision pickup",
+      "overrides": {
+        "tok-runner": {
+          "x": 1300
+        }
+      },
+      "animations": [
+        {
+          "id": "a-run",
+          "objectId": "tok-runner",
+          "kind": "motion",
+          "effect": "move",
+          "trigger": "onEnter",
+          "delayMs": 0,
+          "durationMs": 2200,
+          "easing": "none"
+        },
+        {
+          "id": "a-orb-grabbed",
+          "objectId": "orb",
+          "kind": "exit",
+          "effect": "disappear",
+          "trigger": "onCollision",
+          "collideWith": ["tok-runner"],
+          "delayMs": 0,
+          "durationMs": 200,
+          "easing": "power2.out"
+        }
+      ]
+    },
+    {
+      "id": "step-click",
+      "name": "4 · Click trigger",
+      "overrides": {},
+      "animations": [
+        {
+          "id": "a-click",
+          "objectId": "secret",
+          "kind": "emphasis",
+          "effect": "pulse",
+          "trigger": "onClick",
+          "delayMs": 0,
+          "durationMs": 500,
+          "easing": "power2.out"
+        },
+        {
+          "id": "a-click-fade",
+          "objectId": "arrow-1",
+          "kind": "exit",
+          "effect": "fade",
+          "trigger": "onClick",
+          "delayMs": 0,
+          "durationMs": 400,
+          "easing": "power2.out"
+        }
+      ],
+      "autoAdvanceMs": 3000
+    }
+  ],
+  "schemaVersion": 1
+}

@@ -9,6 +9,10 @@ phase plan, [`deploy/README.md`](./deploy/README.md) for the deploy runbook, and
 [`docs/BUILD_LOG.md`](./docs/BUILD_LOG.md) for the build log & decision record
 (per-phase decisions and the traps hit along the way).
 
+To poke at the editor quickly, import
+[`docs/demo-plan.json`](./docs/demo-plan.json) — a board covering every shape,
+style, animation effect and trigger ([what's in it](./docs/demo-plan.md)).
+
 ## Monorepo layout
 
 ```
