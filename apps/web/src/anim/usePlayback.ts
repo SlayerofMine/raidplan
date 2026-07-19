@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import gsap from "gsap";
 import type { Stage } from "konva/lib/Stage";
 import {
   resolveObjectState,
+  type Anim,
   type ObjectState,
   type ResolvedStates,
 } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
+import { collidingAnimIds, collisionRules, type RectLookup } from "./collision";
 import { compileStep } from "./compileStep";
+import { compileOneShot, deferredAnimsFor } from "./oneShot";
 
 /**
  * The playback engine (plan §3.5 / §8.1).
@@ -31,6 +35,17 @@ export interface PlaybackApi {
   previous: () => void;
   goTo: (stepIndex: number) => void;
   seek: (progress: number) => void;
+  /**
+   * Fire this object's `onClick` animations, if it has any. The viewer calls it
+   * when the object is clicked (plan §7).
+   */
+  triggerClick: (objectId: string) => void;
+  /**
+   * Objects on the current step with an `onClick` animation. The viewer only
+   * turns on hit-testing when this is non-empty, so the usual case keeps the
+   * `listening={false}` fast path (plan §8.4).
+   */
+  clickableObjectIds: string[];
 }
 
 export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
@@ -42,6 +57,14 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const timeline = useRef<gsap.core.Timeline | null>(null);
+  /**
+   * Deferred animations already fired this playthrough. A pickup is *consumed*:
+   * it fires on first contact and stays spent until the step is rebuilt
+   * (restart or a step change), which is where this is cleared.
+   */
+  const fired = useRef<Set<string>>(new Set());
+  /** Timelines started by a trigger, so transport controls can govern them too. */
+  const oneShots = useRef<gsap.core.Timeline[]>([]);
 
   /** Write a resolved state straight onto its Konva node. */
   const applyToNode = useCallback(
@@ -87,6 +110,61 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
   );
 
   /**
+   * An object's state *right now*, read off its Konva node. A triggered
+   * animation continues from where the object actually is rather than snapping
+   * back to the step's start. `w`/`h` come from the resolved fallback because
+   * `applyToNode` never writes them.
+   */
+  const liveStateOf = useCallback(
+    (objectId: string, fallback: ObjectState): ObjectState => {
+      const node = stageRef.current?.findOne(`#${objectId}`);
+      if (!node) return fallback;
+      return {
+        ...fallback,
+        x: node.x(),
+        y: node.y(),
+        rotation: node.rotation(),
+        opacity: node.opacity(),
+        visible: node.visible(),
+      };
+    },
+    [stageRef],
+  );
+
+  /** Run a single deferred animation now (see `oneShot.ts`). */
+  const fireAnim = useCallback(
+    (anim: Anim) => {
+      const step = steps[stepIndex];
+      if (!step) return;
+      const end = resolveAll(stepIndex);
+      const target = end[anim.objectId];
+      if (!target) return;
+
+      const { timeline: tl, initial } = compileOneShot({
+        anim,
+        step,
+        start: { [anim.objectId]: liveStateOf(anim.objectId, target) },
+        end,
+        apply: applyToNode,
+        onUpdate: redraw,
+      });
+      // Entrance effects need their offset applied before the first tick.
+      applyStates(initial);
+      oneShots.current.push(tl);
+      tl.play();
+    },
+    [
+      steps,
+      stepIndex,
+      resolveAll,
+      liveStateOf,
+      applyToNode,
+      applyStates,
+      redraw,
+    ],
+  );
+
+  /**
    * Build the timeline for a step. Entering a step always snaps to its start
    * state first, so jumping in from anywhere lands in the same place (plan §7).
    */
@@ -94,6 +172,11 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
     (index: number) => {
       timeline.current?.kill();
       timeline.current = null;
+      // Rebuilding a step re-arms every pickup and drops anything a trigger
+      // started, so a replay is identical to the first run.
+      for (const shot of oneShots.current) shot.kill();
+      oneShots.current = [];
+      fired.current.clear();
 
       const step = steps[index];
       if (!step) return null;
@@ -142,17 +225,56 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
     };
   }, [buildStep, stepIndex]);
 
+  /**
+   * Collision watch — **only while playing** (plan §7).
+   *
+   * Rides GSAP's global ticker rather than the step timeline's `onUpdate`, so a
+   * collision caused *by* a triggered animation is still caught after the step's
+   * own timeline has finished. Boxes are read from the live Konva nodes, which
+   * is what makes this work mid-tween. No React state is touched per frame.
+   */
+  useEffect(() => {
+    if (!isPlaying) return;
+    const animations = steps[stepIndex]?.animations ?? [];
+    const rules = collisionRules(animations);
+    if (rules.length === 0) return;
+
+    const rectOf: RectLookup = (objectId) => {
+      const node = stageRef.current?.findOne(`#${objectId}`);
+      // A hidden object can't be hit — a consumed pickup stays consumed.
+      if (!node || !node.visible()) return null;
+      const layer = node.getLayer();
+      return layer ? node.getClientRect({ relativeTo: layer }) : null;
+    };
+
+    const tick = () => {
+      for (const animId of collidingAnimIds(rules, rectOf)) {
+        if (fired.current.has(animId)) continue;
+        const anim = animations.find((a) => a.id === animId);
+        if (!anim) continue;
+        fired.current.add(animId); // consumed: never fires twice per playthrough
+        fireAnim(anim);
+      }
+    };
+
+    gsap.ticker.add(tick);
+    return () => gsap.ticker.remove(tick);
+  }, [isPlaying, steps, stepIndex, stageRef, fireAnim]);
+
   const play = useCallback(() => {
     const tl = timeline.current;
     if (!tl) return;
     // Replay from the top once it has run to the end.
     if (tl.progress() >= 1) tl.progress(0);
     tl.play();
+    // Anything a trigger started resumes with the transport.
+    for (const shot of oneShots.current) shot.play();
     setIsPlaying(true);
   }, []);
 
   const pause = useCallback(() => {
     timeline.current?.pause();
+    for (const shot of oneShots.current) shot.pause();
     setIsPlaying(false);
   }, []);
 
@@ -171,6 +293,35 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
     setProgress(tl.progress());
   }, []);
 
+  /**
+   * Fire an object's `onClick` animations. Unlike collisions this doesn't
+   * require the transport to be running — the viewer *is* play mode, and
+   * click-to-advance is the whole point of the trigger (plan §7). Each fires at
+   * most once per playthrough, like a pickup.
+   */
+  const triggerClick = useCallback(
+    (objectId: string) => {
+      for (const anim of deferredAnimsFor(
+        steps[stepIndex],
+        objectId,
+        "onClick",
+      )) {
+        if (fired.current.has(anim.id)) continue;
+        fired.current.add(anim.id);
+        fireAnim(anim);
+      }
+    },
+    [steps, stepIndex, fireAnim],
+  );
+
+  const clickableObjectIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const anim of steps[stepIndex]?.animations ?? []) {
+      if (anim.trigger === "onClick") ids.add(anim.objectId);
+    }
+    return [...ids];
+  }, [steps, stepIndex]);
+
   return {
     stepIndex,
     isPlaying,
@@ -184,5 +335,7 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
     previous: () => goTo(stepIndex - 1),
     goTo,
     seek,
+    triggerClick,
+    clickableObjectIds,
   };
 }

@@ -134,8 +134,10 @@ export const ObjectNode = memo(function ObjectNode({
       rotation={rotation}
       opacity={opacity}
       draggable={draggable && !object.locked}
-      onMouseDown={handleMouseDown}
-      onTap={() => select([objectId])}
+      // Selection is an *editor* concern. The viewer enables listening on steps
+      // with onClick animations, and must not mutate the editor's selection.
+      onMouseDown={draggable ? handleMouseDown : undefined}
+      onTap={draggable ? () => select([objectId]) : undefined}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}

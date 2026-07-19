@@ -130,7 +130,11 @@ export function ViewerPage() {
             This plan has no steps yet. Add some in the editor.
           </p>
         ) : (
-          <ViewerStage stageRef={stageRef} />
+          <ViewerStage
+            stageRef={stageRef}
+            clickableObjectIds={playback.clickableObjectIds}
+            onObjectClick={playback.triggerClick}
+          />
         )}
       </main>
 
