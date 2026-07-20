@@ -4,7 +4,7 @@ import type { Config } from "./config.js";
 import type { Db } from "./db/client.js";
 import { createAuth, type Auth } from "./auth/auth.js";
 import { domainUserIdFor, viewerFor } from "./auth/session.js";
-import type { Viewer } from "./auth/access.js";
+import { isAdmin, type Viewer } from "./auth/access.js";
 import type { Fetch } from "./auth/discordIdentity.js";
 import { createShareRoutes } from "./og/shareRoutes.js";
 import { createUploadRoutes } from "./uploads/uploadRoutes.js";
@@ -169,7 +169,11 @@ export function createApp({ db, config, getUserId, fetchImpl }: AppDeps) {
       createContext: async (_opts, c) => {
         const userId = await resolveUserId(c.req.raw);
         const viewer: Viewer | null = userId ? viewerFor(db, userId) : null;
-        return { db, viewer };
+        return {
+          db,
+          viewer,
+          isAdmin: isAdmin(viewer, config.iconAdminUserIds),
+        };
       },
     }),
   );

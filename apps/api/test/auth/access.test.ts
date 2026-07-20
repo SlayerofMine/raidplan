@@ -4,6 +4,7 @@ import {
   canEdit,
   canList,
   canView,
+  isAdmin,
   roleAtLeast,
   type PlanAcl,
   type Viewer,
@@ -156,5 +157,17 @@ describe("canList", () => {
     expect(canList(plan({ visibility: "public", deletedAt: 1 }), owner)).toBe(
       false,
     );
+  });
+});
+
+describe("isAdmin", () => {
+  it("admits only ids on the allowlist", () => {
+    expect(isAdmin(owner, [OWNER])).toBe(true);
+    expect(isAdmin(owner, ["someone_else"])).toBe(false);
+  });
+
+  it("admits no one on an empty allowlist, and never the anonymous", () => {
+    expect(isAdmin(owner, [])).toBe(false);
+    expect(isAdmin(anonymous, [OWNER])).toBe(false);
   });
 });

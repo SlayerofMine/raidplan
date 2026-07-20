@@ -122,7 +122,7 @@ describe("HomePage — API unreachable", () => {
 
 describe("HomePage — signed in", () => {
   beforeEach(() => {
-    meGet.mockResolvedValue({ userId: "u1", roles: {} });
+    meGet.mockResolvedValue({ userId: "u1", roles: {}, isAdmin: false });
     // Most tests don't care about the encounter list; default it to empty.
     encounterList.mockResolvedValue([]);
   });

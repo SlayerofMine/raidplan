@@ -3,6 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import {
   DEFAULT_ENCOUNTERS,
   EncounterPresetSchema,
+  type Background,
   type EncounterPreset,
   type EncounterSummary,
 } from "@raidplan/shared";
@@ -133,4 +134,76 @@ export function seedDefaultEncounters(db: Db): void {
       preset: encounter.preset,
     });
   }
+}
+
+/** A readable, url-safe base slug from an encounter's name. */
+function slugifyName(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return base || "encounter";
+}
+
+/** `base`, or `base-2`, `base-3`… — the first form not already taken. */
+function uniqueSlug(db: Db, base: string): string {
+  for (let n = 1; ; n++) {
+    const slug = n === 1 ? base : `${base}-${n}`;
+    const taken = db
+      .select({ id: encounters.id })
+      .from(encounters)
+      .where(eq(encounters.slug, slug))
+      .get();
+    if (!taken) return slug;
+  }
+}
+
+/**
+ * Create an encounter from the admin panel (plan §17, stage 2). The slug is
+ * derived from the name and de-duplicated, so the admin never has to invent one.
+ * Content (objects/steps) starts empty — pre-placed content is authored later.
+ */
+export function createEncounter(
+  db: Db,
+  input: { raid: string; name: string; background: Background },
+): EncounterRecord {
+  return upsertEncounter(db, {
+    slug: uniqueSlug(db, slugifyName(input.name)),
+    raid: input.raid,
+    name: input.name,
+    preset: { background: input.background, objects: [], steps: [] },
+  });
+}
+
+/**
+ * Patch an encounter's editable fields. **Objects and steps are preserved** —
+ * the admin panel only edits name/raid/background, so an update must never wipe
+ * pre-placed content it doesn't manage. Returns `undefined` if no such row.
+ */
+export function updateEncounter(
+  db: Db,
+  id: string,
+  patch: { raid?: string; name?: string; background?: Background },
+): EncounterRecord | undefined {
+  const existing = getEncounter(db, id);
+  if (!existing) return undefined;
+
+  const raid = patch.raid ?? existing.raid;
+  const name = patch.name ?? existing.name;
+  const preset: EncounterPreset = {
+    ...existing.preset,
+    ...(patch.background ? { background: patch.background } : {}),
+  };
+
+  db.update(encounters)
+    .set({ raid, name, doc: JSON.stringify(preset), updatedAt: nowSeconds() })
+    .where(eq(encounters.id, id))
+    .run();
+  return { id, slug: existing.slug, raid, name, preset };
+}
+
+/** Delete an encounter. Returns whether a row was actually removed. */
+export function deleteEncounter(db: Db, id: string): boolean {
+  const result = db.delete(encounters).where(eq(encounters.id, id)).run();
+  return result.changes > 0;
 }

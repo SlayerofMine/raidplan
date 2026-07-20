@@ -5,9 +5,12 @@ import { createTestDb } from "../../src/db/testDb.js";
 import type { Db } from "../../src/db/client.js";
 import { encounters } from "../../src/db/schema.js";
 import {
+  createEncounter,
+  deleteEncounter,
   getEncounter,
   listEncounters,
   seedDefaultEncounters,
+  updateEncounter,
   upsertEncounter,
 } from "../../src/encounters/encountersRepo.js";
 
@@ -117,6 +120,19 @@ describe("encountersRepo", () => {
     const list = listEncounters(db);
     expect(list.map((e) => e.raid)).toEqual(["Amirdrassil", "Zephyr"]);
     expect(list[0]!.background).toEqual(background);
+  });
+
+  it("createEncounter derives a unique slug from the name", () => {
+    const a = createEncounter(db, { raid: "R", name: "Big Bad", background });
+    const b = createEncounter(db, { raid: "R", name: "Big Bad", background });
+    expect(a.slug).toBe("big-bad");
+    expect(b.slug).toBe("big-bad-2");
+    expect(a.preset.objects).toEqual([]);
+  });
+
+  it("updateEncounter/deleteEncounter signal a missing row", () => {
+    expect(updateEncounter(db, "ghost", { name: "x" })).toBeUndefined();
+    expect(deleteEncounter(db, "ghost")).toBe(false);
   });
 
   it("skips a row whose stored doc is corrupt rather than throwing", () => {

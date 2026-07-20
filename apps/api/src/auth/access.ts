@@ -96,3 +96,18 @@ export function canList(plan: PlanAcl, viewer: Viewer | null): boolean {
   if (plan.ownerId === viewer.userId) return true;
   return roleAtLeast(roleInPlanGuild(plan, viewer), "viewer");
 }
+
+/**
+ * Is this viewer a **site admin** (plan §17)? Not a guild role but a flat
+ * allowlist of user ids: authoring encounters (and later attacks) is an
+ * infrastructure-level capability, gated exactly like an icon sync
+ * (`ICON_ADMIN_USER_IDS`, see {@link ../icons/iconAdmin.ts}). An empty allowlist
+ * admits no one, which is the safe default for a self-hosted instance.
+ */
+export function isAdmin(
+  viewer: Viewer | null,
+  adminUserIds: readonly string[],
+): boolean {
+  if (!viewer) return false;
+  return adminUserIds.includes(viewer.userId);
+}

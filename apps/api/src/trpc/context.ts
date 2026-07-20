@@ -10,6 +10,12 @@ import type { Viewer } from "../auth/access.js";
 export interface Context {
   db: Db;
   viewer: Viewer | null;
+  /**
+   * Whether the viewer is a site admin (plan §17). Computed once at context
+   * creation from the admin allowlist, so procedures don't each re-derive it.
+   * Optional (defaults to non-admin) — direct callers in tests opt in.
+   */
+  isAdmin?: boolean;
 }
 
 const t = initTRPC.context<Context>().create();
@@ -26,4 +32,15 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Sign in first." });
   }
   return next({ ctx: { ...ctx, viewer: ctx.viewer } });
+});
+
+/**
+ * Requires a **site admin** (plan §17) — for authoring encounters and attacks.
+ * Signed-in-but-not-admin is `FORBIDDEN`, distinct from anonymous `UNAUTHORIZED`.
+ */
+export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!ctx.isAdmin) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Admins only." });
+  }
+  return next({ ctx });
 });

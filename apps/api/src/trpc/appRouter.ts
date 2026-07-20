@@ -10,6 +10,8 @@ export const appRouter = router({
     get: protectedProcedure.query(({ ctx }) => ({
       userId: ctx.viewer.userId,
       roles: ctx.viewer.roles,
+      /** Drives the admin-panel link/route on the client (plan §17). */
+      isAdmin: ctx.isAdmin ?? false,
     })),
   }),
 });
