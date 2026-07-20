@@ -3,17 +3,12 @@ import { asc, eq, inArray } from "drizzle-orm";
 import {
   AttackDefSchema,
   attackIdsInPlan,
+  type AttackContent,
   type AttackDef,
   type Plan,
 } from "@raidplan/shared";
 import type { Db } from "../db/client.js";
 import { attacks } from "../db/schema.js";
-
-/** The editable body of an attack (everything but its identity and version). */
-export type AttackContent = Pick<
-  AttackDef,
-  "name" | "box" | "anchor" | "objects" | "animations"
->;
 
 /**
  * Data access for attack definitions (plan §17, stage 3). Transport-free like

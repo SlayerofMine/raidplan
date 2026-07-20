@@ -39,6 +39,7 @@ const def = (over: Partial<AttackDef> = {}): AttackDef => ({
       },
     },
   ],
+  overrides: {},
   animations: [],
   ...over,
 });

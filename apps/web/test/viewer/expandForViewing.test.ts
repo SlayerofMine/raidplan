@@ -43,6 +43,7 @@ const def: AttackDef = {
       },
     },
   ],
+  overrides: {},
   animations: [],
 };
 

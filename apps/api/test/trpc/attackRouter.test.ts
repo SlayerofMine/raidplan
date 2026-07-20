@@ -35,6 +35,7 @@ const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   box: { w: 100, h: 100 },
   anchor: { x: 0, y: 0 },
   objects: [],
+  overrides: {},
   animations: [],
   ...over,
 });

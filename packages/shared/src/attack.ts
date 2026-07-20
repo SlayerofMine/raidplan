@@ -3,12 +3,15 @@ import { PointSchema, type Point } from "./transform.js";
 import {
   AnimSchema,
   PlanObjectSchema,
+  SCHEMA_VERSION,
+  StepOverrideSchema,
   type Anim,
   type AnimParams,
   type AttackInstance,
   type ObjectBase,
   type Plan,
   type PlanObject,
+  type StepOverride,
 } from "./plan.js";
 
 /**
@@ -45,9 +48,20 @@ export const AttackDefSchema = z.object({
   /** The grab point in def space; an instance's position places *this* point. */
   anchor: PointSchema,
   objects: z.array(PlanObjectSchema),
+  /**
+   * The attack's settled **end state**, per object (def space) — a single
+   * "slide" the animations play toward, exactly like a plan step. This is what
+   * lets the designer author `move`/`scale`/`fly` by dragging on the canvas, and
+   * what `expandPlan` transforms into the instance's step. Optional/`{}` for an
+   * attack that only pulses or blinks in place.
+   */
+  overrides: z.record(z.string().min(1), StepOverrideSchema).default({}),
   animations: z.array(AnimSchema),
 });
 export type AttackDef = z.infer<typeof AttackDefSchema>;
+
+/** The editable body of an attack — everything but its identity and version. */
+export type AttackContent = Omit<AttackDef, "id" | "encounterId" | "version">;
 
 /**
  * The distinct attack ids a plan references, so a renderer can fetch just the
@@ -107,6 +121,20 @@ function placeBase(base: ObjectBase, t: Placement): ObjectBase {
   };
 }
 
+/** Transform a step override's spatial fields (its end-state position/size). */
+function placeOverride(ov: StepOverride, t: Placement): StepOverride {
+  const out: StepOverride = { ...ov };
+  if (ov.x !== undefined && ov.y !== undefined) {
+    const p = placePoint({ x: ov.x, y: ov.y }, t);
+    out.x = p.x;
+    out.y = p.y;
+  }
+  if (ov.w !== undefined) out.w = ov.w * t.scale;
+  if (ov.h !== undefined) out.h = ov.h * t.scale;
+  if (ov.rotation !== undefined) out.rotation = ov.rotation + t.rotation;
+  return out;
+}
+
 /** Transform an animation's spatial params (motion targets and paths). */
 function placeParams(params: AnimParams, t: Placement): AnimParams {
   const next: AnimParams = { ...params };
@@ -123,7 +151,11 @@ function placeParams(params: AnimParams, t: Placement): AnimParams {
 function expandInstance(
   def: AttackDef,
   instance: AttackInstance,
-): { objects: PlanObject[]; animations: Anim[] } {
+): {
+  objects: PlanObject[];
+  animations: Anim[];
+  overrides: Record<string, StepOverride>;
+} {
   const t: Placement = {
     anchor: def.anchor,
     x: instance.x,
@@ -152,7 +184,12 @@ function expandInstance(
     ...(a.params ? { params: placeParams(a.params, t) } : {}),
   }));
 
-  return { objects, animations };
+  const overrides: Record<string, StepOverride> = {};
+  for (const [localId, ov] of Object.entries(def.overrides)) {
+    overrides[scopedId(instance.id, localId)] = placeOverride(ov, t);
+  }
+
+  return { objects, animations, overrides };
 }
 
 /**
@@ -194,10 +231,10 @@ export function expandPlan(
       const here = steps[stepIndex]!;
       const after = steps[stepIndex + 1];
       for (const object of expanded.objects) {
-        here.overrides[object.id] = {
-          ...here.overrides[object.id],
-          visible: true,
-        };
+        // The def's placed end state, made present on its step (unless the def
+        // explicitly ends it hidden, e.g. a disappear).
+        const end = expanded.overrides[object.id] ?? {};
+        here.overrides[object.id] = { ...end, visible: end.visible ?? true };
         if (after) after.overrides[object.id] = { visible: false };
       }
       here.animations.push(...expanded.animations);
@@ -205,4 +242,55 @@ export function expandPlan(
   });
 
   return { ...plan, objects, steps };
+}
+
+/**
+ * The synthetic background an attack is authored on: a plain box the size of the
+ * def's canvas. `getBackgroundSrc` doesn't recognise it, so it renders as an
+ * empty floor — the designer draws the attack on a blank grid, not a map.
+ */
+export const ATTACK_BOX_ASSET = "attack-box";
+
+/**
+ * Present an {@link AttackDef} as a one-step {@link Plan} the editor store can
+ * load, so the attack designer *is* the editor (plan §17, stage 4). The def's
+ * objects are the base layout, its `overrides` are the single step's end state,
+ * and its animations are that step's timeline.
+ */
+export function defToPlan(def: AttackDef): Plan {
+  return {
+    id: def.id,
+    title: def.name,
+    raid: "",
+    background: {
+      assetId: ATTACK_BOX_ASSET,
+      width: def.box.w,
+      height: def.box.h,
+    },
+    objects: def.objects,
+    steps: [
+      { id: "attack", overrides: def.overrides, animations: def.animations },
+    ],
+    schemaVersion: SCHEMA_VERSION,
+  };
+}
+
+/**
+ * Extract an attack's editable body back out of the designer's plan, combined
+ * with the name and anchor the designer tracks separately. The inverse of
+ * {@link defToPlan}.
+ */
+export function planToAttackContent(
+  plan: Plan,
+  meta: { name: string; anchor: Point },
+): AttackContent {
+  const step = plan.steps[0];
+  return {
+    name: meta.name,
+    box: { w: plan.background.width, h: plan.background.height },
+    anchor: meta.anchor,
+    objects: plan.objects,
+    overrides: step?.overrides ?? {},
+    animations: step?.animations ?? [],
+  };
 }

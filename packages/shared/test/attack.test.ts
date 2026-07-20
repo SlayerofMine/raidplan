@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  ATTACK_BOX_ASSET,
   AttackDefSchema,
   attackIdsInPlan,
+  defToPlan,
   expandPlan,
+  planToAttackContent,
   type AttackDef,
 } from "../src/attack.js";
 import {
@@ -55,6 +58,7 @@ const makeDef = (over: Partial<AttackDef> = {}): AttackDef => ({
   box: { w: 100, h: 100 },
   anchor: { x: 0, y: 0 },
   objects: [defObj("o1")],
+  overrides: {},
   animations: [],
   ...over,
 });
@@ -315,6 +319,80 @@ describe("expandPlan — animations", () => {
     expect(anim.collideWith).toEqual(["i1::tank"]);
     const tether = out.objects.find((o) => o.id === "i1::tether")!;
     expect(tether).toMatchObject({ fromId: "i1::orb", toId: "i1::tank" });
+  });
+});
+
+describe("expandPlan — end-state overrides", () => {
+  it("places the def's end state onto the instance's step, made present", () => {
+    const def = makeDef({
+      anchor: { x: 0, y: 0 },
+      objects: [defObj("c")],
+      overrides: { c: { x: 10, y: 0 } },
+    });
+    const out = expandPlan(
+      makePlan([step({ attacks: [inst({ x: 5, y: 5 })] })]),
+      { atk: def },
+    );
+    expect(out.steps[0]!.overrides["i1::c"]).toEqual({
+      x: 15,
+      y: 5,
+      visible: true,
+    });
+  });
+
+  it("honours a def end state that hides the object (a disappear)", () => {
+    const def = makeDef({
+      objects: [defObj("c")],
+      overrides: { c: { visible: false } },
+    });
+    const out = expandPlan(makePlan([step({ attacks: [inst()] })]), {
+      atk: def,
+    });
+    expect(out.steps[0]!.overrides["i1::c"]).toEqual({ visible: false });
+  });
+});
+
+describe("defToPlan / planToAttackContent", () => {
+  it("presents a def as a one-step plan on a box-sized blank canvas", () => {
+    const def = makeDef({
+      name: "Sweep",
+      box: { w: 300, h: 200 },
+      objects: [defObj("o1")],
+      overrides: { o1: { x: 5 } },
+      animations: [defAnim({ objectId: "o1" })],
+    });
+    const plan = defToPlan(def);
+    expect(plan.background).toEqual({
+      assetId: ATTACK_BOX_ASSET,
+      width: 300,
+      height: 200,
+    });
+    expect(plan.title).toBe("Sweep");
+    expect(plan.objects).toBe(def.objects);
+    expect(plan.steps).toHaveLength(1);
+    expect(plan.steps[0]!.overrides).toBe(def.overrides);
+    expect(plan.steps[0]!.animations).toBe(def.animations);
+  });
+
+  it("round-trips a def's body back out", () => {
+    const def = makeDef({
+      box: { w: 300, h: 200 },
+      objects: [defObj("o1", { x: 3 })],
+      overrides: { o1: { x: 5 } },
+      animations: [defAnim({ objectId: "o1" })],
+    });
+    const content = planToAttackContent(defToPlan(def), {
+      name: "Renamed",
+      anchor: { x: 1, y: 2 },
+    });
+    expect(content).toMatchObject({
+      name: "Renamed",
+      anchor: { x: 1, y: 2 },
+      box: { w: 300, h: 200 },
+      objects: def.objects,
+      overrides: def.overrides,
+      animations: def.animations,
+    });
   });
 });
 

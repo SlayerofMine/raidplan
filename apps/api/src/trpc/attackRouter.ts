@@ -1,6 +1,11 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { AnimSchema, PlanObjectSchema, PointSchema } from "@raidplan/shared";
+import {
+  AnimSchema,
+  PlanObjectSchema,
+  PointSchema,
+  StepOverrideSchema,
+} from "@raidplan/shared";
 import {
   createAttack,
   deleteAttack,
@@ -25,6 +30,7 @@ const attackContent = {
   }),
   anchor: PointSchema,
   objects: z.array(PlanObjectSchema),
+  overrides: z.record(z.string().min(1), StepOverrideSchema).default({}),
   animations: z.array(AnimSchema),
 };
 
