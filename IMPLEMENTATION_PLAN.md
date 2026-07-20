@@ -414,6 +414,7 @@ Estimates assume **one experienced full‑stack dev**; scale accordingly. Every 
 - **Unit (Vitest):** state resolution, schema validation/migrations, animation timeline compilation, store reducers, access‑control helpers.
 - **Component (RTL):** palette, properties panel, steps strip, animation editor.
 - **E2E (Playwright):** create → place → animate → save → open viewer → play; auth flow; sharing/visibility; import/export round‑trip.
+  - **Testing protected flows without Discord:** the API's `DEV_AUTH` flag (dev/CI only — `loadConfig` refuses it in production) exposes `/api/dev/login?userId=…`, which mints a session cookie for any user. Being an admin comes from `ICON_ADMIN_USER_IDS`, so dev‑login as an allowlisted id to reach admin routes. For manual work: `pnpm dev:auth`, then visit `/api/dev/login?userId=me`. For E2E: the signed‑in suite (`pnpm --filter @raidplan/web test:e2e:auth`, config `playwright.auth.config.ts`) boots a throwaway API (in‑memory DB, `DEV_AUTH`) and a `signIn()` helper — kept separate so the default suite stays hermetic.
 - **Performance:** scripted 50‑object/4‑step scene with an FPS assertion in CI (allow a threshold) to catch regressions.
 - **Manual QA checklist** per release: zoom/pan, snapping, undo/redo depth, keyboard shortcuts, mobile viewer, Discord unfurl.
 

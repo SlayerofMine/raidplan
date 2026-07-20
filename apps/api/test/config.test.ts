@@ -97,4 +97,17 @@ describe("loadConfig", () => {
   it("boots in production once auth is configured", () => {
     expect(() => loadConfig({ NODE_ENV: "production", ...AUTH })).not.toThrow();
   });
+
+  it("leaves DEV_AUTH off unless a truthy flag is set", () => {
+    expect(loadConfig({}).devAuth).toBe(false);
+    expect(loadConfig({ DEV_AUTH: "0" }).devAuth).toBe(false);
+    expect(loadConfig({ DEV_AUTH: "1" }).devAuth).toBe(true);
+    expect(loadConfig({ DEV_AUTH: "true" }).devAuth).toBe(true);
+  });
+
+  it("refuses DEV_AUTH in production — it would bypass sign-in for anyone", () => {
+    expect(() =>
+      loadConfig({ NODE_ENV: "production", DEV_AUTH: "1", ...AUTH }),
+    ).toThrow(/DEV_AUTH/);
+  });
 });

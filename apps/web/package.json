@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:auth": "playwright test --config=playwright.auth.config.ts"
   },
   "dependencies": {
     "@raidplan/shared": "workspace:*",

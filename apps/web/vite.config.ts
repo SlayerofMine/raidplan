@@ -1,6 +1,25 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
+/**
+ * Preview-server proxy for the signed-in E2E suite. Off (empty) unless `E2E_API`
+ * names an API origin, so the default preview and E2E run stay hermetic. The
+ * paths match production's Caddy routing (deploy/caddy/Caddyfile).
+ */
+function e2eApiProxy(
+  target: string | undefined,
+): Record<string, { target: string; changeOrigin: boolean }> {
+  if (!target) return {};
+  const to = { target, changeOrigin: false };
+  return {
+    "/api": to,
+    "/trpc": to,
+    "^/p/": to,
+    "^/uploads/": to,
+    "^/icons/": to,
+  };
+}
+
 // `vitest/config` re-exports Vite's `defineConfig` with the `test` field typed,
 // so the build and unit-test configuration live in one file.
 export default defineConfig({
@@ -39,12 +58,17 @@ export default defineConfig({
      * Vite's preview server inherits `server.proxy` by default. Undo that.
      *
      * Two reasons. It's more faithful: in production Caddy does the proxying
-     * and Vite isn't in the request path at all. And it keeps the E2E suite
-     * hermetic — otherwise the tests quietly talk to whatever dev API happens
-     * to be listening on :4000, so they'd pass or fail depending on the
+     * and Vite isn't in the request path at all. And it keeps the default E2E
+     * suite hermetic — otherwise the tests quietly talk to whatever dev API
+     * happens to be listening on :4000, so they'd pass or fail depending on the
      * developer's local state, and could write to a real dev database.
+     *
+     * The **signed-in** E2E suite (`playwright.auth.config.ts`) is the one
+     * exception: it starts its own throwaway API and points the preview at it by
+     * setting `E2E_API` to that origin. So the escape hatch is explicit and
+     * scoped — nothing proxies anywhere unless a test run asks it to.
      */
-    proxy: {},
+    proxy: e2eApiProxy(process.env.E2E_API),
   },
   test: {
     environment: "jsdom",

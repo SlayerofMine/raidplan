@@ -75,6 +75,12 @@ describe("tRPC over HTTP", () => {
     expect(readBody.result.data.title).toBe("Over the wire");
   });
 
+  it("exposes no dev-login route unless DEV_AUTH is on", async () => {
+    // The module-level `config` has DEV_AUTH unset.
+    const res = await appAs(null).request("/api/dev/login?userId=u1");
+    expect(res.status).toBe(404);
+  });
+
   it("derives the viewer per request, so users can't read each other's plans", async () => {
     db.insert(users).values({ id: "u2", discordId: "d2", name: "Other" }).run();
 
@@ -93,5 +99,41 @@ describe("tRPC over HTTP", () => {
       `/trpc/plan.get?input=${encodeURIComponent(JSON.stringify({ id }))}`,
     );
     expect(asOther.status).toBe(404);
+  });
+});
+
+describe("dev auth (DEV_AUTH)", () => {
+  // A real app (no injected getUserId), so the cookie resolver actually runs.
+  const devConfig = loadConfig({ NODE_ENV: "test", DEV_AUTH: "1" });
+  const devApp = () => createApp({ db, config: devConfig });
+
+  it("signs in via a cookie, with no Discord round-trip", async () => {
+    const login = await devApp().request("/api/dev/login?userId=u1");
+    expect(login.status).toBe(302);
+    expect(login.headers.get("set-cookie")).toContain("dev_user=u1");
+
+    const me = await devApp().request("/trpc/me.get", {
+      headers: { cookie: "dev_user=u1" },
+    });
+    expect(me.status).toBe(200);
+    const body = (await me.json()) as { result: { data: { userId: string } } };
+    expect(body.result.data.userId).toBe("u1");
+  });
+
+  it("materialises a brand-new user so their first write satisfies FKs", async () => {
+    await devApp().request("/api/dev/login?userId=fresh&name=Fresh");
+    const created = await devApp().request("/trpc/plan.create", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: "dev_user=fresh" },
+      body: JSON.stringify({
+        background: { assetId: "arena", width: 1600, height: 900 },
+      }),
+    });
+    expect(created.status).toBe(200);
+  });
+
+  it("is still anonymous without the cookie", async () => {
+    const me = await devApp().request("/trpc/me.get");
+    expect(me.status).toBe(401);
   });
 });

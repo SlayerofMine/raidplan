@@ -56,7 +56,20 @@ const ConfigSchema = z.object({
   DISCORD_OWNER_ROLE_IDS: z.string().default(""),
   DISCORD_EDITOR_ROLE_IDS: z.string().default(""),
   DISCORD_DEFAULT_ROLE: z.enum(ROLES).default("viewer"),
+
+  /**
+   * **Development/CI only** — bypass Discord so protected flows are testable
+   * without OAuth (plan §13). When on, `/api/dev/login?userId=…` mints a session
+   * cookie for any user. `loadConfig` refuses to enable it in production, so it
+   * can never become an auth hole on the real server. Off by default.
+   */
+  DEV_AUTH: z.string().optional(),
 });
+
+/** Whether a string env flag reads as "on". */
+function isEnabled(raw: string | undefined): boolean {
+  return ["1", "true", "yes", "on"].includes((raw ?? "").toLowerCase());
+}
 
 /** Split a comma-separated env list, tolerating spaces and empties. */
 function idList(raw: string): string[] {
@@ -92,6 +105,8 @@ export type Config = z.infer<typeof ConfigSchema> & {
   iconPackDir: string;
   /** Parsed {@link ConfigSchema.ICON_ADMIN_USER_IDS}. */
   iconAdminUserIds: string[];
+  /** Discord-free dev/CI sign-in is active (plan §13). Never true in production. */
+  devAuth: boolean;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -118,6 +133,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     );
   }
 
+  const devAuth = isEnabled(config.DEV_AUTH);
+  // A test-auth backdoor in production would let anyone sign in as anyone. Fail
+  // to boot rather than serve it — the guard is the whole point of the feature.
+  if (config.NODE_ENV === "production" && devAuth) {
+    throw new Error(
+      "DEV_AUTH must never be enabled in production — it bypasses Discord sign-in.",
+    );
+  }
+
   return {
     ...config,
     authEnabled,
@@ -132,5 +156,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // POSIX join without importing path: config stays dependency-free.
     iconPackDir: `${config.ICON_DIR.replace(/\/+$/, "")}/pack`,
     iconAdminUserIds: idList(config.ICON_ADMIN_USER_IDS),
+    devAuth,
   };
 }

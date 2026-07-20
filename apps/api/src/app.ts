@@ -5,6 +5,7 @@ import type { Db } from "./db/client.js";
 import { createAuth, type Auth } from "./auth/auth.js";
 import { domainUserIdFor, viewerFor } from "./auth/session.js";
 import { isAdmin, type Viewer } from "./auth/access.js";
+import { createDevAuthRoutes, readDevUserId } from "./auth/devAuth.js";
 import type { Fetch } from "./auth/discordIdentity.js";
 import { createShareRoutes } from "./og/shareRoutes.js";
 import { createUploadRoutes } from "./uploads/uploadRoutes.js";
@@ -133,9 +134,21 @@ export function createApp({ db, config, getUserId, fetchImpl }: AppDeps) {
     });
   }
 
+  // Discord-free sign-in for dev/CI (plan §13). Never registered in production —
+  // `loadConfig` refuses to set `devAuth` there.
+  if (config.devAuth) {
+    app.route("/", createDevAuthRoutes({ db }));
+  }
+
   const resolveUserId =
     getUserId ??
     (async (req: Request) => {
+      // A dev-auth cookie stands in for a real session, read in the same place
+      // the better-auth session would be.
+      if (config.devAuth) {
+        const devUserId = readDevUserId(req);
+        if (devUserId) return devUserId;
+      }
       if (!auth) return null;
       const session = await auth.api.getSession({ headers: req.headers });
       if (!session) return null;

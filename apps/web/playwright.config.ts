@@ -7,6 +7,9 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./e2e",
+  // The signed-in suite needs a running API; it has its own config
+  // (playwright.auth.config.ts). Keep it out of the default hermetic run.
+  testIgnore: "**/auth/**",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

@@ -7,5 +7,10 @@
     "lib": ["ES2022", "DOM"],
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "playwright.config.ts", "e2e"]
+  "include": [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "playwright.auth.config.ts",
+    "e2e"
+  ]
 }
