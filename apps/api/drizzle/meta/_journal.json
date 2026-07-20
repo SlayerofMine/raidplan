@@ -29,6 +29,13 @@
       "when": 1784568438040,
       "tag": "0003_empty_calypso",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1784585552195,
+      "tag": "0004_large_veda",
+      "breakpoints": true
     }
   ]
 }

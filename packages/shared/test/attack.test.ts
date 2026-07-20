@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { AttackDefSchema, expandPlan, type AttackDef } from "../src/attack.js";
+import {
+  AttackDefSchema,
+  attackIdsInPlan,
+  expandPlan,
+  type AttackDef,
+} from "../src/attack.js";
 import {
   PlanSchema,
   SCHEMA_VERSION,
@@ -97,6 +102,23 @@ describe("AttackDefSchema", () => {
       animations: [],
     });
     expect(def.version).toBe(1);
+  });
+});
+
+describe("attackIdsInPlan", () => {
+  it("collects distinct attack ids across steps", () => {
+    const plan = makePlan([
+      step({
+        id: "s0",
+        attacks: [inst({ attackId: "a" }), inst({ attackId: "b" })],
+      }),
+      step({ id: "s1", attacks: [inst({ attackId: "a" })] }),
+    ]);
+    expect(attackIdsInPlan(plan).sort()).toEqual(["a", "b"]);
+  });
+
+  it("is empty for a plan with no attacks", () => {
+    expect(attackIdsInPlan(makePlan([step()]))).toEqual([]);
   });
 });
 

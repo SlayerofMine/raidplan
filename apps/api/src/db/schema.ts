@@ -206,6 +206,30 @@ export const encounters = sqliteTable(
   }),
 );
 
+/**
+ * Reusable attack definitions (plan §17, stage 3). Like encounters, the whole
+ * `AttackDef` (objects + animations + placement) lives as JSON in `doc`; the
+ * columns exist only for listing an encounter's attacks and resolving them by
+ * id. `encounter_id` is a plain column, not a foreign key — a dangling attack is
+ * harmless (it simply isn't listed) and this keeps seeding and edits order-free.
+ */
+export const attacks = sqliteTable(
+  "attacks",
+  {
+    id: text("id").primaryKey(),
+    encounterId: text("encounter_id").notNull(),
+    name: text("name").notNull(),
+    version: integer("version").notNull().default(1),
+    /** The `AttackDef` as JSON (plan §17). */
+    doc: text("doc").notNull(),
+    createdAt: integer("created_at").notNull().default(now),
+    updatedAt: integer("updated_at").notNull().default(now),
+  },
+  (t) => ({
+    encounterIdx: index("attacks_encounter_idx").on(t.encounterId),
+  }),
+);
+
 /** Status of a sync run. */
 export const ICON_SYNC_STATUSES = ["running", "ok", "error"] as const;
 

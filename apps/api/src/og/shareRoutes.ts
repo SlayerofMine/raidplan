@@ -1,8 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { Hono } from "hono";
-import { isUploadedAsset, type Plan } from "@raidplan/shared";
+import { expandPlan, isUploadedAsset, type Plan } from "@raidplan/shared";
 import { canView } from "../auth/access.js";
+import { attackDefsForPlan } from "../attacks/attacksRepo.js";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
 import { createIconCatalogRepo } from "../icons/catalogRepo.js";
@@ -61,8 +62,12 @@ export function createShareRoutes({
   };
 
   app.get("/p/:slug/og.png", async (c) => {
-    const plan = await loadShared(c.req.param("slug"), c.req.raw);
-    if (!plan) return c.text("Not found", 404);
+    const raw = await loadShared(c.req.param("slug"), c.req.raw);
+    if (!raw) return c.text("Not found", 404);
+
+    // Stamp any attacks into concrete objects so the preview shows them too
+    // (plan §17). A no-attack plan passes straight through.
+    const plan = expandPlan(raw, attackDefsForPlan(db, raw));
 
     // "Step 1" is index 0; a plan with no steps previews its base layout.
     const png = renderOgImage(plan, plan.steps.length > 0 ? 0 : -1, {

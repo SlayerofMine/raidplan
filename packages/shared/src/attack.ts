@@ -49,6 +49,19 @@ export const AttackDefSchema = z.object({
 });
 export type AttackDef = z.infer<typeof AttackDefSchema>;
 
+/**
+ * The distinct attack ids a plan references, so a renderer can fetch just the
+ * definitions it needs before calling {@link expandPlan}. Empty for the common
+ * plan with no attacks.
+ */
+export function attackIdsInPlan(plan: Plan): string[] {
+  const ids = new Set<string>();
+  for (const step of plan.steps) {
+    for (const instance of step.attacks ?? []) ids.add(instance.attackId);
+  }
+  return [...ids];
+}
+
 /** A placement: how an instance maps def space into the plan's space. */
 interface Placement {
   anchor: Point;
