@@ -12,6 +12,9 @@ export * from "./mechanics.js";
 export * from "./assets/svg.js";
 export * from "./assets/icons.js";
 export * from "./assets/backgrounds.js";
+// Reusable attacks (plan §17): the reference/instance model and `expandPlan`,
+// which stamps attack instances into an ordinary Plan the renderers understand.
+export * from "./attack.js";
 // Encounter presets (plan §17): admin-authored starting points (background +
 // pre-placed objects) that seed a new plan. Shared so web offers the selector
 // and api resolves the preset into a document.

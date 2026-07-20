@@ -102,6 +102,29 @@ export const AnimSchema = z.object({
 export type Anim = z.infer<typeof AnimSchema>;
 
 /**
+ * A placed instance of a reusable **attack** (plan §17). The plan stores only
+ * this reference and a transform; the attack's own objects and animations live
+ * in its {@link ./attack.ts AttackDef} and are stamped in at render time by
+ * `expandPlan`. That's what makes an attack indivisible — there's nothing in the
+ * document to take apart. The planner tunes only placement and timing.
+ */
+export const AttackInstanceSchema = z.object({
+  id: z.string().min(1),
+  /** Which attack definition to expand (resolved to the current version). */
+  attackId: z.string().min(1),
+  /** Where the def's anchor point lands, in the plan's native pixel space. */
+  x: z.number().finite(),
+  y: z.number().finite(),
+  /** Degrees clockwise; rotates the whole attack about its anchor. */
+  rotation: z.number().finite().default(0),
+  /** Uniform scale about the anchor. */
+  scale: z.number().finite().positive().default(1),
+  /** Delay from the step's start before the attack begins. */
+  startMs: z.number().finite().nonnegative().default(0),
+});
+export type AttackInstance = z.infer<typeof AttackInstanceSchema>;
+
+/**
  * The end-state delta applied to a single object when a step is "settled".
  * Every field is optional: absent fields inherit the previous step's value
  * (see {@link ./resolve.ts}). This is the "PowerPoint slide" the author edits.
@@ -125,6 +148,12 @@ export const StepSchema = z.object({
   name: z.string().optional(),
   overrides: z.record(z.string().min(1), StepOverrideSchema),
   animations: z.array(AnimSchema),
+  /**
+   * Pre-designed attacks dropped into this step (plan §17). Optional so older
+   * documents stay valid; `expandPlan` stamps these into concrete objects and
+   * animations at render time.
+   */
+  attacks: z.array(AttackInstanceSchema).optional(),
   /** Optional autoplay dwell before advancing to the next step. */
   autoAdvanceMs: z.number().finite().nonnegative().optional(),
 });
