@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { asc, eq, inArray } from "drizzle-orm";
 import {
   AttackDefSchema,
@@ -7,6 +8,12 @@ import {
 } from "@raidplan/shared";
 import type { Db } from "../db/client.js";
 import { attacks } from "../db/schema.js";
+
+/** The editable body of an attack (everything but its identity and version). */
+export type AttackContent = Pick<
+  AttackDef,
+  "name" | "box" | "anchor" | "objects" | "animations"
+>;
 
 /**
  * Data access for attack definitions (plan §17, stage 3). Transport-free like
@@ -72,10 +79,54 @@ export function listAttacksForEncounter(
     });
 }
 
+/** One definition by id, for the designer to open. */
+export function getAttack(db: Db, id: string): AttackDef | undefined {
+  const row = db.select().from(attacks).where(eq(attacks.id, id)).get();
+  return row ? parseDef(row.doc) : undefined;
+}
+
+/** Create a new attack (version 1) from the designer. */
+export function createAttack(
+  db: Db,
+  input: { encounterId: string } & AttackContent,
+): AttackDef {
+  const def: AttackDef = { id: randomUUID(), version: 1, ...input };
+  saveAttack(db, def);
+  return def;
+}
+
 /**
- * Insert or replace a definition by its id, bumping the stored `version`. The
- * admin authoring UI (stage 4) is the real writer; for now this backs seeding
- * and tests.
+ * Replace an attack's body, bumping its version. Version drives auto-follow's
+ * future "changed" marker (plan §17): a plan using this attack picks up the edit
+ * automatically. `encounterId` is immutable — an attack belongs to its
+ * encounter. Returns `undefined` if no such attack.
+ */
+export function updateAttack(
+  db: Db,
+  id: string,
+  content: AttackContent,
+): AttackDef | undefined {
+  const existing = getAttack(db, id);
+  if (!existing) return undefined;
+  const def: AttackDef = {
+    ...content,
+    id,
+    encounterId: existing.encounterId,
+    version: existing.version + 1,
+  };
+  saveAttack(db, def);
+  return def;
+}
+
+/** Delete an attack. Returns whether a row was actually removed. */
+export function deleteAttack(db: Db, id: string): boolean {
+  return db.delete(attacks).where(eq(attacks.id, id)).run().changes > 0;
+}
+
+/**
+ * Insert or replace a definition by its id. The admin authoring UI (stage 4)
+ * writes through {@link createAttack}/{@link updateAttack}; this is the shared
+ * primitive and backs tests.
  */
 export function saveAttack(db: Db, def: AttackDef): void {
   const doc = JSON.stringify(def);
