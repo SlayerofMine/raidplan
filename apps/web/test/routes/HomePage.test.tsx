@@ -141,6 +141,21 @@ describe("HomePage — signed in", () => {
       ...over,
     }) as never;
 
+  it("shows an Admin link only to admins", async () => {
+    planList.mockResolvedValue([]);
+    renderPage();
+    await screen.findByTestId("sign-out");
+    expect(screen.queryByTestId("admin-link")).not.toBeInTheDocument();
+
+    meGet.mockResolvedValue({ userId: "u1", roles: {}, isAdmin: true });
+    encounterList.mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByTestId("admin-link")).toHaveAttribute(
+      "href",
+      "/admin",
+    );
+  });
+
   it("lists the user's plans, linking to the editor", async () => {
     planList.mockResolvedValue([summary()]);
     renderPage();

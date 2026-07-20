@@ -73,13 +73,24 @@ export function HomePage() {
             </a>
           )}
           {session.status === "signedIn" && (
-            <a
-              href={logoutUrl}
-              data-testid="sign-out"
-              className="text-sm text-neutral-400 hover:text-accent"
-            >
-              Sign out
-            </a>
+            <div className="flex items-center gap-3">
+              {session.session.isAdmin && (
+                <Link
+                  to="/admin"
+                  data-testid="admin-link"
+                  className="text-sm text-neutral-400 hover:text-accent"
+                >
+                  Admin
+                </Link>
+              )}
+              <a
+                href={logoutUrl}
+                data-testid="sign-out"
+                className="text-sm text-neutral-400 hover:text-accent"
+              >
+                Sign out
+              </a>
+            </div>
           )}
         </div>
       </header>

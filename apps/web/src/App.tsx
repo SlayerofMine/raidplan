@@ -11,6 +11,9 @@ const EditorPage = lazy(() =>
 const ViewerPage = lazy(() =>
   import("./routes/ViewerPage").then((m) => ({ default: m.ViewerPage })),
 );
+const AdminPage = lazy(() =>
+  import("./routes/AdminPage").then((m) => ({ default: m.AdminPage })),
+);
 
 /**
  * App routes (plan §3): landing, the editor, and the public viewer `/p/:slug`
@@ -35,6 +38,8 @@ export function App() {
             then hands humans on to this route.
           */}
             <Route path="/view/:slug" element={<ViewerPage />} />
+            {/* Admin-gated on the server; the page itself turns non-admins away. */}
+            <Route path="/admin" element={<AdminPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
