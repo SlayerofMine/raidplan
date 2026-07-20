@@ -49,7 +49,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    setupFiles: ["./src/test/setup.ts"],
+    setupFiles: ["./test/setup.ts"],
     // Playwright owns the browser end-to-end suite (see playwright.config.ts).
     exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
   },
