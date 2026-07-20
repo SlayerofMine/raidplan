@@ -519,7 +519,14 @@ marker for v1; add pinning later.
    (server) and the viewer (Konva). *Auto-follow* by `attackId`. WebM inherits attacks once
    the editor renders placed instances (stage 5), since it captures that stage. v1 def
    effects are the params-driven set; `scale`/`fly`-to-target need a def end-state (follow-up).
-4. **Attack designer** — reuse the editor, admin-scoped; mark anchor + exposed knobs.
+4. **Attack designer** [DONE] — the editor, admin-scoped. An `AttackDef` is a one-step
+   mini-plan, so `defToPlan`/`planToAttackContent` load it onto the shared store and the same
+   canvas/palette/panels author it; a **Layout | Animate** toggle switches between base
+   placement and the single step's end-state + animations. Admin attack CRUD
+   (`attack.create/update/remove/get`) behind `adminProcedure`; `/admin/encounters/:id/attacks`
+   lists and the designer saves. Verified by a signed-in e2e. *(Custom exposed knobs beyond
+   position/rotation/scale/timing, and an interactive on-canvas anchor handle, are follow-ups —
+   the anchor is set numerically for now.)*
 5. **Planner side** — attacks in the palette; drop / position / time.
 
 ---
