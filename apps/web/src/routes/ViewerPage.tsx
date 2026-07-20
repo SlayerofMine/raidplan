@@ -8,6 +8,7 @@ import { isEditableTarget } from "../editor/isEditableTarget";
 import { isLocalPlan, LOCAL_PLAN_ID } from "../editor/planScope";
 import { clearHistory, useEditorStore } from "../store/editorStore";
 import { loadPlan } from "../store/persistence";
+import { expandForViewing } from "../viewer/expandForViewing";
 import { PlaybackControls } from "../viewer/PlaybackControls";
 import { ViewerStage } from "../viewer/ViewerStage";
 
@@ -35,29 +36,33 @@ export function ViewerPage() {
   const playback = usePlayback(stageRef);
   const fps = useFps(playback.isPlaying);
 
-  // Load once, before playback builds its first timeline.
+  // Load once, before playback builds its first timeline. Attacks are stamped
+  // in (`expandForViewing`) before the store is hydrated, so playback treats
+  // them as ordinary objects.
   useEffect(() => {
     let cancelled = false;
 
+    const hydrate = (doc: Parameters<typeof expandForViewing>[0]) =>
+      expandForViewing(doc).then((expanded) => {
+        if (cancelled) return;
+        useEditorStore.getState().loadPlan(expanded);
+        clearHistory();
+        setLoad("ready");
+      });
+
     if (isLocalPlan(slug)) {
       const saved = loadPlan();
-      if (saved) {
-        useEditorStore.getState().loadPlan(saved);
-        clearHistory();
-      }
-      setLoad(saved ? "ready" : "missing");
-      return;
+      if (saved) void hydrate(saved);
+      else setLoad("missing");
+      return () => {
+        cancelled = true;
+      };
     }
 
     setLoad("loading");
     api.plan.getBySlug
       .query({ slug })
-      .then((plan) => {
-        if (cancelled) return;
-        useEditorStore.getState().loadPlan(plan.doc);
-        clearHistory();
-        setLoad("ready");
-      })
+      .then((plan) => hydrate(plan.doc))
       .catch(() => {
         if (!cancelled) setLoad("missing");
       });
