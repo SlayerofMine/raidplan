@@ -508,7 +508,9 @@ marker for v1; add pinning later.
    re-express today's three bundled maps as a "Sandbox" raid so there's no regression and no
    dependency on an icon sync. *(Roster curation of the left palette is a follow-up slice —
    it needs the plan to reference its encounter and touches the icon palette.)*
-2. **`adminProcedure` + admin panel shell** — CRUD encounters, upload battlemaps, curate rosters.
+2. **`adminProcedure` + admin panel shell** [DONE] — CRUD encounters and upload
+   battlemaps at `/admin`, gated by a site-admin allowlist. *(Roster curation is
+   deferred with the left-palette work; the panel edits name/raid/background.)*
 3. **`AttackDef`/`AttackInstance` schema + `expandStep` wired into all three renderers** — the
    architectural core; prove the pipeline before any UI.
 4. **Attack designer** — reuse the editor, admin-scoped; mark anchor + exposed knobs.
