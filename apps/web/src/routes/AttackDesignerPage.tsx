@@ -7,6 +7,7 @@ import {
   type Point,
 } from "@raidplan/shared";
 import { api } from "../api/client";
+import { AddObjectControls } from "../editor/AddObjectControls";
 import { AnimationPanel } from "../editor/AnimationPanel";
 import { CanvasStage } from "../editor/canvas/CanvasStage";
 import { IconPalette } from "../editor/IconPalette";
@@ -162,6 +163,8 @@ function AttackDesigner({
           onChange={(e) => setName(e.target.value)}
           className="rounded border border-panelborder bg-neutral-900 px-2 py-1 text-sm"
         />
+
+        <AddObjectControls />
 
         <div className="flex overflow-hidden rounded border border-panelborder text-xs">
           <button

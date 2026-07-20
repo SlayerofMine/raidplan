@@ -23,6 +23,10 @@ test("an admin authors an attack, sees it listed, and deletes it", async ({
   await expect(page.getByTestId("save-attack")).toBeVisible();
   await expect(page.getByTestId("mode-layout")).toBeVisible();
 
+  // The mechanic shapes are available here, not just icon tokens.
+  await expect(page.getByRole("button", { name: "Soak" })).toBeVisible();
+  await page.getByRole("button", { name: "Cone" }).click();
+
   await page.getByTestId("attack-name").fill("Frontal Cone");
   await page.getByTestId("save-attack").click();
 

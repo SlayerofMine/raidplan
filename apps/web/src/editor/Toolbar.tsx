@@ -20,6 +20,8 @@ import {
   videoFileName,
 } from "./videoExport";
 import { uploadBackground } from "./uploadBackground";
+import { AddObjectControls } from "./AddObjectControls";
+import { Btn, Divider } from "./ToolbarButton";
 import { useToast } from "../ui/toastContext";
 
 /**
@@ -52,8 +54,6 @@ export function Toolbar({
   const zoomAtPoint = useEditorStore((s) => s.zoomAtPoint);
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
   const duplicateSelected = useEditorStore((s) => s.duplicateSelected);
-  const addPrimitive = useEditorStore((s) => s.addPrimitive);
-  const addTether = useEditorStore((s) => s.addTether);
   const loadPlan = useEditorStore((s) => s.loadPlan);
   const getPlan = useEditorStore((s) => s.getPlan);
 
@@ -188,57 +188,7 @@ export function Toolbar({
 
       <Divider />
 
-      <Btn onClick={() => addPrimitive("text")} label="Text" />
-
-      <Divider />
-
-      {/* WoW mechanics — distinguished by form, recoloured via the tint prop. */}
-      <Btn
-        onClick={() => addPrimitive("shape", "cone")}
-        label="Cone"
-        title="Frontal (cone)"
-      />
-      <Btn
-        onClick={() => addPrimitive("shape", "line")}
-        label="Beam"
-        title="Frontal (line / beam)"
-      />
-      <Btn
-        onClick={() => addPrimitive("shape", "soak")}
-        label="Soak"
-        title="Soak / stack marker"
-      />
-      <Btn
-        onClick={() => addPrimitive("shape", "voidzone")}
-        label="Void"
-        title="Voidzone / puddle (avoid)"
-      />
-      <Btn
-        onClick={() => addPrimitive("shape", "pickup")}
-        label="Pickup"
-        title="Pickup / collectible"
-      />
-      <Btn
-        onClick={() => {
-          if (selectedIds.length === 2) {
-            addTether(selectedIds[0]!, selectedIds[1]!);
-          }
-        }}
-        disabled={selectedIds.length !== 2}
-        label="Tether"
-        title={
-          selectedIds.length === 2
-            ? "Link the two selected objects"
-            : "Select exactly two objects to tether them"
-        }
-      />
-
-      <Divider />
-
-      {/* Generic zones + arrow. */}
-      <Btn onClick={() => addPrimitive("shape", "rect")} label="Rect" />
-      <Btn onClick={() => addPrimitive("shape", "circle")} label="Circle" />
-      <Btn onClick={() => addPrimitive("arrow")} label="Arrow" />
+      <AddObjectControls />
 
       <Divider />
 
@@ -373,36 +323,5 @@ export function Toolbar({
         </span>
       </div>
     </header>
-  );
-}
-
-function Divider() {
-  return <div className="mx-1 h-5 w-px bg-panelborder" />;
-}
-
-function Btn({
-  onClick,
-  label,
-  ariaLabel,
-  title,
-  disabled,
-}: {
-  onClick: () => void;
-  label: string;
-  ariaLabel?: string;
-  title?: string;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={ariaLabel ?? label}
-      title={title}
-      className="rounded border border-panelborder px-2 py-1 text-sm hover:border-accent disabled:opacity-40"
-    >
-      {label}
-    </button>
   );
 }
