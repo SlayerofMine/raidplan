@@ -512,8 +512,13 @@ marker for v1; add pinning later.
 2. **`adminProcedure` + admin panel shell** [DONE] — CRUD encounters and upload
    battlemaps at `/admin`, gated by a site-admin allowlist. *(Roster curation is
    deferred with the left-palette work; the panel edits name/raid/background.)*
-3. **`AttackDef`/`AttackInstance` schema + `expandStep` wired into all three renderers** — the
-   architectural core; prove the pipeline before any UI.
+3. **`AttackDef`/`AttackInstance` schema + `expandPlan` wired into the renderers** [DONE] —
+   the architectural core. A plan stores only instances; the pure `expandPlan(plan, defs)`
+   stamps them into an ordinary Plan (namespaced objects, per-step visibility overrides,
+   transformed anims), so every renderer draws attacks for free. Wired into the OG preview
+   (server) and the viewer (Konva). *Auto-follow* by `attackId`. WebM inherits attacks once
+   the editor renders placed instances (stage 5), since it captures that stage. v1 def
+   effects are the params-driven set; `scale`/`fly`-to-target need a def end-state (follow-up).
 4. **Attack designer** — reuse the editor, admin-scoped; mark anchor + exposed knobs.
 5. **Planner side** — attacks in the palette; drop / position / time.
 
