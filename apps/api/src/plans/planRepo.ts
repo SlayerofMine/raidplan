@@ -76,6 +76,11 @@ export function createPlan(
     guildId?: string | null;
     title?: string;
     background: Plan["background"];
+    /** Encounter classification, mirrored to the `raid` column for listing. */
+    raid?: string;
+    /** Pre-placed content when seeding from an encounter preset (plan §17). */
+    objects?: Plan["objects"];
+    steps?: Plan["steps"];
   },
 ): PlanWithDoc {
   const id = randomUUID();
@@ -83,8 +88,11 @@ export function createPlan(
   const doc = makeEmptyPlan({
     id,
     ...(params.title !== undefined ? { title: params.title } : {}),
+    ...(params.raid !== undefined ? { raid: params.raid } : {}),
     background: params.background,
   });
+  if (params.objects) doc.objects = params.objects;
+  if (params.steps) doc.steps = params.steps;
   const at = nowSeconds();
 
   db.transaction((tx) => {

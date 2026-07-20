@@ -464,4 +464,56 @@ Deliver Phase 1's acceptance criteria by end of week 1; you now have a spine to 
 
 ---
 
+## 17. Encounter Presets & Attack Designer (epic)
+
+An **admin panel** with two jobs, plus the matching planner-side flow. Decisions
+taken with the maintainer; see the memory note `encounter-attack-designer`.
+
+- **Encounter presets** — admin defines *raid → encounter → { background, curated
+  token roster, optional pre-placed objects }*. The planner picks a raid + encounter
+  and gets a pre-seeded plan. A preset is essentially a template `Plan`; a new plan
+  clones its preset content.
+- **Attack designer** — admin pre-designs *attacks* (multi-object animated mechanics)
+  per encounter. The planner drops one in and only adjusts **position + timing**; an
+  attack is an **indivisible** unit (can't be dismantled or hand-animated).
+
+**Key architecture decisions**
+
+- **Attacks use a reference / instance model, not baked groups.** A plan stores only an
+  `AttackInstance { attackId, version, x, y, rotation, scale, startMs, params }`; the
+  internals live in an `AttackDef` authored in the designer. A shared
+  `expandStep(step, defs) → { objects, anims }` (beside `resolveObjectState`) is the one
+  place instances become concrete, and Konva, the OG SVG renderer and the WebM exporter
+  all consume its output — so they can't diverge. Indivisibility is a property of the
+  data: there is nothing in the plan doc to select.
+- **Backgrounds are admin-uploaded original battlemaps** (no Blizzard art — keeps the §11
+  stance). Reuses the existing upload pipeline (`assets.kind = "background"`,
+  `isUploadedAsset`, `/uploads/…`); an encounter references the uploaded `assetId`.
+- Attack instances live **per step**: `Step` gains `attacks: AttackInstance[]` alongside
+  `animations`. The designer *is* the existing editor, admin-scoped, plus marking the
+  anchor object and which values are exposed knobs.
+- Admin gating: an `adminProcedure` generalizing `isIconAdmin(viewer, adminUserIds)` over
+  the same allowlist.
+
+**Open decision (before Stage 3):** when an admin edits an attack def, do dependent plans
+auto-follow the latest version or stay pinned? Leaning auto-follow + a visible "updated"
+marker for v1; add pinning later.
+
+**Stages** (each independently shippable, green per commit)
+
+1. **Encounter registry + preset → new-plan flow.** `EncounterPreset` schema in shared;
+   `encounters` table + repo + idempotent seed; `encounter.list`; `plan.create` accepts an
+   `encounterId` and seeds the doc from the preset; the home page's new-plan control becomes
+   an encounter selector (grouped by raid), with the bundled maps kept as a fallback. Seeds
+   re-express today's three bundled maps as a "Sandbox" raid so there's no regression and no
+   dependency on an icon sync. *(Roster curation of the left palette is a follow-up slice —
+   it needs the plan to reference its encounter and touches the icon palette.)*
+2. **`adminProcedure` + admin panel shell** — CRUD encounters, upload battlemaps, curate rosters.
+3. **`AttackDef`/`AttackInstance` schema + `expandStep` wired into all three renderers** — the
+   architectural core; prove the pipeline before any UI.
+4. **Attack designer** — reuse the editor, admin-scoped; mark anchor + exposed knobs.
+5. **Planner side** — attacks in the palette; drop / position / time.
+
+---
+
 *End of plan. Suggested next actions: (a) confirm the three key decisions in §2, then (b) scaffold Phase 0–1, or (c) turn this document into a checklist/issue tracker.*

@@ -28,6 +28,7 @@ import {
   toAcl,
 } from "../plans/planRepo.js";
 import { isValidSlug } from "../plans/slug.js";
+import { getEncounter } from "../encounters/encountersRepo.js";
 import { protectedProcedure, publicProcedure, router } from "./context.js";
 
 /**
@@ -67,17 +68,44 @@ export const planRouter = router({
       z.object({
         title: z.string().min(1).max(200).optional(),
         guildId: z.string().min(1).nullable().optional(),
-        background: BackgroundSchema,
+        /** Seed from an encounter preset (plan §17)… */
+        encounterId: z.string().min(1).optional(),
+        /** …or start on a bare map. Exactly one is required. */
+        background: BackgroundSchema.optional(),
       }),
     )
-    .mutation(({ ctx, input }) =>
-      createPlan(ctx.db, {
+    .mutation(({ ctx, input }) => {
+      const base = {
         ownerId: ctx.viewer.userId,
         guildId: input.guildId ?? null,
         ...(input.title !== undefined ? { title: input.title } : {}),
-        background: input.background,
-      }),
-    ),
+      };
+
+      if (input.encounterId) {
+        const encounter = getEncounter(ctx.db, input.encounterId);
+        if (!encounter) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "No such encounter.",
+          });
+        }
+        return createPlan(ctx.db, {
+          ...base,
+          background: encounter.preset.background,
+          objects: encounter.preset.objects,
+          steps: encounter.preset.steps,
+          raid: encounter.raid,
+        });
+      }
+
+      if (!input.background) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Pick an encounter or a starting map.",
+        });
+      }
+      return createPlan(ctx.db, { ...base, background: input.background });
+    }),
 
   list: protectedProcedure.query(({ ctx }) =>
     listPlansFor(ctx.db, {

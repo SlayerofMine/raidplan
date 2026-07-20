@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { loginUrl, logoutUrl, useSession } from "../api/useSession";
@@ -6,12 +6,31 @@ import {
   BACKGROUNDS,
   DEFAULT_BACKGROUND,
   toBackground,
+  type Background,
+  type EncounterSummary,
 } from "@raidplan/shared";
 import { LOCAL_PLAN_ID } from "../editor/planScope";
 import { filterPlans, planRaids, relativeTime } from "./planFilters";
 
 /** One row of `plan.list`, with every field the server sends. */
 type PlanRow = Awaited<ReturnType<typeof api.plan.list.query>>[number];
+
+/**
+ * Turn a selector value into the `plan.create` input. Encounter choices carry
+ * an id (the server resolves the preset); map choices resolve to a background
+ * here. An unrecognised or empty choice falls back to the default map, so
+ * "New plan" always does something sensible.
+ */
+function createInput(
+  choice: string,
+): { encounterId: string } | { background: Background } {
+  if (choice.startsWith("encounter:")) {
+    return { encounterId: choice.slice("encounter:".length) };
+  }
+  const assetId = choice.slice("map:".length);
+  const def = BACKGROUNDS.find((b) => b.assetId === assetId);
+  return { background: def ? toBackground(def) : DEFAULT_BACKGROUND };
+}
 
 /**
  * Landing page (plan §5.2's dashboard in miniature): sign in, list your plans,
@@ -127,7 +146,8 @@ function PlanList() {
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
   const [raid, setRaid] = useState("");
-  const [startMap, setStartMap] = useState(DEFAULT_BACKGROUND.assetId);
+  const [encounters, setEncounters] = useState<EncounterSummary[] | null>(null);
+  const [startChoice, setStartChoice] = useState("");
 
   const load = useCallback(() => {
     api.plan.list
@@ -138,20 +158,47 @@ function PlanList() {
 
   useEffect(load, [load]);
 
+  // The selector still works on the bundled maps if this fails, so a failure is
+  // silent (empty list) rather than blocking a new plan.
+  useEffect(() => {
+    api.encounter.list
+      .query()
+      .then(setEncounters)
+      .catch(() => setEncounters([]));
+  }, []);
+
+  // Default to the first encounter once the list arrives, else a bundled map.
+  // Never overrides a choice the user has already made.
+  useEffect(() => {
+    if (startChoice || encounters === null) return;
+    const first = encounters[0];
+    setStartChoice(
+      first ? `encounter:${first.id}` : `map:${DEFAULT_BACKGROUND.assetId}`,
+    );
+  }, [encounters, startChoice]);
+
   const create = async () => {
     setCreating(true);
     try {
-      // A "starter": begin on the chosen bundled map (plan §5.2).
-      const def = BACKGROUNDS.find((b) => b.assetId === startMap);
-      const plan = await api.plan.create.mutate({
-        background: def ? toBackground(def) : DEFAULT_BACKGROUND,
-      });
+      const plan = await api.plan.create.mutate(createInput(startChoice));
       navigate(`/plan/${plan.id}/edit`);
     } catch {
       setError("Could not create a plan.");
       setCreating(false);
     }
   };
+
+  // Encounters grouped by raid for <optgroup>s. `encounter.list` already comes
+  // ordered by raid then name, so insertion order is the display order.
+  const encountersByRaid = useMemo(() => {
+    const groups = new Map<string, EncounterSummary[]>();
+    for (const encounter of encounters ?? []) {
+      const list = groups.get(encounter.raid) ?? [];
+      list.push(encounter);
+      groups.set(encounter.raid, list);
+    }
+    return [...groups.entries()];
+  }, [encounters]);
 
   const duplicate = async (id: string) => {
     try {
@@ -170,22 +217,36 @@ function PlanList() {
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-sm font-semibold text-neutral-300">Your plans</h2>
         <div className="ml-auto flex items-center gap-2">
-          <label className="sr-only" htmlFor="start-map">
-            Starting map
+          <label className="sr-only" htmlFor="start-choice">
+            Starting point
           </label>
           <select
-            id="start-map"
-            aria-label="Starting map for a new plan"
-            data-testid="start-map"
-            value={startMap}
-            onChange={(e) => setStartMap(e.target.value)}
+            id="start-choice"
+            aria-label="Starting point for a new plan"
+            data-testid="start-choice"
+            value={startChoice}
+            onChange={(e) => setStartChoice(e.target.value)}
             className="rounded border border-panelborder bg-neutral-900 px-2 py-1 text-sm"
           >
-            {BACKGROUNDS.map((b) => (
-              <option key={b.assetId} value={b.assetId}>
-                {b.name}
-              </option>
+            {encountersByRaid.map(([raidName, list]) => (
+              <optgroup key={raidName || "Other"} label={raidName || "Other"}>
+                {list.map((encounter) => (
+                  <option
+                    key={encounter.id}
+                    value={`encounter:${encounter.id}`}
+                  >
+                    {encounter.name}
+                  </option>
+                ))}
+              </optgroup>
             ))}
+            <optgroup label="Blank maps">
+              {BACKGROUNDS.map((b) => (
+                <option key={b.assetId} value={`map:${b.assetId}`}>
+                  {b.name}
+                </option>
+              ))}
+            </optgroup>
           </select>
           <button
             type="button"

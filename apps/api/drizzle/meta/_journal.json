@@ -22,6 +22,13 @@
       "when": 1784301376717,
       "tag": "0002_productive_vargas",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1784568438040,
+      "tag": "0003_empty_calypso",
+      "breakpoints": true
     }
   ]
 }

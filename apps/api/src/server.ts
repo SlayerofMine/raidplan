@@ -5,6 +5,7 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { openDb } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
+import { seedDefaultEncounters } from "./encounters/encountersRepo.js";
 import { logger } from "./logger.js";
 
 /**
@@ -23,6 +24,9 @@ if (config.DATABASE_PATH !== ":memory:") {
 const { db } = openDb(config.DATABASE_PATH);
 // Migrate on boot so a deploy is "build & restart" with no step to forget.
 runMigrations(db);
+// Insert-if-absent, so the new-plan flow always has starter encounters without
+// clobbering anything the admin has authored (plan §17).
+seedDefaultEncounters(db);
 
 const app = createApp({ db, config });
 

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { DEFAULT_BACKGROUND } from "@raidplan/shared";
 import { HomePage } from "../../src/routes/HomePage";
 import { LOCAL_PLAN_ID } from "../../src/editor/planScope";
 
@@ -20,6 +21,7 @@ vi.mock("../../src/api/client", () => {
         create: { mutate: vi.fn() },
         duplicate: { mutate: vi.fn() },
       },
+      encounter: { list: { query: vi.fn() } },
     },
     errorCode: code,
     isUnauthorized: (e: unknown) => code(e) === "UNAUTHORIZED",
@@ -30,7 +32,19 @@ vi.mock("../../src/api/client", () => {
 const { api } = await import("../../src/api/client");
 const meGet = vi.mocked(api.me.get.query);
 const planList = vi.mocked(api.plan.list.query);
+const planCreate = vi.mocked(api.plan.create.mutate);
 const planDuplicate = vi.mocked(api.plan.duplicate.mutate);
+const encounterList = vi.mocked(api.encounter.list.query);
+
+const encounter = (over: Record<string, unknown> = {}) =>
+  ({
+    id: "e1",
+    slug: "sandbox-arena",
+    raid: "Sandbox",
+    name: "Arena",
+    background: DEFAULT_BACKGROUND,
+    ...over,
+  }) as never;
 
 /** A tRPC-shaped rejection, as the client surfaces it. */
 function trpcError(code: string) {
@@ -109,6 +123,8 @@ describe("HomePage — API unreachable", () => {
 describe("HomePage — signed in", () => {
   beforeEach(() => {
     meGet.mockResolvedValue({ userId: "u1", roles: {} });
+    // Most tests don't care about the encounter list; default it to empty.
+    encounterList.mockResolvedValue([]);
   });
 
   const summary = (over: Record<string, unknown> = {}) =>
@@ -194,6 +210,43 @@ describe("HomePage — signed in", () => {
     expect(
       screen.getByRole("option", { name: "Nerub-ar Palace" }),
     ).toBeInTheDocument();
+  });
+
+  it("creates a plan from the selected encounter", async () => {
+    const user = userEvent.setup();
+    planList.mockResolvedValue([]);
+    encounterList.mockResolvedValue([
+      encounter({ id: "e1", raid: "Amirdrassil", name: "Fyrakk" }),
+    ]);
+    planCreate.mockResolvedValue({ id: "np" } as never);
+    renderPage();
+
+    // The selector defaults to the encounter once the list loads.
+    await screen.findByRole("option", { name: "Fyrakk" });
+    await user.click(screen.getByTestId("new-plan"));
+
+    await waitFor(() =>
+      expect(planCreate).toHaveBeenCalledWith({ encounterId: "e1" }),
+    );
+  });
+
+  it("falls back to a bundled map when no encounter is chosen", async () => {
+    const user = userEvent.setup();
+    planList.mockResolvedValue([]);
+    encounterList.mockResolvedValue([]); // no encounters authored yet
+    planCreate.mockResolvedValue({ id: "np" } as never);
+    renderPage();
+
+    await screen.findByTestId("new-plan");
+    await user.click(screen.getByTestId("new-plan"));
+
+    await waitFor(() =>
+      expect(planCreate).toHaveBeenCalledWith({
+        background: expect.objectContaining({
+          assetId: DEFAULT_BACKGROUND.assetId,
+        }),
+      }),
+    );
   });
 
   it("duplicates a plan and refreshes the list", async () => {

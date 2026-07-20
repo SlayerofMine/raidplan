@@ -179,6 +179,33 @@ export const icons = sqliteTable(
   }),
 );
 
+/**
+ * Admin-authored encounter presets (plan §17, stage 1).
+ *
+ * Like `plan_data`, the preset body (background + pre-placed objects + steps)
+ * lives as one JSON blob in `doc`; the relational columns exist only for the
+ * selector — grouping by `raid`, labelling by `name`, and an idempotent seed
+ * keyed on `slug`. Rows are few, so parsing `doc` for a background preview is
+ * cheap.
+ */
+export const encounters = sqliteTable(
+  "encounters",
+  {
+    id: text("id").primaryKey(),
+    /** Stable identity for the idempotent seed and admin CRUD. */
+    slug: text("slug").notNull().unique(),
+    raid: text("raid").notNull().default(""),
+    name: text("name").notNull(),
+    /** The `EncounterPreset` as JSON (plan §17). */
+    doc: text("doc").notNull(),
+    createdAt: integer("created_at").notNull().default(now),
+    updatedAt: integer("updated_at").notNull().default(now),
+  },
+  (t) => ({
+    raidIdx: index("encounters_raid_idx").on(t.raid),
+  }),
+);
+
 /** Status of a sync run. */
 export const ICON_SYNC_STATUSES = ["running", "ok", "error"] as const;
 

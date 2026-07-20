@@ -12,6 +12,10 @@ export * from "./mechanics.js";
 export * from "./assets/svg.js";
 export * from "./assets/icons.js";
 export * from "./assets/backgrounds.js";
+// Encounter presets (plan §17): admin-authored starting points (background +
+// pre-placed objects) that seed a new plan. Shared so web offers the selector
+// and api resolves the preset into a document.
+export * from "./encounter.js";
 // The synced WoW icon catalog contract (plan §11.1). Distinct from the bundled
 // manifest above: this is the shape of the server's searchable icon feed.
 export * from "./iconCatalog.js";
