@@ -14,6 +14,16 @@ const ViewerPage = lazy(() =>
 const AdminPage = lazy(() =>
   import("./routes/AdminPage").then((m) => ({ default: m.AdminPage })),
 );
+const AttackListPage = lazy(() =>
+  import("./routes/AttackListPage").then((m) => ({
+    default: m.AttackListPage,
+  })),
+);
+const AttackDesignerPage = lazy(() =>
+  import("./routes/AttackDesignerPage").then((m) => ({
+    default: m.AttackDesignerPage,
+  })),
+);
 
 /**
  * App routes (plan §3): landing, the editor, and the public viewer `/p/:slug`
@@ -38,8 +48,20 @@ export function App() {
             then hands humans on to this route.
           */}
             <Route path="/view/:slug" element={<ViewerPage />} />
-            {/* Admin-gated on the server; the page itself turns non-admins away. */}
+            {/* Admin-gated on the server; the pages turn non-admins away too. */}
             <Route path="/admin" element={<AdminPage />} />
+            <Route
+              path="/admin/encounters/:encounterId/attacks"
+              element={<AttackListPage />}
+            />
+            <Route
+              path="/admin/encounters/:encounterId/attacks/new"
+              element={<AttackDesignerPage />}
+            />
+            <Route
+              path="/admin/attacks/:attackId"
+              element={<AttackDesignerPage />}
+            />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

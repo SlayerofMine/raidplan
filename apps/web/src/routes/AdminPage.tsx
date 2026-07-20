@@ -2,66 +2,25 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getBackgroundSrc, type Background } from "@raidplan/shared";
 import { api } from "../api/client";
-import { loginUrl, useSession } from "../api/useSession";
 import { uploadBackground, UploadError } from "../editor/uploadBackground";
+import { RequireAdmin } from "./RequireAdmin";
 
 /**
- * Encounter admin (plan §17, stage 2). Authoring is server-gated by
- * `adminProcedure`; this page only *shows* the tools to admins — a non-admin who
- * reaches the route is told plainly rather than shown a panel whose every action
- * would 403.
- *
- * Backgrounds reuse the existing upload pipeline (`uploadBackground`): the admin
- * uploads their own battlemap and the encounter references the stored path, so
- * no Blizzard art is involved (plan §11).
+ * Encounter admin (plan §17, stage 2). Backgrounds reuse the existing upload
+ * pipeline (`uploadBackground`): the admin uploads their own battlemap and the
+ * encounter references the stored path, so no Blizzard art is involved (§11).
+ * Each encounter links to its attacks (stage 4's designer).
  */
 type EncounterRow = Awaited<
   ReturnType<typeof api.encounter.list.query>
 >[number];
 
-function Centered({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-3 p-8 text-center text-neutral-300">
-      {children}
-    </main>
-  );
-}
-
 export function AdminPage() {
-  const session = useSession();
-
-  if (session.status === "loading") {
-    return <Centered>…</Centered>;
-  }
-  if (session.status === "unreachable") {
-    return <Centered>Can’t reach the RaidPlans server.</Centered>;
-  }
-  if (session.status === "anonymous") {
-    return (
-      <Centered>
-        <p>Sign in to manage encounters.</p>
-        <a
-          href={loginUrl("/admin")}
-          className="rounded bg-accent px-4 py-2 font-medium text-neutral-950 hover:opacity-90"
-        >
-          Sign in with Discord
-        </a>
-      </Centered>
-    );
-  }
-  if (!session.session.isAdmin) {
-    return (
-      <Centered>
-        <p data-testid="admin-forbidden">
-          You’re not an admin, so encounter management isn’t available.
-        </p>
-        <Link to="/" className="text-accent hover:underline">
-          ← Back to plans
-        </Link>
-      </Centered>
-    );
-  }
-  return <AdminPanel />;
+  return (
+    <RequireAdmin next="/admin">
+      <AdminPanel />
+    </RequireAdmin>
+  );
 }
 
 function AdminPanel() {
@@ -305,6 +264,13 @@ function EncounterRow({
         onChange={(e) => setRaid(e.target.value)}
         className={`${inputClass} w-40`}
       />
+      <Link
+        to={`/admin/encounters/${encounter.id}/attacks`}
+        aria-label={`Attacks for ${encounter.name}`}
+        className="rounded border border-panelborder px-2 py-1 text-xs hover:border-accent"
+      >
+        Attacks →
+      </Link>
       <button
         type="button"
         onClick={() =>
