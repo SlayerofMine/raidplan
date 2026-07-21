@@ -1,29 +1,36 @@
-import type { AttackInstance } from "@raidplan/shared";
 import { BASE_STEP_INDEX, useEditorStore } from "../store/editorStore";
 
 /**
- * Placing pre-designed attacks (plan §17, stage 5).
+ * Placing pre-designed attacks (plan §17, reworked in §18.3).
  *
- * A plan seeded from an encounter offers *that encounter's* attacks. Dropping
- * one stores an {@link AttackInstance} — an id and a transform — and nothing
- * else: the attack stays indivisible, and the viewer/preview expand it at render
- * time. The planner tunes only what an instance exposes: where, how big, which
- * way round, and when within the step.
+ * A plan seeded from an encounter offers *that encounter's* attacks. Dropping one
+ * stores only a reference and a rectangle, so the attack stays indivisible.
+ *
+ * **Position, size and rotation are edited on the canvas** — a placed attack is a
+ * selectable, draggable, transformable item like any other, so there are no
+ * coordinate boxes here. What's left is what the canvas can't express: when the
+ * attack fires within its step.
  */
-const NUM = "w-16 rounded border border-panelborder bg-neutral-900 px-1 py-0.5";
+const NUM = "w-20 rounded border border-panelborder bg-neutral-900 px-1 py-0.5";
 
 export function AttacksPanel() {
   const encounterId = useEditorStore((s) => s.encounterId);
   const stepIndex = useEditorStore((s) => s.currentStepIndex);
   const attacks = useEditorStore((s) => s.steps[s.currentStepIndex]?.attacks);
+  const selectedAttackIds = useEditorStore((s) => s.selectedAttackIds);
   const background = useEditorStore((s) => s.background);
   const addAttack = useEditorStore((s) => s.addAttack);
-  // Loaded once per plan by `AttackDefResolver`, and shared with the canvas
-  // preview and the WebM export so all three expand from the same defs.
+  const selectAttack = useEditorStore((s) => s.selectAttack);
+  const updateAttack = useEditorStore((s) => s.updateAttack);
+  const removeAttack = useEditorStore((s) => s.removeAttack);
+  // Loaded once per plan by `AttackDefResolver`, and shared with the canvas and
+  // the WebM export so all three expand from the same defs.
   const defsById = useEditorStore((s) => s.attackDefs);
   const defs = Object.values(defsById);
 
   if (!encounterId) return null;
+
+  const nameOf = (attackId: string) => defsById[attackId]?.name ?? "Attack";
 
   return (
     <section
@@ -72,116 +79,62 @@ export function AttacksPanel() {
               Nothing placed yet.
             </p>
           )}
-          <ul className="flex flex-col gap-2" data-testid="placed-attacks">
-            {(attacks ?? []).map((instance) => (
-              <PlacedAttack
-                key={instance.id}
-                stepIndex={stepIndex}
-                instance={instance}
-                name={defsById[instance.attackId]?.name ?? "Attack"}
-              />
-            ))}
+          <ul className="flex flex-col gap-1" data-testid="placed-attacks">
+            {(attacks ?? []).map((instance) => {
+              const name = nameOf(instance.attackId);
+              const isSelected = selectedAttackIds.includes(instance.id);
+              return (
+                <li
+                  key={instance.id}
+                  // Canvas pixels aren't queryable, so selection is mirrored
+                  // here for the E2E suite.
+                  data-testid="placed-attack"
+                  data-selected={isSelected}
+                  className={`flex flex-col gap-1 rounded border p-2 ${
+                    isSelected ? "border-accent" : "border-panelborder"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => selectAttack([instance.id])}
+                      aria-label={`Select ${name}`}
+                      className="flex-1 truncate text-left text-sm hover:text-accent"
+                    >
+                      {name}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${name}`}
+                      onClick={() => removeAttack(stepIndex, instance.id)}
+                      className="rounded border border-panelborder px-1.5 py-0.5 text-xs text-amber-400 hover:border-amber-400"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <label className="flex items-center gap-1 text-xs text-neutral-400">
+                    starts
+                    <input
+                      type="number"
+                      step="50"
+                      min="0"
+                      aria-label={`${name} start`}
+                      value={instance.startMs}
+                      onChange={(e) =>
+                        updateAttack(stepIndex, instance.id, {
+                          startMs: Number(e.target.value),
+                        })
+                      }
+                      className={NUM}
+                    />
+                    ms into the step
+                  </label>
+                </li>
+              );
+            })}
           </ul>
         </>
       )}
     </section>
-  );
-}
-
-function PlacedAttack({
-  stepIndex,
-  instance,
-  name,
-}: {
-  stepIndex: number;
-  instance: AttackInstance;
-  name: string;
-}) {
-  const updateAttack = useEditorStore((s) => s.updateAttack);
-  const removeAttack = useEditorStore((s) => s.removeAttack);
-  const set = (patch: Partial<AttackInstance>) =>
-    updateAttack(stepIndex, instance.id, patch);
-
-  return (
-    <li className="flex flex-col gap-1 rounded border border-panelborder p-2">
-      <div className="flex items-center gap-2">
-        <span className="flex-1 truncate text-sm">{name}</span>
-        <button
-          type="button"
-          aria-label={`Remove ${name}`}
-          onClick={() => removeAttack(stepIndex, instance.id)}
-          className="rounded border border-panelborder px-1.5 py-0.5 text-xs text-amber-400 hover:border-amber-400"
-        >
-          Remove
-        </button>
-      </div>
-      <div className="flex flex-wrap gap-1 text-xs text-neutral-400">
-        <label className="flex items-center gap-1">
-          x
-          <input
-            type="number"
-            aria-label={`${name} x`}
-            value={instance.x}
-            onChange={(e) => set({ x: Number(e.target.value) })}
-            className={NUM}
-          />
-        </label>
-        <label className="flex items-center gap-1">
-          y
-          <input
-            type="number"
-            aria-label={`${name} y`}
-            value={instance.y}
-            onChange={(e) => set({ y: Number(e.target.value) })}
-            className={NUM}
-          />
-        </label>
-        <label className="flex items-center gap-1">
-          rot
-          <input
-            type="number"
-            aria-label={`${name} rotation`}
-            value={instance.rotation}
-            onChange={(e) => set({ rotation: Number(e.target.value) })}
-            className={NUM}
-          />
-        </label>
-        <label className="flex items-center gap-1">
-          w
-          <input
-            type="number"
-            min="1"
-            aria-label={`${name} width`}
-            value={instance.w}
-            onChange={(e) => set({ w: Number(e.target.value) || 1 })}
-            className={NUM}
-          />
-        </label>
-        <label className="flex items-center gap-1">
-          h
-          <input
-            type="number"
-            min="1"
-            aria-label={`${name} height`}
-            value={instance.h}
-            onChange={(e) => set({ h: Number(e.target.value) || 1 })}
-            className={NUM}
-          />
-        </label>
-        <label className="flex items-center gap-1">
-          start
-          <input
-            type="number"
-            step="50"
-            min="0"
-            aria-label={`${name} start`}
-            value={instance.startMs}
-            onChange={(e) => set({ startMs: Number(e.target.value) })}
-            className={NUM}
-          />
-          ms
-        </label>
-      </div>
-    </li>
   );
 }

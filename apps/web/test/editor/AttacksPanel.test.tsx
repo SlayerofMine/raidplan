@@ -79,18 +79,36 @@ describe("AttacksPanel", () => {
     });
   });
 
-  it("retunes a placed attack's transform and timing", async () => {
+  it("tunes only what the canvas can't express — when it fires", async () => {
     const user = userEvent.setup();
     state().loadPlan(plan("enc1"));
     state().selectStep(0);
     state().addAttack(0, "atk1", { x: 0, y: 0 });
     render(<AttacksPanel />);
 
-    const rotation = await screen.findByLabelText("Frontal Cone rotation");
-    await user.clear(rotation);
-    await user.type(rotation, "90");
+    const start = await screen.findByLabelText("Frontal Cone start");
+    await user.clear(start);
+    await user.type(start, "250");
+    expect(state().steps[0]!.attacks![0]!.startMs).toBe(250);
 
-    expect(state().steps[0]!.attacks![0]!.rotation).toBe(90);
+    // Position/size/rotation are edited on the canvas, not here.
+    expect(screen.queryByLabelText("Frontal Cone rotation")).toBeNull();
+    expect(screen.queryByLabelText("Frontal Cone x")).toBeNull();
+  });
+
+  it("selects a placed attack, which clears any object selection", async () => {
+    const user = userEvent.setup();
+    state().loadPlan(plan("enc1"));
+    state().selectStep(0);
+    const id = state().addAttack(0, "atk1", { x: 0, y: 0 })!;
+    state().select([]);
+    render(<AttacksPanel />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Select Frontal Cone" }),
+    );
+    expect(state().selectedAttackIds).toEqual([id]);
+    expect(state().selectedIds).toEqual([]);
   });
 
   it("removes a placed attack", async () => {

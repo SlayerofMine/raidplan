@@ -17,6 +17,7 @@ const MIN_SIZE = 8;
 export function SelectionTransformer() {
   const ref = useRef<TransformerNode>(null);
   const selectedIds = useEditorStore((s) => s.selectedIds);
+  const selectedAttackIds = useEditorStore((s) => s.selectedAttackIds);
   const objectIds = useEditorStore((s) => s.objectIds);
 
   useEffect(() => {
@@ -32,6 +33,9 @@ export function SelectionTransformer() {
         const object = objects[id];
         return object && !object.locked && object.type !== "tether";
       })
+      // A placed attack is transformed through its frame, which carries the
+      // instance id (plan §18.3) — resizing it *is* resizing the rectangle.
+      .concat(selectedAttackIds)
       .map((id) => stage.findOne(`#${id}`))
       .filter((node): node is KonvaNode => node !== undefined);
 
@@ -39,7 +43,7 @@ export function SelectionTransformer() {
     transformer.getLayer()?.batchDraw();
     // `objectIds` participates so the transformer re-attaches when nodes are
     // added/removed underneath a stable selection.
-  }, [selectedIds, objectIds]);
+  }, [selectedIds, selectedAttackIds, objectIds]);
 
   return (
     <Transformer

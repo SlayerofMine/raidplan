@@ -41,9 +41,26 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
 
   await page.getByRole("button", { name: "Place Sweeping Flame" }).click();
 
-  // It's placed on the step, and exposes only its transform and timing.
+  // It's placed on the step, and exposes only its timing here — position, size
+  // and rotation are edited on the canvas (plan §18.3).
   await expect(
     page.getByRole("button", { name: "Remove Sweeping Flame" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Sweeping Flame rotation")).toHaveValue("0");
+  await expect(page.getByLabel("Sweeping Flame start")).toHaveValue("0");
+  await expect(page.getByLabel("Sweeping Flame rotation")).toHaveCount(0);
+
+  // --- it's a canvas citizen: clickable there, and Delete removes it ---
+  const canvas = (await page.getByTestId("canvas-container").boundingBox())!;
+  // Placed at the middle of the board, which "fit" puts at the canvas centre.
+  await page.mouse.click(
+    canvas.x + canvas.width / 2,
+    canvas.y + canvas.height / 2,
+  );
+  await expect(page.getByTestId("placed-attack")).toHaveAttribute(
+    "data-selected",
+    "true",
+  );
+
+  await page.keyboard.press("Delete");
+  await expect(page.getByTestId("no-placed")).toBeVisible();
 });

@@ -95,6 +95,13 @@ export interface EditorState extends PlanDoc {
   selectAll: () => void;
   clearSelection: () => void;
   /**
+   * Placed attacks currently selected (plan §18.3). Kept beside `selectedIds`
+   * rather than mixed into it: an attack is a reference, not an object, and the
+   * two are never selected together — picking one clears the other.
+   */
+  selectedAttackIds: string[];
+  selectAttack: (ids: string[]) => void;
+  /**
    * Tie the current selection together so it selects and transforms as one
    * (plan §18.1). Returns the new group id, or undefined for a selection of
    * fewer than two. Members already in other groups are merged into this one.
@@ -316,6 +323,7 @@ export const useEditorStore = create<EditorState>()(
       objectIds: [],
       steps: [],
       selectedIds: [],
+      selectedAttackIds: [],
       view: INITIAL_VIEW,
       stageSize: INITIAL_STAGE_SIZE,
       snapEnabled: false,
@@ -466,7 +474,19 @@ export const useEditorStore = create<EditorState>()(
           reindexZ(s);
         }),
 
-      deleteSelected: () => get().deleteObjects(get().selectedIds),
+      deleteSelected: () => {
+        const { selectedIds, selectedAttackIds, currentStepIndex } = get();
+        // Delete removes whichever kind is selected — they're never both.
+        for (const id of selectedAttackIds) {
+          get().removeAttack(currentStepIndex, id);
+        }
+        if (selectedAttackIds.length > 0) {
+          set((s) => {
+            s.selectedAttackIds = [];
+          });
+        }
+        if (selectedIds.length > 0) get().deleteObjects(selectedIds);
+      },
 
       duplicateSelected: () => {
         const state = get();
@@ -538,6 +558,13 @@ export const useEditorStore = create<EditorState>()(
       select: (ids) =>
         set((s) => {
           s.selectedIds = withGroupMembers(s.objects, s.objectIds, ids);
+          s.selectedAttackIds = [];
+        }),
+
+      selectAttack: (ids) =>
+        set((s) => {
+          s.selectedAttackIds = ids;
+          s.selectedIds = [];
         }),
       toggleSelect: (id) =>
         set((s) => {
@@ -552,10 +579,12 @@ export const useEditorStore = create<EditorState>()(
       selectAll: () =>
         set((s) => {
           s.selectedIds = [...s.objectIds];
+          s.selectedAttackIds = [];
         }),
       clearSelection: () =>
         set((s) => {
           s.selectedIds = [];
+          s.selectedAttackIds = [];
         }),
 
       groupSelected: () => {
@@ -757,6 +786,7 @@ export const useEditorStore = create<EditorState>()(
           s.objectIds = doc.objectIds;
           s.steps = doc.steps;
           s.selectedIds = [];
+          s.selectedAttackIds = [];
           s.currentStepIndex = BASE_STEP_INDEX;
         }),
 
