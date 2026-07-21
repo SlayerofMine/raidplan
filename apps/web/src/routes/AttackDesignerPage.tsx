@@ -10,6 +10,7 @@ import {
 import { api } from "../api/client";
 import { TetherButton } from "../editor/TetherButton";
 import { AnimationPanel } from "../editor/AnimationPanel";
+import { AttackParamsPanel } from "../editor/AttackParamsPanel";
 import { CanvasStage } from "../editor/canvas/CanvasStage";
 import { IconPalette } from "../editor/IconPalette";
 import { PropertiesPanel } from "../editor/PropertiesPanel";
@@ -256,6 +257,12 @@ function AttackDesigner({
       >
         <PropertiesPanel />
         <AnimationPanel />
+        <AttackParamsPanel
+          params={params}
+          bindings={bindings}
+          onParamsChange={setParams}
+          onBindingsChange={setBindings}
+        />
       </div>
       <div style={{ gridArea: "timeline" }} className="flex min-h-0 flex-col">
         <TimelineDock />

@@ -1,4 +1,5 @@
 import { BASE_STEP_INDEX, useEditorStore } from "../store/editorStore";
+import { AttackArgs } from "./AttackArgs";
 
 /**
  * The attacks placed on the current step (plan §18.3).
@@ -90,6 +91,15 @@ export function AttacksPanel() {
                 />
                 ms into the step
               </label>
+              <AttackArgs
+                params={defsById[instance.attackId]?.params ?? []}
+                instance={instance}
+                onChange={(key, value) =>
+                  updateAttack(stepIndex, instance.id, {
+                    args: { ...instance.args, [key]: value },
+                  })
+                }
+              />
             </li>
           );
         })}
