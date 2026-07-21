@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { expandPlan, type AttackDef, type Plan } from "@raidplan/shared";
+import {
+  expandPlan,
+  SCHEMA_VERSION,
+  type AttackDef,
+  type Plan,
+} from "@raidplan/shared";
 import { createTestDb } from "../../src/db/testDb.js";
 import type { Db } from "../../src/db/client.js";
 import { attacks } from "../../src/db/schema.js";
@@ -51,27 +56,22 @@ const planWith = (attackId: string): Plan => ({
   raid: "",
   background: { assetId: "arena", width: 1600, height: 900 },
   objects: [],
-  steps: [
+  attacks: [
     {
-      id: "s0",
-      overrides: {},
-      animations: [],
-      attacks: [
-        {
-          id: "i1",
-          attackId,
-          x: 400,
-          y: 400,
-          w: 200,
-          h: 200,
-          rotation: 0,
-          startMs: 0,
-          args: {},
-        },
-      ],
+      id: "i1",
+      attackId,
+      stepId: "s0",
+      x: 400,
+      y: 400,
+      w: 200,
+      h: 200,
+      rotation: 0,
+      startMs: 0,
+      args: {},
     },
   ],
-  schemaVersion: 2,
+  steps: [{ id: "s0", overrides: {}, animations: [] }],
+  schemaVersion: SCHEMA_VERSION,
 });
 
 describe("attacksRepo", () => {

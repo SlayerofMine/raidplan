@@ -36,11 +36,14 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
   await page.getByTestId("new-plan").click();
   await expect(page).toHaveURL(/\/plan\/.+\/edit/);
 
-  // The library lives in the palette, beside tokens and shapes.
+  // The library lives in the palette, beside tokens and shapes. Placing works
+  // from the base layout — where you lay the board out — and the attack fires
+  // on step 1, which is created for it.
   await page.getByRole("tab", { name: "Attacks" }).click();
-  // Attacks live on a step, so it says so until there is one.
-  await expect(page.getByTestId("attacks-need-step")).toBeVisible();
-  await page.getByTestId("add-step").click();
+  await expect(page.getByTestId("step-base")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 
   // Autosave is debounced, so listen for the save that carries the attack
   // itself before trusting the viewer to have it.
@@ -51,14 +54,16 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
   );
   await page.getByRole("button", { name: "Place Sweeping Flame" }).click();
 
-  // It's placed on the step. Every value has one home now, so the panel itself
-  // carries no number boxes at all (§18.3/§18.6).
+  // It's on the board. Every value has one home now, so the panel itself
+  // carries no number boxes at all (§18.3/§18.6) — only which step fires it.
   await expect(
     page.getByRole("button", { name: "Remove Sweeping Flame" }),
   ).toBeVisible();
   await expect(page.getByLabel("Sweeping Flame rotation")).toHaveCount(0);
+  await expect(page.getByLabel("Sweeping Flame fires on")).toHaveValue(/.+/);
 
-  // When it fires is a draggable bar on the timeline.
+  // When within that step is a draggable bar on the timeline.
+  await page.getByTestId("step-0").click();
   await page.getByTestId("timeline-toggle").click();
   await expect(
     page.getByRole("button", { name: /Sweeping Flame · starts 0ms/ }),
@@ -84,8 +89,13 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
 
   // --- it's a canvas citizen: clickable there, and Delete removes it ---
   await page.goto(planUrl);
-  // A reload lands on the base layout; attacks live on a step.
-  await page.getByTestId("step-0").click();
+  // A reload lands on the base layout — which is a fine place to grab an
+  // attack, because that's where the board is laid out.
+  // The name only resolves once the definitions are fetched, which is also when
+  // the attack becomes grabbable on the canvas.
+  await expect(
+    page.getByRole("button", { name: "Select Sweeping Flame" }),
+  ).toBeVisible();
   const canvas = (await page.getByTestId("canvas-container").boundingBox())!;
   // Placed at the middle of the board, which "fit" puts at the canvas centre.
   await page.mouse.click(

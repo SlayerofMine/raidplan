@@ -45,12 +45,12 @@ beforeEach(() => {
 describe("attack bars", () => {
   it("shows a bar for a placed attack, even with no animations on the step", async () => {
     state().addStep();
-    state().addAttack(0, "atk1", { x: 0, y: 0 });
+    state().addAttack("atk1", { x: 0, y: 0 });
     render(<TimelineChart stepIndex={0} />);
 
     // An attack alone is enough content — the "no animations" state must go.
     expect(screen.queryByTestId("timeline-empty-0")).not.toBeInTheDocument();
-    const id = state().steps[0]!.attacks![0]!.id;
+    const id = state().attacks[0]!.id;
     expect(screen.getByTestId(`timeline-attack-${id}`)).toBeInTheDocument();
     // The label describes when it fires and how long it runs.
     expect(screen.getByTestId(`timeline-attack-${id}`)).toHaveAccessibleName(
@@ -61,20 +61,20 @@ describe("attack bars", () => {
   it("nudges when it fires with the arrow keys", async () => {
     const user = userEvent.setup();
     state().addStep();
-    const id = state().addAttack(0, "atk1", { x: 0, y: 0 })!;
+    const id = state().addAttack("atk1", { x: 0, y: 0 })!;
     render(<TimelineChart stepIndex={0} />);
 
     const bar = screen.getByTestId(`timeline-attack-${id}`);
     bar.focus();
     await user.keyboard("{ArrowRight}");
 
-    expect(state().steps[0]!.attacks![0]!.startMs).toBeGreaterThan(0);
+    expect(state().attacks[0]!.startMs).toBeGreaterThan(0);
   });
 
   it("selects the attack when its bar is clicked", async () => {
     const user = userEvent.setup();
     state().addStep();
-    const id = state().addAttack(0, "atk1", { x: 0, y: 0 })!;
+    const id = state().addAttack("atk1", { x: 0, y: 0 })!;
     render(<TimelineChart stepIndex={0} />);
 
     await user.click(screen.getByTestId(`timeline-attack-row-${id}`));

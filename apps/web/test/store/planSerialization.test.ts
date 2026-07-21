@@ -44,6 +44,7 @@ function plan(): Plan {
         },
       },
     ],
+    attacks: [],
     steps: [],
     schemaVersion: SCHEMA_VERSION,
   };

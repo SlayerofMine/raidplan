@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { attackIdsInPlan } from "@raidplan/shared";
+import { attackIdsInPlan, SCHEMA_VERSION } from "@raidplan/shared";
 import { clearHistory, useEditorStore } from "../../src/store/editorStore";
 
 /**
- * Placed attacks (plan §17, stage 5). A plan stores only instances; the store's
- * job is to put them on a step, retune them, and round-trip them through the
- * serialized document.
+ * Placed attacks (plan §17, remodelled in §18.3). A plan stores only instances;
+ * the store's job is to put them on the board, say which step fires them,
+ * retune them, and round-trip them through the serialized document.
  */
 const state = () => useEditorStore.getState();
 
@@ -15,16 +15,16 @@ beforeEach(() => {
 });
 
 describe("addAttack", () => {
-  it("drops an instance onto a step with sane defaults", () => {
-    state().addStep();
-    const id = state().addAttack(0, "atk1", { x: 400, y: 300 });
+  it("drops an instance on the board with sane defaults", () => {
+    const stepId = state().addStep();
+    const id = state().addAttack("atk1", { x: 400, y: 300 });
 
-    const attacks = state().steps[0]!.attacks!;
-    expect(attacks).toHaveLength(1);
+    expect(state().attacks).toHaveLength(1);
     // Centred on the drop point, at the def's default size (400 by default).
-    expect(attacks[0]).toMatchObject({
+    expect(state().attacks[0]).toMatchObject({
       id,
       attackId: "atk1",
+      stepId,
       x: 200,
       y: 100,
       w: 400,
@@ -34,31 +34,44 @@ describe("addAttack", () => {
     });
   });
 
-  it("refuses a step that doesn't exist", () => {
-    expect(state().addAttack(3, "atk1", { x: 0, y: 0 })).toBeUndefined();
+  it("selects what it just placed, so it can be dragged straight away", () => {
+    state().addStep();
+    const id = state().addAttack("atk1", { x: 0, y: 0 });
+    expect(state().selectedAttackIds).toEqual([id]);
+  });
+
+  it("fires on the step being edited", () => {
+    state().addStep();
+    const second = state().addStep();
+    state().selectStep(1);
+    const id = state().addAttack("atk1", { x: 0, y: 0 })!;
+    expect(state().attacks.find((a) => a.id === id)!.stepId).toBe(second);
+  });
+
+  it("makes a step when the plan has none — an attack has to happen somewhen", () => {
+    const id = state().addAttack("atk1", { x: 0, y: 0 })!;
+    expect(state().steps).toHaveLength(1);
+    expect(state().attacks.find((a) => a.id === id)!.stepId).toBe(
+      state().steps[0]!.id,
+    );
   });
 
   it("keeps several instances of one attack apart", () => {
     state().addStep();
-    const a = state().addAttack(0, "atk1", { x: 1, y: 1 });
-    const b = state().addAttack(0, "atk1", { x: 2, y: 2 });
+    const a = state().addAttack("atk1", { x: 1, y: 1 });
+    const b = state().addAttack("atk1", { x: 2, y: 2 });
     expect(a).not.toBe(b);
-    expect(state().steps[0]!.attacks).toHaveLength(2);
+    expect(state().attacks).toHaveLength(2);
   });
 });
 
 describe("updateAttack", () => {
   it("retunes position, rotation, scale and timing", () => {
     state().addStep();
-    const id = state().addAttack(0, "atk1", { x: 0, y: 0 })!;
-    state().updateAttack(0, id, {
-      x: 50,
-      w: 300,
-      rotation: 90,
-      startMs: 250,
-    });
+    const id = state().addAttack("atk1", { x: 0, y: 0 })!;
+    state().updateAttack(id, { x: 50, w: 300, rotation: 90, startMs: 250 });
 
-    expect(state().steps[0]!.attacks![0]).toMatchObject({
+    expect(state().attacks[0]).toMatchObject({
       x: 50,
       w: 300,
       rotation: 90,
@@ -66,23 +79,45 @@ describe("updateAttack", () => {
     });
   });
 
-  it("ignores an unknown instance rather than throwing", () => {
+  it("moves an attack to another step", () => {
     state().addStep();
-    expect(() => state().updateAttack(0, "ghost", { x: 1 })).not.toThrow();
+    const later = state().addStep();
+    const id = state().addAttack("atk1", { x: 0, y: 0 })!;
+    state().updateAttack(id, { stepId: later });
+    expect(state().attacks[0]!.stepId).toBe(later);
+  });
+
+  it("ignores an unknown instance rather than throwing", () => {
+    expect(() => state().updateAttack("ghost", { x: 1 })).not.toThrow();
   });
 });
 
 describe("removeAttack", () => {
   it("removes just that instance", () => {
     state().addStep();
-    const a = state().addAttack(0, "atk1", { x: 1, y: 1 })!;
-    state().addAttack(0, "atk2", { x: 2, y: 2 });
+    const a = state().addAttack("atk1", { x: 1, y: 1 })!;
+    state().addAttack("atk2", { x: 2, y: 2 });
 
-    state().removeAttack(0, a);
+    state().removeAttack(a);
 
-    const attacks = state().steps[0]!.attacks!;
-    expect(attacks).toHaveLength(1);
-    expect(attacks[0]!.attackId).toBe("atk2");
+    expect(state().attacks).toHaveLength(1);
+    expect(state().attacks[0]!.attackId).toBe("atk2");
+  });
+
+  it("takes the attacks fired by a deleted step with it", () => {
+    const first = state().addStep();
+    state().addStep();
+    state().selectStep(0);
+    state().addAttack("atk1", { x: 0, y: 0 });
+    state().selectStep(1);
+    const survivor = state().addAttack("atk2", { x: 0, y: 0 });
+
+    state().deleteStep(0);
+
+    // Without its step there is no moment for it to happen. (Undo brings the
+    // step and its attacks back together.)
+    expect(state().attacks.map((a) => a.id)).toEqual([survivor]);
+    expect(state().steps.map((s) => s.id)).not.toContain(first);
   });
 });
 
@@ -95,14 +130,15 @@ describe("round-trip", () => {
       encounterId: "enc1",
       background: { assetId: "arena", width: 1600, height: 900 },
       objects: [],
+      attacks: [],
       steps: [{ id: "s0", overrides: {}, animations: [] }],
-      schemaVersion: 2,
+      schemaVersion: SCHEMA_VERSION,
     });
-    state().addAttack(0, "atk1", { x: 10, y: 20 });
+    state().addAttack("atk1", { x: 10, y: 20 });
 
     const plan = state().getPlan();
     expect(plan.encounterId).toBe("enc1");
     expect(attackIdsInPlan(plan)).toEqual(["atk1"]);
-    expect(plan.steps[0]!.attacks![0]).toMatchObject({ w: 400, h: 400 });
+    expect(plan.attacks[0]).toMatchObject({ w: 400, h: 400, stepId: "s0" });
   });
 });

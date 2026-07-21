@@ -88,6 +88,7 @@ describe("AttackArgs — answering with this plan's objects", () => {
   const instance = {
     id: "i1",
     attackId: "atk1",
+    stepId: "s0",
     x: 0,
     y: 0,
     w: 100,

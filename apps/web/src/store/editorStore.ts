@@ -138,19 +138,25 @@ export interface EditorState extends PlanDoc {
   setAttackDefs: (defs: Record<string, AttackDef>) => void;
 
   // --- placed attacks (plan §17) ---
-  /** Drop a pre-designed attack onto a step at a point. Returns its instance id. */
+  /**
+   * Drop a pre-designed attack on the board at a point (plan §18.3).
+   *
+   * Placement belongs to the plan, so this works from the base layout as well as
+   * from a step. *When* it fires is a separate question: it's pinned to the step
+   * being edited, or to the first one when you're laying out the board — and a
+   * plan with no steps gets one, because an attack that never fires is furniture.
+   */
   addAttack: (
-    stepIndex: number,
     attackId: string,
     at: { x: number; y: number },
+    stepId?: string,
   ) => string | undefined;
-  /** Retune a placed attack — position, rotation, scale or start offset. */
+  /** Retune a placed attack — position, rotation, scale, step or start offset. */
   updateAttack: (
-    stepIndex: number,
     instanceId: string,
     patch: Partial<Omit<AttackInstance, "id" | "attackId">>,
   ) => void;
-  removeAttack: (stepIndex: number, instanceId: string) => void;
+  removeAttack: (instanceId: string) => void;
 
   // --- document ---
   setTitle: (title: string) => void;
@@ -318,6 +324,7 @@ export const useEditorStore = create<EditorState>()(
       title: "Untitled plan",
       raid: "",
       encounterId: undefined,
+      attacks: [],
       attackDefs: {},
       background: DEFAULT_BACKGROUND,
       objects: {},
@@ -476,11 +483,9 @@ export const useEditorStore = create<EditorState>()(
         }),
 
       deleteSelected: () => {
-        const { selectedIds, selectedAttackIds, currentStepIndex } = get();
+        const { selectedIds, selectedAttackIds } = get();
         // Delete removes whichever kind is selected — they're never both.
-        for (const id of selectedAttackIds) {
-          get().removeAttack(currentStepIndex, id);
-        }
+        for (const id of selectedAttackIds) get().removeAttack(id);
         if (selectedAttackIds.length > 0) {
           set((s) => {
             s.selectedAttackIds = [];
@@ -655,8 +660,12 @@ export const useEditorStore = create<EditorState>()(
 
       deleteStep: (index) =>
         set((s) => {
-          if (!s.steps[index]) return;
+          const doomed = s.steps[index];
+          if (!doomed) return;
           s.steps.splice(index, 1);
+          // An attack fires on exactly one step; without it there is no moment
+          // for it to happen, so it goes too (undo brings both back).
+          s.attacks = s.attacks.filter((a) => a.stepId !== doomed.id);
           // Stay in range; fall back to the base layout when the last step goes.
           s.currentStepIndex = Math.min(s.currentStepIndex, s.steps.length - 1);
         }),
@@ -723,11 +732,17 @@ export const useEditorStore = create<EditorState>()(
           s.attackDefs = defs;
         }),
 
-      addAttack: (stepIndex, attackId, at) => {
+      addAttack: (attackId, at, stepId) => {
         const state = get();
-        if (!state.steps[stepIndex]) return undefined;
-        // The def's default size is a placement hint; centre it on the drop
-        // point so the attack lands where you aimed (plan §18.2).
+        // Laying out the board is a fine time to place an attack; it fires on
+        // the step you're editing, else the first one, creating it if need be.
+        const firesOn =
+          stepId ??
+          state.steps[state.currentStepIndex]?.id ??
+          state.steps[0]?.id ??
+          get().addStep();
+        // The def's default size is the size it was drawn at; centre it on the
+        // drop point so the attack lands where you aimed (plan §18.2).
         const size = state.attackDefs[attackId]?.defaultSize ?? {
           w: 400,
           h: 400,
@@ -735,6 +750,7 @@ export const useEditorStore = create<EditorState>()(
         const instance: AttackInstance = {
           id: nextAttackId(),
           attackId,
+          stepId: firesOn,
           x: at.x - size.w / 2,
           y: at.y - size.h / 2,
           w: size.w,
@@ -744,27 +760,22 @@ export const useEditorStore = create<EditorState>()(
           args: {},
         };
         set((s) => {
-          const step = s.steps[stepIndex];
-          if (!step) return;
-          // `attacks` is optional on older documents.
-          step.attacks = [...(step.attacks ?? []), instance];
+          s.attacks.push(instance);
+          s.selectedAttackIds = [instance.id];
+          s.selectedIds = [];
         });
         return instance.id;
       },
 
-      updateAttack: (stepIndex, instanceId, patch) =>
+      updateAttack: (instanceId, patch) =>
         set((s) => {
-          const instance = s.steps[stepIndex]?.attacks?.find(
-            (a) => a.id === instanceId,
-          );
+          const instance = s.attacks.find((a) => a.id === instanceId);
           if (instance) Object.assign(instance, patch);
         }),
 
-      removeAttack: (stepIndex, instanceId) =>
+      removeAttack: (instanceId) =>
         set((s) => {
-          const step = s.steps[stepIndex];
-          if (!step?.attacks) return;
-          step.attacks = step.attacks.filter((a) => a.id !== instanceId);
+          s.attacks = s.attacks.filter((a) => a.id !== instanceId);
         }),
 
       setTitle: (title) =>
@@ -786,6 +797,7 @@ export const useEditorStore = create<EditorState>()(
           s.background = doc.background;
           s.objects = doc.objects;
           s.objectIds = doc.objectIds;
+          s.attacks = doc.attacks;
           s.steps = doc.steps;
           s.selectedIds = [];
           s.selectedAttackIds = [];
@@ -798,7 +810,9 @@ export const useEditorStore = create<EditorState>()(
         set((s) => {
           s.objects = {};
           s.objectIds = [];
+          s.attacks = [];
           s.selectedIds = [];
+          s.selectedAttackIds = [];
           s.title = "Untitled plan";
           s.background = DEFAULT_BACKGROUND;
           s.steps = [];
@@ -840,6 +854,7 @@ export const useEditorStore = create<EditorState>()(
         background: state.background,
         objects: state.objects,
         objectIds: state.objectIds,
+        attacks: state.attacks,
         steps: state.steps,
       }),
       // Immer keeps untouched slices referentially stable, so a shallow compare

@@ -9,13 +9,14 @@ vi.mock("../../src/api/client", () => ({
 const { api } = await import("../../src/api/client");
 const byIds = vi.mocked(api.attack.byIds.query);
 
-const planWith = (attacks: Plan["steps"][number]["attacks"]): Plan => ({
+const planWith = (attacks: Plan["attacks"]): Plan => ({
   id: "p",
   title: "t",
   raid: "",
   background: { assetId: "arena", width: 1600, height: 900 },
   objects: [],
-  steps: [{ id: "s0", overrides: {}, animations: [], attacks }],
+  attacks,
+  steps: [{ id: "s0", overrides: {}, animations: [] }],
   schemaVersion: 2,
 });
 
@@ -65,6 +66,7 @@ describe("expandForViewing", () => {
       {
         id: "i1",
         attackId: "atk1",
+        stepId: "s0",
         x: 300,
         y: 200,
         w: 200,

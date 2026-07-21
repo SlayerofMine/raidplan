@@ -70,6 +70,7 @@ function planDoc(over: Partial<Plan> = {}): Plan {
     raid: "",
     background: BACKGROUND,
     objects: [],
+    attacks: [],
     steps: [],
     schemaVersion: SCHEMA_VERSION,
     ...over,

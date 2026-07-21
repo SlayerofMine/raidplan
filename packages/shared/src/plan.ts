@@ -17,7 +17,7 @@ import { ObjectStyleSchema } from "./mechanics.js";
  */
 
 /** Current on-disk schema version. Bump when a migration is required. */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /** Opacity is always normalised to 0..1. */
 const OpacitySchema = z.number().min(0).max(1);
@@ -120,6 +120,14 @@ export const AttackInstanceSchema = z.object({
   /** Which attack definition to expand (resolved to the current version). */
   attackId: z.string().min(1),
   /**
+   * The step this attack fires on. *Where* an attack sits is a property of the
+   * board and belongs to the plan; *when* it goes off is a property of one step
+   * — so an attack is placed from the base layout like any other object, and
+   * carries the id of the step that plays it. By id, not index, so reordering
+   * steps can't shuffle the encounter's timing.
+   */
+  stepId: z.string().min(1),
+  /**
    * The rectangle the attack is drawn into, in the plan's native pixels —
    * top-left plus size, like every other object. The def's unit space (-1..1) is
    * mapped onto it, so this *is* the placement: a Transformer handle edits it
@@ -171,12 +179,6 @@ export const StepSchema = z.object({
   name: z.string().optional(),
   overrides: z.record(z.string().min(1), StepOverrideSchema),
   animations: z.array(AnimSchema),
-  /**
-   * Pre-designed attacks dropped into this step (plan §17). Optional so older
-   * documents stay valid; `expandPlan` stamps these into concrete objects and
-   * animations at render time.
-   */
-  attacks: z.array(AttackInstanceSchema).optional(),
   /** Optional autoplay dwell before advancing to the next step. */
   autoAdvanceMs: z.number().finite().nonnegative().optional(),
 });
@@ -205,6 +207,12 @@ export const PlanSchema = z.object({
   background: BackgroundSchema,
   /** Base object set — objects exist across all steps. */
   objects: z.array(PlanObjectSchema),
+  /**
+   * Pre-designed attacks placed on the board (plan §17). Like objects they live
+   * on the plan, not inside a slide; each names the step it fires on.
+   * `expandPlan` stamps them into concrete objects and animations at render time.
+   */
+  attacks: z.array(AttackInstanceSchema).default([]),
   /** Ordered slides. */
   steps: z.array(StepSchema),
   schemaVersion: z.number().int().positive(),
@@ -229,6 +237,7 @@ export function makeEmptyPlan(params: {
     ...(params.encounterId ? { encounterId: params.encounterId } : {}),
     background: params.background,
     objects: [],
+    attacks: [],
     steps: [],
     schemaVersion: SCHEMA_VERSION,
   };

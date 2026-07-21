@@ -1,5 +1,6 @@
 import {
   SCHEMA_VERSION,
+  type AttackInstance,
   type Background,
   type Plan,
   type PlanObject,
@@ -26,7 +27,11 @@ export interface PlanDoc {
   objects: Record<string, PlanObject>;
   /** Render/stacking order — also the array order in the serialized Plan. */
   objectIds: string[];
-  /** Carried through untouched in Phase 2; Phase 3 makes steps live. */
+  /**
+   * Placed attacks (plan §18.3). Like objects they belong to the plan rather
+   * than to a slide; each names the step it fires on.
+   */
+  attacks: AttackInstance[];
   steps: Step[];
 }
 
@@ -41,6 +46,7 @@ export function toPlan(doc: PlanDoc): Plan {
     objects: doc.objectIds
       .map((id) => doc.objects[id])
       .filter((o): o is PlanObject => o !== undefined),
+    attacks: doc.attacks,
     steps: doc.steps,
     schemaVersion: SCHEMA_VERSION,
   };
@@ -62,6 +68,7 @@ export function fromPlan(plan: Plan): PlanDoc {
     background: plan.background,
     objects,
     objectIds,
+    attacks: plan.attacks,
     steps: plan.steps,
   };
 }

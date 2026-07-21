@@ -68,17 +68,21 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
   // long as their definition runs — the same `layoutStepTimeline` the player
   // uses, so a bar means the same thing whether it's an animation or an attack.
   const attackDefs = useEditorStore((s) => s.attackDefs);
+  const attacks = useEditorStore((s) => s.attacks);
   const attackRows = useMemo(
     () =>
-      (step?.attacks ?? []).map((instance) => {
-        const def = attackDefs[instance.attackId];
-        return {
-          instance,
-          name: def?.name ?? "Attack",
-          spanMs: def ? layoutStepTimeline(def.animations).totalMs : 0,
-        };
-      }),
-    [step?.attacks, attackDefs],
+      // Attacks live on the plan; a step's chart shows the ones it fires.
+      attacks
+        .filter((instance) => instance.stepId === step?.id)
+        .map((instance) => {
+          const def = attackDefs[instance.attackId];
+          return {
+            instance,
+            name: def?.name ?? "Attack",
+            spanMs: def ? layoutStepTimeline(def.animations).totalMs : 0,
+          };
+        }),
+    [attacks, step?.id, attackDefs],
   );
 
   // Object rows in first-appearance order, so the chart reads top-to-bottom the
@@ -177,7 +181,6 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
             {attackRows.map((row) => (
               <AttackRow
                 key={row.instance.id}
-                stepIndex={stepIndex}
                 instance={row.instance}
                 name={row.name}
                 spanMs={row.spanMs}
@@ -197,13 +200,11 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
  * not something a plan retunes.
  */
 function AttackRow({
-  stepIndex,
   instance,
   name,
   spanMs,
   pxPerMs,
 }: {
-  stepIndex: number;
   instance: AttackInstance;
   name: string;
   spanMs: number;
@@ -215,8 +216,7 @@ function AttackRow({
     s.selectedAttackIds.includes(instance.id),
   );
 
-  const setStart = (startMs: number) =>
-    updateAttack(stepIndex, instance.id, { startMs });
+  const setStart = (startMs: number) => updateAttack(instance.id, { startMs });
 
   const describe = `${name} · starts ${Math.round(instance.startMs)}ms · ${Math.round(spanMs)}ms`;
 

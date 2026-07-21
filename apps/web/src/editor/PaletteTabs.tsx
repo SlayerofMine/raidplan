@@ -1,5 +1,5 @@
 import type { ShapeKind } from "@raidplan/shared";
-import { BASE_STEP_INDEX, useEditorStore } from "../store/editorStore";
+import { useEditorStore } from "../store/editorStore";
 import { AttackThumbnail } from "./AttackThumbnail";
 import { ATTACK_DATA_TYPE, SHAPE_DATA_TYPE } from "./paletteDrag";
 
@@ -54,7 +54,6 @@ export function ShapesTab() {
 
 export function AttacksTab() {
   const encounterId = useEditorStore((s) => s.encounterId);
-  const stepIndex = useEditorStore((s) => s.currentStepIndex);
   const background = useEditorStore((s) => s.background);
   const addAttack = useEditorStore((s) => s.addAttack);
   const defs = Object.values(useEditorStore((s) => s.attackDefs));
@@ -66,16 +65,6 @@ export function AttacksTab() {
         className="p-3 text-xs text-neutral-500"
       >
         This plan isn’t tied to an encounter, so it has no attack library.
-      </p>
-    );
-  }
-  if (stepIndex === BASE_STEP_INDEX) {
-    return (
-      <p
-        data-testid="attacks-need-step"
-        className="p-3 text-xs text-neutral-500"
-      >
-        Attacks belong to a step — pick one below to place them.
       </p>
     );
   }
@@ -96,7 +85,7 @@ export function AttacksTab() {
           title={def.name}
           aria-label={`Place ${def.name}`}
           onClick={() =>
-            addAttack(stepIndex, def.id, {
+            addAttack(def.id, {
               x: background.width / 2,
               y: background.height / 2,
             })

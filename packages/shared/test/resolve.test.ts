@@ -44,6 +44,7 @@ function plan(objects: PlanObject[], steps: Step[]): Plan {
     raid: "test",
     background: { assetId: "bg", width: 1000, height: 1000 },
     objects,
+    attacks: [],
     steps,
     schemaVersion: SCHEMA_VERSION,
   };

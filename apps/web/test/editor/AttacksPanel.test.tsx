@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { AttackDef, Plan } from "@raidplan/shared";
+import { SCHEMA_VERSION, type AttackDef, type Plan } from "@raidplan/shared";
 import { AttacksPanel } from "../../src/editor/AttacksPanel";
 import {
   BASE_STEP_INDEX,
@@ -33,8 +33,9 @@ const plan = (encounterId?: string): Plan => ({
   ...(encounterId ? { encounterId } : {}),
   background: { assetId: "arena", width: 1600, height: 900 },
   objects: [],
+  attacks: [],
   steps: [{ id: "s0", overrides: {}, animations: [] }],
-  schemaVersion: 2,
+  schemaVersion: SCHEMA_VERSION,
 });
 
 beforeEach(() => {
@@ -52,11 +53,30 @@ describe("AttacksPanel", () => {
     expect(screen.queryByTestId("attacks-panel")).not.toBeInTheDocument();
   });
 
-  it("stays out of the way on the base layout, where attacks can't exist", () => {
+  it("is there on the base layout too — attacks are placed on the board", () => {
     state().loadPlan(plan("enc1"));
     state().selectStep(BASE_STEP_INDEX);
+    state().addAttack("atk1", { x: 0, y: 0 });
     render(<AttacksPanel />);
-    expect(screen.queryByTestId("attacks-panel")).not.toBeInTheDocument();
+    expect(screen.getByTestId("attacks-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("placed-attack")).toBeInTheDocument();
+  });
+
+  it("places from the base layout onto the first step, which is when it fires", () => {
+    state().loadPlan(plan("enc1"));
+    state().selectStep(BASE_STEP_INDEX);
+    const id = state().addAttack("atk1", { x: 0, y: 0 })!;
+    // "Add it to the board, have it go off in step 1" — no step-picking first.
+    expect(state().attacks.find((a) => a.id === id)!.stepId).toBe("s0");
+  });
+
+  it("makes a step for an attack when the plan has none, so it can fire at all", () => {
+    state().loadPlan({ ...plan("enc1"), steps: [] });
+    const id = state().addAttack("atk1", { x: 0, y: 0 })!;
+    expect(state().steps).toHaveLength(1);
+    expect(state().attacks.find((a) => a.id === id)!.stepId).toBe(
+      state().steps[0]!.id,
+    );
   });
 
   it("points at the palette when nothing is placed — it isn't a second library", async () => {
@@ -73,7 +93,7 @@ describe("AttacksPanel", () => {
   it("has no number boxes left — every value has its own home", async () => {
     state().loadPlan(plan("enc1"));
     state().selectStep(0);
-    state().addAttack(0, "atk1", { x: 0, y: 0 });
+    state().addAttack("atk1", { x: 0, y: 0 });
     render(<AttacksPanel />);
 
     // Position/size/rotation are on the canvas; timing is on the timeline.
@@ -87,7 +107,7 @@ describe("AttacksPanel", () => {
     const user = userEvent.setup();
     state().loadPlan(plan("enc1"));
     state().selectStep(0);
-    const id = state().addAttack(0, "atk1", { x: 0, y: 0 })!;
+    const id = state().addAttack("atk1", { x: 0, y: 0 })!;
     state().select([]);
     render(<AttacksPanel />);
 
@@ -102,12 +122,12 @@ describe("AttacksPanel", () => {
     const user = userEvent.setup();
     state().loadPlan(plan("enc1"));
     state().selectStep(0);
-    state().addAttack(0, "atk1", { x: 0, y: 0 });
+    state().addAttack("atk1", { x: 0, y: 0 });
     render(<AttacksPanel />);
 
     await user.click(
       await screen.findByRole("button", { name: "Remove Frontal Cone" }),
     );
-    expect(state().steps[0]!.attacks).toHaveLength(0);
+    expect(state().attacks).toHaveLength(0);
   });
 });

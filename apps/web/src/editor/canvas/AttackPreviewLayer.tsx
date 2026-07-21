@@ -29,20 +29,24 @@ import { ObjectVisual } from "./ObjectVisual";
  * drag the parts are offset imperatively (never through React, plan §8.1) and
  * committed on drop.
  *
- * Attacks belong to a step, so nothing renders on the base layout.
+ * Attacks are placed on the board, not inside a slide, so every one of them
+ * draws on every view — including the base layout, which is where you lay the
+ * board out. The ones that fire on some *other* step are dimmed, so the current
+ * moment reads clearly without hiding what else the encounter does.
  */
+const OTHER_STEP_OPACITY = 0.3;
+
 export function AttackPreviewLayer() {
-  const steps = useEditorStore((s) => s.steps);
+  const attacks = useEditorStore((s) => s.attacks);
   const attackDefs = useEditorStore((s) => s.attackDefs);
   const background = useEditorStore((s) => s.background);
-  const stepIndex = useEditorStore((s) => s.currentStepIndex);
+  const currentStepId = useEditorStore((s) => s.steps[s.currentStepIndex]?.id);
 
-  const instances = steps[stepIndex]?.attacks ?? [];
-  if (instances.length === 0) return null;
+  if (attacks.length === 0) return null;
 
   return (
     <>
-      {instances.map((instance) => {
+      {attacks.map((instance) => {
         const def = attackDefs[instance.attackId];
         if (!def) return null;
         return (
@@ -51,7 +55,7 @@ export function AttackPreviewLayer() {
             instance={instance}
             def={def}
             background={background}
-            stepIndex={stepIndex}
+            dimmed={instance.stepId !== currentStepId}
           />
         );
       })}
@@ -63,12 +67,13 @@ function PlacedAttack({
   instance,
   def,
   background,
-  stepIndex,
+  dimmed,
 }: {
   instance: AttackInstance;
   def: AttackDef;
   background: Background;
-  stepIndex: number;
+  /** It fires on another step: still placeable, just not this moment. */
+  dimmed: boolean;
 }) {
   const selected = useEditorStore((s) =>
     s.selectedAttackIds.includes(instance.id),
@@ -85,7 +90,8 @@ function PlacedAttack({
       raid: "",
       background,
       objects: [],
-      steps: [{ id: "s", overrides: {}, animations: [], attacks: [instance] }],
+      attacks: [{ ...instance, stepId: "s" }],
+      steps: [{ id: "s", overrides: {}, animations: [] }],
       schemaVersion: SCHEMA_VERSION,
     };
     const expanded = expandPlan(shell, { [instance.attackId]: def });
@@ -109,7 +115,7 @@ function PlacedAttack({
 
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
     partsRef.current?.position({ x: 0, y: 0 });
-    updateAttack(stepIndex, instance.id, {
+    updateAttack(instance.id, {
       x: e.target.x() - half.x,
       y: e.target.y() - half.y,
     });
@@ -122,7 +128,7 @@ function PlacedAttack({
     const h = Math.max(8, instance.h * node.scaleY());
     node.scaleX(1);
     node.scaleY(1);
-    updateAttack(stepIndex, instance.id, {
+    updateAttack(instance.id, {
       x: node.x() - w / 2,
       y: node.y() - h / 2,
       w,
@@ -133,7 +139,11 @@ function PlacedAttack({
 
   return (
     <>
-      <Group ref={partsRef} listening={false}>
+      <Group
+        ref={partsRef}
+        listening={false}
+        opacity={dimmed ? OTHER_STEP_OPACITY : 1}
+      >
         {parts.map(({ object, state }) => (
           <ObjectVisual key={object.id} object={object} state={state} />
         ))}

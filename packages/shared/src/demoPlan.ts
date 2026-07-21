@@ -347,6 +347,7 @@ export function buildDemoPlan(): Plan {
     raid: "Feature demo",
     background: { ...BOARD },
     objects,
+    attacks: [],
     steps: [
       {
         id: "step-effects",

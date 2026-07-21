@@ -31,6 +31,7 @@ function validPlan(): Plan {
         },
       },
     ],
+    attacks: [],
     steps: [
       {
         id: "step_1",
@@ -119,6 +120,7 @@ describe("PlanSchema — malformed documents are rejected", () => {
 
   it("rejects an unknown animation trigger", () => {
     const plan = validPlan() as unknown as {
+      attacks: [];
       steps: { animations: { trigger: string }[] }[];
     };
     plan.steps[0]!.animations[0]!.trigger = "someday";

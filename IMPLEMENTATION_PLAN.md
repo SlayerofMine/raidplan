@@ -627,6 +627,29 @@ Net effect: the attacks panel has **no number boxes left** — the palette place
 positions and sizes, the timeline says when, and the panel carries only the arguments the
 definition asked the plan for.
 
+### 18.7 Corrections after first real use
+
+Three things the first hands-on pass found, each a hole in §18.2–18.3 rather than a slip:
+
+1. **Attacks were invisible during playback.** Parts are materialised hidden (that's what keeps
+   them off neighbouring steps) and nothing tweens `visible`, so without an entrance an attack
+   played out unseen; and `ObjectNode` unmounted hidden objects, leaving GSAP nothing to find by
+   id. Now: parts without an entrance get an implicit `appear` when the attack fires, and hidden
+   objects keep their node (`visible={false}`). While there, a def's internal trigger chain is
+   flattened onto absolute delays as it joins its host step, so an attack can't chain off the
+   plan's own animations and `startMs` shifts it exactly once. The pure timing model moved to
+   `@raidplan/shared` so expansion and the player share one implementation. [DONE]
+2. **The instance rectangle wasn't the attack's bounding box.** Unit space is now pinned to the
+   attack's own extent (`attackContentBox`, measured across base + end state + motion paths), and
+   expansion maps *that* onto the rect — so old definitions self-correct too. Saving from the
+   designer shrink-wraps to match and measures `defaultSize`, which deletes the hand-typed size
+   boxes; the designer draws the box instead. [DONE]
+3. **An attack couldn't be placed from the base layout.** Placement is a property of the board,
+   firing is a property of one step — so instances moved from `Step.attacks` to `Plan.attacks`,
+   each carrying `stepId`. Placing from the base layout pins the attack to the first step,
+   creating one if the plan has none. The canvas shows every attack, dimming the ones that fire
+   elsewhere; the panel says which step fires each. SCHEMA_VERSION → 3, clean break. [DONE]
+
 ---
 
 *End of plan. Suggested next actions: (a) confirm the three key decisions in §2, then (b) scaffold Phase 0–1, or (c) turn this document into a checklist/issue tracker.*

@@ -83,6 +83,7 @@ const makeDef = (over: Partial<AttackDef> = {}): AttackDef => ({
 const inst = (over: Partial<AttackInstance> = {}): AttackInstance => ({
   id: "i1",
   attackId: "atk",
+  stepId: "s1",
   x: 0,
   y: 0,
   w: 200,
@@ -100,12 +101,17 @@ const step = (over: Partial<Step> = {}): Step => ({
   ...over,
 });
 
-const makePlan = (steps: Step[], objects: PlanObject[] = []): Plan => ({
+const makePlan = (
+  steps: Step[],
+  objects: PlanObject[] = [],
+  attacks: AttackInstance[] = [],
+): Plan => ({
   id: "p",
   title: "t",
   raid: "",
   background: { assetId: "arena", width: 1600, height: 900 },
   objects,
+  attacks,
   steps,
   schemaVersion: SCHEMA_VERSION,
 });
@@ -118,7 +124,7 @@ const animById = (plan: Plan, id: string, stepIndex = 0) =>
   plan.steps[stepIndex]!.animations.find((a) => a.id === id)!;
 
 const expandOne = (def: AttackDef, instance: AttackInstance) =>
-  expandPlan(makePlan([step({ attacks: [instance] })]), { atk: def });
+  expandPlan(makePlan([step()], [], [instance]), { atk: def });
 
 describe("AttackDefSchema", () => {
   it("defaults version, placement hint and end state", () => {
@@ -136,14 +142,16 @@ describe("AttackDefSchema", () => {
 });
 
 describe("attackIdsInPlan", () => {
-  it("collects distinct attack ids across steps", () => {
-    const plan = makePlan([
-      step({
-        id: "s0",
-        attacks: [inst({ attackId: "a" }), inst({ attackId: "b" })],
-      }),
-      step({ id: "s1", attacks: [inst({ attackId: "a" })] }),
-    ]);
+  it("collects distinct attack ids across the plan", () => {
+    const plan = makePlan(
+      [step({ id: "s0" }), step({ id: "s1" })],
+      [],
+      [
+        inst({ attackId: "a" }),
+        inst({ attackId: "b" }),
+        inst({ attackId: "a", stepId: "s1" }),
+      ],
+    );
     expect(attackIdsInPlan(plan).sort()).toEqual(["a", "b"]);
   });
 
@@ -233,14 +241,15 @@ describe("expandPlan — stamping", () => {
     const cone = out.objects.find((o) => o.id === "i1::cone");
     expect(cone).toBeDefined();
     expect(cone!.base.visible).toBe(false);
-    expect(out.steps[0]!.attacks).toEqual([]);
+    expect(out.attacks).toEqual([]);
   });
 
   it("bounds visibility to the instance's step", () => {
-    const plan = makePlan([
-      step({ id: "s0", attacks: [inst()] }),
-      step({ id: "s1" }),
-    ]);
+    const plan = makePlan(
+      [step({ id: "s1" }), step({ id: "s2" })],
+      [],
+      [inst()],
+    );
     const out = expandPlan(plan, { atk: makeDef() });
     expect(out.steps[0]!.overrides["i1::o1"]).toEqual({ visible: true });
     expect(out.steps[1]!.overrides["i1::o1"]).toEqual({ visible: false });
@@ -254,17 +263,27 @@ describe("expandPlan — stamping", () => {
 
   it("skips an instance whose def is missing, leaving the rest renderable", () => {
     const out = expandPlan(
-      makePlan([step({ attacks: [inst({ attackId: "ghost" })] })]),
+      makePlan([step()], [], [inst({ attackId: "ghost" })]),
       {},
     );
     expect(out.objects).toEqual([]);
-    expect(out.steps[0]!.attacks).toEqual([]);
+    expect(out.attacks).toEqual([]);
+  });
+
+  it("skips an instance whose step has been deleted", () => {
+    const out = expandPlan(
+      makePlan([step({ id: "s1" })], [], [inst({ stepId: "gone" })]),
+      { atk: makeDef() },
+    );
+    expect(out.objects).toEqual([]);
   });
 
   it("keeps two instances of one def from colliding", () => {
-    const plan = makePlan([
-      step({ attacks: [inst({ id: "i1" }), inst({ id: "i2" })] }),
-    ]);
+    const plan = makePlan(
+      [step()],
+      [],
+      [inst({ id: "i1" }), inst({ id: "i2" })],
+    );
     const out = expandPlan(plan, { atk: makeDef() });
     const ids = out.objects.map((o) => o.id);
     expect(ids).toContain("i1::o1");
@@ -275,10 +294,7 @@ describe("expandPlan — stamping", () => {
     const own = defObj("boss");
     const ownAnim = defAnim({ id: "own", objectId: "boss" });
     const def = makeDef({ animations: [defAnim({ objectId: "o1" })] });
-    const plan = makePlan(
-      [step({ animations: [ownAnim], attacks: [inst()] })],
-      [own],
-    );
+    const plan = makePlan([step({ animations: [ownAnim] })], [own], [inst()]);
     const out = expandPlan(plan, { atk: def });
     expect(out.objects[0]).toBe(own);
     expect(out.steps[0]!.animations[0]).toBe(ownAnim);
@@ -511,9 +527,11 @@ describe("expandPlan — an attack owns its own timing", () => {
   });
 
   it("keeps two attacks on one step from chaining into each other", () => {
-    const plan = makePlan([
-      step({ attacks: [inst({ id: "i1" }), inst({ id: "i2" })] }),
-    ]);
+    const plan = makePlan(
+      [step()],
+      [],
+      [inst({ id: "i1" }), inst({ id: "i2" })],
+    );
     const out = expandPlan(plan, { atk: chained });
     // i2's first animation still starts at 0 — it does not queue up behind i1.
     expect(animById(out, "i2::a1").delayMs).toBe(0);
@@ -738,10 +756,11 @@ describe("expandPlan — result is a valid plan", () => {
       objects: [defObj("c", { x: 0.5, y: 0.5 })],
       animations: [defAnim({ objectId: "c", params: { toX: 1, toY: 1 } })],
     });
-    const plan = makePlan([
-      step({ id: "s0", attacks: [inst()] }),
-      step({ id: "s1" }),
-    ]);
+    const plan = makePlan(
+      [step({ id: "s1" }), step({ id: "s2" })],
+      [],
+      [inst()],
+    );
     expect(() =>
       PlanSchema.parse(expandPlan(plan, { atk: def })),
     ).not.toThrow();

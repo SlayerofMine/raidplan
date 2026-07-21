@@ -205,10 +205,7 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
     }
 
     const attackId = e.dataTransfer.getData(ATTACK_DATA_TYPE);
-    if (attackId) {
-      const { currentStepIndex } = useEditorStore.getState();
-      addAttack(currentStepIndex, attackId, at);
-    }
+    if (attackId) addAttack(attackId, at);
   };
 
   return (

@@ -9,6 +9,7 @@ function plan(): Plan {
     raid: "",
     background: { assetId: "arena", width: 1600, height: 900 },
     objects: [],
+    attacks: [],
     steps: [],
     schemaVersion: SCHEMA_VERSION,
   };
