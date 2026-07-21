@@ -90,6 +90,13 @@ describe("plan.create from an encounter", () => {
     expect(plan.doc.background).toEqual(BACKGROUND);
     expect(plan.doc.objects).toHaveLength(1);
     expect(plan.doc.objects[0]!.id).toBe("boss");
+    // Remembered so the editor can offer this encounter's attacks (§17).
+    expect(plan.doc.encounterId).toBe(encounter.id);
+  });
+
+  it("leaves encounterId unset for a bare-map plan", async () => {
+    const plan = await callerFor(user).plan.create({ background: BACKGROUND });
+    expect(plan.doc.encounterId).toBeUndefined();
   });
 
   it("404s on an unknown encounter instead of a blank plan", async () => {

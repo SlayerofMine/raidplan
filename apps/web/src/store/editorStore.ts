@@ -5,6 +5,7 @@ import { immer } from "zustand/middleware/immer";
 import {
   resolveObjectState,
   type Anim,
+  type AttackInstance,
   type Background,
   type ObjectBase,
   type ObjectState,
@@ -18,7 +19,7 @@ import {
 } from "@raidplan/shared";
 import { DEFAULT_BACKGROUND } from "@raidplan/shared";
 import { getIconById } from "@raidplan/shared";
-import { nextAnimId, nextStepId } from "./ids";
+import { nextAnimId, nextAttackId, nextStepId } from "./ids";
 import {
   fitView,
   screenToNative,
@@ -109,6 +110,21 @@ export interface EditorState extends PlanDoc {
     patch: Partial<Omit<Anim, "id">>,
   ) => void;
   deleteAnimation: (stepIndex: number, animId: string) => void;
+
+  // --- placed attacks (plan §17) ---
+  /** Drop a pre-designed attack onto a step at a point. Returns its instance id. */
+  addAttack: (
+    stepIndex: number,
+    attackId: string,
+    at: { x: number; y: number },
+  ) => string | undefined;
+  /** Retune a placed attack — position, rotation, scale or start offset. */
+  updateAttack: (
+    stepIndex: number,
+    instanceId: string,
+    patch: Partial<Omit<AttackInstance, "id" | "attackId">>,
+  ) => void;
+  removeAttack: (stepIndex: number, instanceId: string) => void;
 
   // --- document ---
   setTitle: (title: string) => void;
@@ -248,6 +264,7 @@ export const useEditorStore = create<EditorState>()(
       id: "local",
       title: "Untitled plan",
       raid: "",
+      encounterId: undefined,
       background: DEFAULT_BACKGROUND,
       objects: {},
       objectIds: [],
@@ -595,6 +612,41 @@ export const useEditorStore = create<EditorState>()(
           step.animations = step.animations.filter((a) => a.id !== animId);
         }),
 
+      addAttack: (stepIndex, attackId, at) => {
+        if (!get().steps[stepIndex]) return undefined;
+        const instance: AttackInstance = {
+          id: nextAttackId(),
+          attackId,
+          x: at.x,
+          y: at.y,
+          rotation: 0,
+          scale: 1,
+          startMs: 0,
+        };
+        set((s) => {
+          const step = s.steps[stepIndex];
+          if (!step) return;
+          // `attacks` is optional on older documents.
+          step.attacks = [...(step.attacks ?? []), instance];
+        });
+        return instance.id;
+      },
+
+      updateAttack: (stepIndex, instanceId, patch) =>
+        set((s) => {
+          const instance = s.steps[stepIndex]?.attacks?.find(
+            (a) => a.id === instanceId,
+          );
+          if (instance) Object.assign(instance, patch);
+        }),
+
+      removeAttack: (stepIndex, instanceId) =>
+        set((s) => {
+          const step = s.steps[stepIndex];
+          if (!step?.attacks) return;
+          step.attacks = step.attacks.filter((a) => a.id !== instanceId);
+        }),
+
       setTitle: (title) =>
         set((s) => {
           s.title = title;
@@ -610,6 +662,7 @@ export const useEditorStore = create<EditorState>()(
           s.id = doc.id;
           s.title = doc.title;
           s.raid = doc.raid;
+          s.encounterId = doc.encounterId;
           s.background = doc.background;
           s.objects = doc.objects;
           s.objectIds = doc.objectIds;

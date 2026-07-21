@@ -20,6 +20,8 @@ export interface PlanDoc {
   id: string;
   title: string;
   raid: string;
+  /** Which encounter seeded this plan (plan §17) — drives the attack palette. */
+  encounterId?: string | undefined;
   background: Background;
   objects: Record<string, PlanObject>;
   /** Render/stacking order — also the array order in the serialized Plan. */
@@ -34,6 +36,7 @@ export function toPlan(doc: PlanDoc): Plan {
     id: doc.id,
     title: doc.title,
     raid: doc.raid,
+    ...(doc.encounterId ? { encounterId: doc.encounterId } : {}),
     background: doc.background,
     objects: doc.objectIds
       .map((id) => doc.objects[id])
@@ -55,6 +58,7 @@ export function fromPlan(plan: Plan): PlanDoc {
     id: plan.id,
     title: plan.title,
     raid: plan.raid,
+    encounterId: plan.encounterId,
     background: plan.background,
     objects,
     objectIds,

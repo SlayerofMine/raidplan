@@ -173,6 +173,12 @@ export const PlanSchema = z.object({
   title: z.string(),
   /** Encounter / map identifier. */
   raid: z.string(),
+  /**
+   * The encounter this plan was seeded from (plan §17). Optional — plans that
+   * started on a bare map have none. It's what lets the editor offer *this
+   * encounter's* pre-designed attacks in the palette.
+   */
+  encounterId: z.string().min(1).optional(),
   background: BackgroundSchema,
   /** Base object set — objects exist across all steps. */
   objects: z.array(PlanObjectSchema),
@@ -190,12 +196,14 @@ export function makeEmptyPlan(params: {
   id: string;
   title?: string;
   raid?: string;
+  encounterId?: string;
   background: Background;
 }): Plan {
   return {
     id: params.id,
     title: params.title ?? "Untitled plan",
     raid: params.raid ?? "",
+    ...(params.encounterId ? { encounterId: params.encounterId } : {}),
     background: params.background,
     objects: [],
     steps: [],

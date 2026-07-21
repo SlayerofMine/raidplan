@@ -78,6 +78,8 @@ export function createPlan(
     background: Plan["background"];
     /** Encounter classification, mirrored to the `raid` column for listing. */
     raid?: string;
+    /** Which encounter seeded this plan (plan §17) — drives the attack palette. */
+    encounterId?: string;
     /** Pre-placed content when seeding from an encounter preset (plan §17). */
     objects?: Plan["objects"];
     steps?: Plan["steps"];
@@ -89,6 +91,9 @@ export function createPlan(
     id,
     ...(params.title !== undefined ? { title: params.title } : {}),
     ...(params.raid !== undefined ? { raid: params.raid } : {}),
+    ...(params.encounterId !== undefined
+      ? { encounterId: params.encounterId }
+      : {}),
     background: params.background,
   });
   if (params.objects) doc.objects = params.objects;

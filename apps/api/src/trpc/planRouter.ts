@@ -95,6 +95,8 @@ export const planRouter = router({
           objects: encounter.preset.objects,
           steps: encounter.preset.steps,
           raid: encounter.raid,
+          // Remembered so the editor can offer this encounter's attacks (§17).
+          encounterId: encounter.id,
         });
       }
 
