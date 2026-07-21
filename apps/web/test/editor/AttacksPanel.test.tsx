@@ -50,33 +50,22 @@ describe("AttacksPanel", () => {
     expect(screen.queryByTestId("attacks-panel")).not.toBeInTheDocument();
   });
 
-  it("says attacks belong to a step while on the base layout", async () => {
+  it("stays out of the way on the base layout, where attacks can't exist", () => {
     state().loadPlan(plan("enc1"));
     state().selectStep(BASE_STEP_INDEX);
     render(<AttacksPanel />);
-    expect(await screen.findByTestId("attacks-need-step")).toBeInTheDocument();
+    expect(screen.queryByTestId("attacks-panel")).not.toBeInTheDocument();
   });
 
-  it("offers the encounter's attacks and places one on the step", async () => {
-    const user = userEvent.setup();
+  it("points at the palette when nothing is placed — it isn't a second library", async () => {
     state().loadPlan(plan("enc1"));
     state().selectStep(0);
     render(<AttacksPanel />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "Place Frontal Cone" }),
-    );
-
-    const placed = state().steps[0]!.attacks!;
-    expect(placed).toHaveLength(1);
-    // The def's default 100x100 rect, centred on the middle of the board.
-    expect(placed[0]).toMatchObject({
-      attackId: "atk1",
-      x: 750,
-      y: 400,
-      w: 100,
-      h: 100,
-    });
+    expect(await screen.findByTestId("no-placed")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Place Frontal Cone" }),
+    ).toBeNull();
   });
 
   it("tunes only what the canvas can't express — when it fires", async () => {

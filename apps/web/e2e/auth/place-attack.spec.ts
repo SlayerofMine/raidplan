@@ -36,7 +36,9 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
   await page.getByTestId("new-plan").click();
   await expect(page).toHaveURL(/\/plan\/.+\/edit/);
 
-  // Attacks live on a step, so the panel says so until there is one.
+  // The library lives in the palette, beside tokens and shapes.
+  await page.getByRole("tab", { name: "Attacks" }).click();
+  // Attacks live on a step, so it says so until there is one.
   await expect(page.getByTestId("attacks-need-step")).toBeVisible();
   await page.getByTestId("add-step").click();
 
