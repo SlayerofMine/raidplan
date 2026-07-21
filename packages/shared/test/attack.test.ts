@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ATTACK_AUTHORING_SIZE,
   ATTACK_BOX_ASSET,
   AttackDefSchema,
   attackIdsInPlan,
@@ -19,11 +20,17 @@ import {
   type Step,
 } from "../src/plan.js";
 
+/**
+ * Attacks are stored in **unit space**: -1..1 centred, where (0,0) is the middle
+ * of the placed rectangle and ±1 its edges. Lengths are unit lengths, so 2 spans
+ * the rectangle and a length scales by `w/2` / `h/2` — independently, which is
+ * why a non-square rectangle stretches an attack.
+ */
 const base = (over: Partial<ObjectBase> = {}): ObjectBase => ({
   x: 0,
   y: 0,
-  w: 10,
-  h: 10,
+  w: 0.5,
+  h: 0.5,
   rotation: 0,
   opacity: 1,
   z: 0,
@@ -55,21 +62,25 @@ const makeDef = (over: Partial<AttackDef> = {}): AttackDef => ({
   encounterId: "enc",
   name: "Cone",
   version: 1,
-  box: { w: 100, h: 100 },
-  anchor: { x: 0, y: 0 },
+  defaultSize: { w: 400, h: 400 },
   objects: [defObj("o1")],
   overrides: {},
   animations: [],
   ...over,
 });
 
+/**
+ * The default instance covers (0,0)‥(200,200): centre (100,100), half-extents
+ * 100. So unit (0,0) lands at (100,100) and unit (1,0) at (200,100).
+ */
 const inst = (over: Partial<AttackInstance> = {}): AttackInstance => ({
   id: "i1",
   attackId: "atk",
   x: 0,
   y: 0,
+  w: 200,
+  h: 200,
   rotation: 0,
-  scale: 1,
   startMs: 0,
   ...over,
 });
@@ -94,18 +105,21 @@ const makePlan = (steps: Step[], objects: PlanObject[] = []): Plan => ({
 /** The last object in the expanded plan — the one an attack just added. */
 const lastObject = (plan: Plan) => plan.objects.at(-1)!;
 
+const expandOne = (def: AttackDef, instance: AttackInstance) =>
+  expandPlan(makePlan([step({ attacks: [instance] })]), { atk: def });
+
 describe("AttackDefSchema", () => {
-  it("defaults version and scale-free fields sanely", () => {
+  it("defaults version, placement hint and end state", () => {
     const def = AttackDefSchema.parse({
       id: "a",
       encounterId: "e",
       name: "n",
-      box: { w: 10, h: 10 },
-      anchor: { x: 0, y: 0 },
       objects: [],
       animations: [],
     });
     expect(def.version).toBe(1);
+    expect(def.defaultSize).toEqual({ w: 400, h: 400 });
+    expect(def.overrides).toEqual({});
   });
 });
 
@@ -133,17 +147,64 @@ describe("expandPlan — the common case is free", () => {
   });
 });
 
+describe("expandPlan — placement maths", () => {
+  it("puts unit origin at the centre of the instance rectangle", () => {
+    const out = expandOne(makeDef({ objects: [defObj("c")] }), inst());
+    expect(lastObject(out).base).toMatchObject({ x: 100, y: 100 });
+  });
+
+  it("puts unit ±1 on the rectangle's edges", () => {
+    const def = makeDef({ objects: [defObj("c", { x: 1, y: -1 })] });
+    const out = expandOne(def, inst());
+    expect(lastObject(out).base).toMatchObject({ x: 200, y: 0 });
+  });
+
+  it("scales lengths by the half-extents", () => {
+    // A unit length of 2 spans the rectangle, so 0.5 → a quarter of it.
+    const def = makeDef({ objects: [defObj("c", { w: 0.5, h: 2 })] });
+    const out = expandOne(def, inst());
+    expect(lastObject(out).base).toMatchObject({ w: 50, h: 200 });
+  });
+
+  it("stretches independently in a non-square rectangle", () => {
+    const def = makeDef({ objects: [defObj("c", { x: 1, y: 1, w: 1, h: 1 })] });
+    const out = expandOne(def, inst({ w: 400, h: 100 }));
+    // centre (200,50), halves (200,50).
+    expect(lastObject(out).base).toMatchObject({
+      x: 400,
+      y: 100,
+      w: 200,
+      h: 50,
+    });
+  });
+
+  it("follows the rectangle when it moves", () => {
+    const out = expandOne(
+      makeDef({ objects: [defObj("c")] }),
+      inst({ x: 1000, y: 500 }),
+    );
+    expect(lastObject(out).base).toMatchObject({ x: 1100, y: 600 });
+  });
+
+  it("rotates clockwise about the centre and adds to the object's rotation", () => {
+    const def = makeDef({
+      objects: [defObj("c", { x: 1, y: 0, rotation: 15 })],
+    });
+    const out = expandOne(def, inst({ rotation: 90 }));
+    const b = lastObject(out).base;
+    // (1,0) is the right edge; a quarter turn puts it at the bottom edge.
+    expect(b.x).toBeCloseTo(100);
+    expect(b.y).toBeCloseTo(200);
+    expect(b.rotation).toBe(105);
+  });
+});
+
 describe("expandPlan — stamping", () => {
   it("adds namespaced, initially-hidden objects and clears the instances", () => {
-    const def = makeDef({ objects: [defObj("cone", { x: 50, y: 50 })] });
-    const plan = makePlan([step({ attacks: [inst({ x: 200, y: 300 })] })]);
-
-    const out = expandPlan(plan, { atk: def });
+    const out = expandOne(makeDef({ objects: [defObj("cone")] }), inst());
     const cone = out.objects.find((o) => o.id === "i1::cone");
     expect(cone).toBeDefined();
     expect(cone!.base.visible).toBe(false);
-    // anchor (0,0) + object (50,50) placed at instance (200,300), scale 1.
-    expect(cone!.base).toMatchObject({ x: 250, y: 350 });
     expect(out.steps[0]!.attacks).toEqual([]);
   });
 
@@ -158,9 +219,7 @@ describe("expandPlan — stamping", () => {
   });
 
   it("adds no trailing override when the attack is on the last step", () => {
-    const out = expandPlan(makePlan([step({ attacks: [inst()] })]), {
-      atk: makeDef(),
-    });
+    const out = expandOne(makeDef(), inst());
     expect(out.steps).toHaveLength(1);
     expect(out.steps[0]!.overrides["i1::o1"]).toEqual({ visible: true });
   });
@@ -185,7 +244,7 @@ describe("expandPlan — stamping", () => {
   });
 
   it("preserves the plan's own objects and step animations", () => {
-    const own = defObj("boss", { x: 800, y: 450 });
+    const own = defObj("boss");
     const ownAnim = defAnim({ id: "own", objectId: "boss" });
     const def = makeDef({ animations: [defAnim({ objectId: "o1" })] });
     const plan = makePlan(
@@ -199,72 +258,51 @@ describe("expandPlan — stamping", () => {
   });
 });
 
-describe("expandPlan — placement maths", () => {
-  it("lands an anchored object exactly at the instance position", () => {
+describe("expandPlan — end-state overrides", () => {
+  it("places the def's end state onto the instance's step, made present", () => {
     const def = makeDef({
-      anchor: { x: 50, y: 50 },
-      objects: [defObj("c", { x: 50, y: 50 })],
+      objects: [defObj("c")],
+      overrides: { c: { x: 1, y: 0 } },
     });
-    const out = expandPlan(
-      makePlan([step({ attacks: [inst({ x: 100, y: 120 })] })]),
-      { atk: def },
-    );
-    expect(lastObject(out).base).toMatchObject({ x: 100, y: 120 });
+    const out = expandOne(def, inst());
+    expect(out.steps[0]!.overrides["i1::c"]).toEqual({
+      x: 200,
+      y: 100,
+      visible: true,
+    });
   });
 
-  it("scales size and offset about the anchor", () => {
+  it("honours a def end state that hides the object (a disappear)", () => {
     const def = makeDef({
-      anchor: { x: 0, y: 0 },
-      objects: [defObj("c", { x: 10, y: 0, w: 10, h: 20 })],
+      objects: [defObj("c")],
+      overrides: { c: { visible: false } },
     });
-    const out = expandPlan(
-      makePlan([step({ attacks: [inst({ scale: 2 })] })]),
-      { atk: def },
-    );
-    expect(lastObject(out).base).toMatchObject({ x: 20, y: 0, w: 20, h: 40 });
-  });
-
-  it("rotates the offset clockwise and adds to the object's rotation", () => {
-    const def = makeDef({
-      anchor: { x: 0, y: 0 },
-      objects: [defObj("c", { x: 10, y: 0, rotation: 15 })],
-    });
-    const out = expandPlan(
-      makePlan([step({ attacks: [inst({ rotation: 90 })] })]),
-      { atk: def },
-    );
-    const b = lastObject(out).base;
-    expect(b.x).toBeCloseTo(0);
-    expect(b.y).toBeCloseTo(10);
-    expect(b.rotation).toBe(105);
+    const out = expandOne(def, inst());
+    expect(out.steps[0]!.overrides["i1::c"]).toEqual({ visible: false });
   });
 });
 
 describe("expandPlan — animations", () => {
-  it("retargets and offsets animations, and transforms their params", () => {
+  it("retargets and offsets animations, and maps their params", () => {
     const def = makeDef({
-      anchor: { x: 0, y: 0 },
       objects: [defObj("c")],
       animations: [
         defAnim({
           objectId: "c",
           effect: "move",
           delayMs: 100,
-          params: { toX: 10, toY: 0 },
+          params: { toX: 1, toY: 0 },
         }),
       ],
     });
-    const out = expandPlan(
-      makePlan([step({ attacks: [inst({ x: 5, y: 5, startMs: 200 })] })]),
-      { atk: def },
-    );
+    const out = expandOne(def, inst({ startMs: 200 }));
     const anim = out.steps[0]!.animations.find((a) => a.id === "i1::a1")!;
     expect(anim.objectId).toBe("i1::c");
     expect(anim.delayMs).toBe(300); // 100 + startMs 200
-    expect(anim.params).toMatchObject({ toX: 15, toY: 5 });
+    expect(anim.params).toMatchObject({ toX: 200, toY: 100 });
   });
 
-  it("transforms a motion path point by point", () => {
+  it("maps a motion path point by point", () => {
     const def = makeDef({
       objects: [defObj("c")],
       animations: [
@@ -272,21 +310,18 @@ describe("expandPlan — animations", () => {
           objectId: "c",
           params: {
             path: [
-              { x: 0, y: 0 },
-              { x: 10, y: 0 },
+              { x: -1, y: -1 },
+              { x: 1, y: 1 },
             ],
           },
         }),
       ],
     });
-    const out = expandPlan(
-      makePlan([step({ attacks: [inst({ x: 5, y: 5 })] })]),
-      { atk: def },
-    );
+    const out = expandOne(def, inst());
     const anim = out.steps[0]!.animations.find((a) => a.id === "i1::a1")!;
     expect(anim.params!.path).toEqual([
-      { x: 5, y: 5 },
-      { x: 15, y: 5 },
+      { x: 0, y: 0 },
+      { x: 200, y: 200 },
     ]);
   });
 
@@ -312,101 +347,65 @@ describe("expandPlan — animations", () => {
         }),
       ],
     });
-    const out = expandPlan(makePlan([step({ attacks: [inst()] })]), {
-      atk: def,
-    });
+    const out = expandOne(def, inst());
     const anim = out.steps[0]!.animations.find((a) => a.id === "i1::hit")!;
     expect(anim.collideWith).toEqual(["i1::tank"]);
-    const tether = out.objects.find((o) => o.id === "i1::tether")!;
-    expect(tether).toMatchObject({ fromId: "i1::orb", toId: "i1::tank" });
-  });
-});
-
-describe("expandPlan — end-state overrides", () => {
-  it("places the def's end state onto the instance's step, made present", () => {
-    const def = makeDef({
-      anchor: { x: 0, y: 0 },
-      objects: [defObj("c")],
-      overrides: { c: { x: 10, y: 0 } },
+    expect(out.objects.find((o) => o.id === "i1::tether")).toMatchObject({
+      fromId: "i1::orb",
+      toId: "i1::tank",
     });
-    const out = expandPlan(
-      makePlan([step({ attacks: [inst({ x: 5, y: 5 })] })]),
-      { atk: def },
-    );
-    expect(out.steps[0]!.overrides["i1::c"]).toEqual({
-      x: 15,
-      y: 5,
-      visible: true,
-    });
-  });
-
-  it("honours a def end state that hides the object (a disappear)", () => {
-    const def = makeDef({
-      objects: [defObj("c")],
-      overrides: { c: { visible: false } },
-    });
-    const out = expandPlan(makePlan([step({ attacks: [inst()] })]), {
-      atk: def,
-    });
-    expect(out.steps[0]!.overrides["i1::c"]).toEqual({ visible: false });
   });
 });
 
 describe("defToPlan / planToAttackContent", () => {
-  it("presents a def as a one-step plan on a box-sized blank canvas", () => {
+  it("denormalises unit space onto the square authoring canvas", () => {
     const def = makeDef({
-      name: "Sweep",
-      box: { w: 300, h: 200 },
-      objects: [defObj("o1")],
-      overrides: { o1: { x: 5 } },
-      animations: [defAnim({ objectId: "o1" })],
+      objects: [defObj("o1", { x: 0.5, y: -0.5, w: 0.25 })],
     });
     const plan = defToPlan(def);
+
     expect(plan.background).toEqual({
       assetId: ATTACK_BOX_ASSET,
-      width: 300,
-      height: 200,
+      width: ATTACK_AUTHORING_SIZE,
+      height: ATTACK_AUTHORING_SIZE,
     });
-    expect(plan.title).toBe("Sweep");
-    expect(plan.objects).toBe(def.objects);
+    // Half the canvas is 500, so 0.5 → 750 and -0.5 → 250.
+    expect(plan.objects[0]!.base).toMatchObject({ x: 750, y: 250, w: 125 });
     expect(plan.steps).toHaveLength(1);
-    expect(plan.steps[0]!.overrides).toBe(def.overrides);
-    expect(plan.steps[0]!.animations).toBe(def.animations);
   });
 
-  it("round-trips a def's body back out", () => {
+  it("round-trips a def's body back to unit space", () => {
     const def = makeDef({
-      box: { w: 300, h: 200 },
-      objects: [defObj("o1", { x: 3 })],
-      overrides: { o1: { x: 5 } },
-      animations: [defAnim({ objectId: "o1" })],
+      objects: [defObj("o1", { x: 0.5, y: -0.5, w: 0.25, h: 0.75 })],
+      overrides: { o1: { x: -1, w: 2 } },
+      animations: [defAnim({ objectId: "o1", params: { toX: 0.25, toY: 0 } })],
     });
+
     const content = planToAttackContent(defToPlan(def), {
       name: "Renamed",
-      anchor: { x: 1, y: 2 },
+      defaultSize: { w: 300, h: 200 },
     });
-    expect(content).toMatchObject({
-      name: "Renamed",
-      anchor: { x: 1, y: 2 },
-      box: { w: 300, h: 200 },
-      objects: def.objects,
-      overrides: def.overrides,
-      animations: def.animations,
-    });
+
+    expect(content.name).toBe("Renamed");
+    expect(content.defaultSize).toEqual({ w: 300, h: 200 });
+    expect(content.objects[0]!.base).toMatchObject(def.objects[0]!.base);
+    expect(content.overrides).toEqual(def.overrides);
+    expect(content.animations[0]!.params).toEqual({ toX: 0.25, toY: 0 });
   });
 });
 
 describe("expandPlan — result is a valid plan", () => {
   it("round-trips through the document schema", () => {
     const def = makeDef({
-      objects: [defObj("c", { x: 10, y: 10 })],
-      animations: [defAnim({ objectId: "c", params: { toX: 20, toY: 20 } })],
+      objects: [defObj("c", { x: 0.5, y: 0.5 })],
+      animations: [defAnim({ objectId: "c", params: { toX: 1, toY: 1 } })],
     });
     const plan = makePlan([
       step({ id: "s0", attacks: [inst()] }),
       step({ id: "s1" }),
     ]);
-    const out = expandPlan(plan, { atk: def });
-    expect(() => PlanSchema.parse(out)).not.toThrow();
+    expect(() =>
+      PlanSchema.parse(expandPlan(plan, { atk: def })),
+    ).not.toThrow();
   });
 });

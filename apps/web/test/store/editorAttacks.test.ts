@@ -21,13 +21,15 @@ describe("addAttack", () => {
 
     const attacks = state().steps[0]!.attacks!;
     expect(attacks).toHaveLength(1);
+    // Centred on the drop point, at the def's default size (400 by default).
     expect(attacks[0]).toMatchObject({
       id,
       attackId: "atk1",
-      x: 400,
-      y: 300,
+      x: 200,
+      y: 100,
+      w: 400,
+      h: 400,
       rotation: 0,
-      scale: 1,
       startMs: 0,
     });
   });
@@ -51,15 +53,15 @@ describe("updateAttack", () => {
     const id = state().addAttack(0, "atk1", { x: 0, y: 0 })!;
     state().updateAttack(0, id, {
       x: 50,
+      w: 300,
       rotation: 90,
-      scale: 2,
       startMs: 250,
     });
 
     expect(state().steps[0]!.attacks![0]).toMatchObject({
       x: 50,
+      w: 300,
       rotation: 90,
-      scale: 2,
       startMs: 250,
     });
   });
@@ -94,13 +96,13 @@ describe("round-trip", () => {
       background: { assetId: "arena", width: 1600, height: 900 },
       objects: [],
       steps: [{ id: "s0", overrides: {}, animations: [] }],
-      schemaVersion: 1,
+      schemaVersion: 2,
     });
     state().addAttack(0, "atk1", { x: 10, y: 20 });
 
     const plan = state().getPlan();
     expect(plan.encounterId).toBe("enc1");
     expect(attackIdsInPlan(plan)).toEqual(["atk1"]);
-    expect(plan.steps[0]!.attacks![0]).toMatchObject({ x: 10, y: 20 });
+    expect(plan.steps[0]!.attacks![0]).toMatchObject({ w: 400, h: 400 });
   });
 });

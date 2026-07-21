@@ -19,8 +19,7 @@ const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   encounterId: "enc1",
   name: "Frontal cone",
   version: 1,
-  box: { w: 200, h: 200 },
-  anchor: { x: 0, y: 0 },
+  defaultSize: { w: 200, h: 200 },
   objects: [
     {
       id: "cone",
@@ -61,14 +60,15 @@ const planWith = (attackId: string): Plan => ({
           attackId,
           x: 400,
           y: 400,
+          w: 200,
+          h: 200,
           rotation: 0,
-          scale: 1,
           startMs: 0,
         },
       ],
     },
   ],
-  schemaVersion: 1,
+  schemaVersion: 2,
 });
 
 describe("attacksRepo", () => {

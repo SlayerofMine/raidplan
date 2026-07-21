@@ -3,7 +3,6 @@ import { z } from "zod";
 import {
   AnimSchema,
   PlanObjectSchema,
-  PointSchema,
   StepOverrideSchema,
 } from "@raidplan/shared";
 import {
@@ -24,11 +23,12 @@ import { adminProcedure, protectedProcedure, router } from "./context.js";
  */
 const attackContent = {
   name: z.string().min(1).max(120),
-  box: z.object({
-    w: z.number().finite().positive(),
-    h: z.number().finite().positive(),
-  }),
-  anchor: PointSchema,
+  defaultSize: z
+    .object({
+      w: z.number().finite().positive(),
+      h: z.number().finite().positive(),
+    })
+    .default({ w: 400, h: 400 }),
   objects: z.array(PlanObjectSchema),
   overrides: z.record(z.string().min(1), StepOverrideSchema).default({}),
   animations: z.array(AnimSchema),

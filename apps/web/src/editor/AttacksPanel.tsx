@@ -147,14 +147,24 @@ function PlacedAttack({
           />
         </label>
         <label className="flex items-center gap-1">
-          scale
+          w
           <input
             type="number"
-            step="0.1"
-            min="0.1"
-            aria-label={`${name} scale`}
-            value={instance.scale}
-            onChange={(e) => set({ scale: Number(e.target.value) || 1 })}
+            min="1"
+            aria-label={`${name} width`}
+            value={instance.w}
+            onChange={(e) => set({ w: Number(e.target.value) || 1 })}
+            className={NUM}
+          />
+        </label>
+        <label className="flex items-center gap-1">
+          h
+          <input
+            type="number"
+            min="1"
+            aria-label={`${name} height`}
+            value={instance.h}
+            onChange={(e) => set({ h: Number(e.target.value) || 1 })}
             className={NUM}
           />
         </label>

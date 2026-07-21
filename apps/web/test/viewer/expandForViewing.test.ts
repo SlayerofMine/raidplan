@@ -16,7 +16,7 @@ const planWith = (attacks: Plan["steps"][number]["attacks"]): Plan => ({
   background: { assetId: "arena", width: 1600, height: 900 },
   objects: [],
   steps: [{ id: "s0", overrides: {}, animations: [], attacks }],
-  schemaVersion: 1,
+  schemaVersion: 2,
 });
 
 const def: AttackDef = {
@@ -24,8 +24,7 @@ const def: AttackDef = {
   encounterId: "enc1",
   name: "Cone",
   version: 1,
-  box: { w: 100, h: 100 },
-  anchor: { x: 0, y: 0 },
+  defaultSize: { w: 100, h: 100 },
   objects: [
     {
       id: "cone",
@@ -63,10 +62,11 @@ describe("expandForViewing", () => {
       {
         id: "i1",
         attackId: "atk1",
-        x: 400,
-        y: 300,
+        x: 300,
+        y: 200,
+        w: 200,
+        h: 200,
         rotation: 0,
-        scale: 1,
         startMs: 0,
       },
     ]);

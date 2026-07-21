@@ -694,14 +694,22 @@ export const useEditorStore = create<EditorState>()(
         }),
 
       addAttack: (stepIndex, attackId, at) => {
-        if (!get().steps[stepIndex]) return undefined;
+        const state = get();
+        if (!state.steps[stepIndex]) return undefined;
+        // The def's default size is a placement hint; centre it on the drop
+        // point so the attack lands where you aimed (plan §18.2).
+        const size = state.attackDefs[attackId]?.defaultSize ?? {
+          w: 400,
+          h: 400,
+        };
         const instance: AttackInstance = {
           id: nextAttackId(),
           attackId,
-          x: at.x,
-          y: at.y,
+          x: at.x - size.w / 2,
+          y: at.y - size.h / 2,
+          w: size.w,
+          h: size.h,
           rotation: 0,
-          scale: 1,
           startMs: 0,
         };
         set((s) => {

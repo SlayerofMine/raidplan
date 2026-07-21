@@ -16,8 +16,7 @@ const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   encounterId: "enc1",
   name: "Frontal Cone",
   version: 1,
-  box: { w: 100, h: 100 },
-  anchor: { x: 50, y: 50 },
+  defaultSize: { w: 100, h: 100 },
   objects: [],
   overrides: {},
   animations: [],
@@ -33,7 +32,7 @@ const plan = (encounterId?: string): Plan => ({
   background: { assetId: "arena", width: 1600, height: 900 },
   objects: [],
   steps: [{ id: "s0", overrides: {}, animations: [] }],
-  schemaVersion: 1,
+  schemaVersion: 2,
 });
 
 beforeEach(() => {
@@ -70,8 +69,14 @@ describe("AttacksPanel", () => {
 
     const placed = state().steps[0]!.attacks!;
     expect(placed).toHaveLength(1);
-    // Dropped at the middle of the board.
-    expect(placed[0]).toMatchObject({ attackId: "atk1", x: 800, y: 450 });
+    // The def's default 100x100 rect, centred on the middle of the board.
+    expect(placed[0]).toMatchObject({
+      attackId: "atk1",
+      x: 750,
+      y: 400,
+      w: 100,
+      h: 100,
+    });
   });
 
   it("retunes a placed attack's transform and timing", async () => {

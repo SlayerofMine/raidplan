@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PointSchema, type Point } from "./transform.js";
+import { type Point } from "./transform.js";
 import {
   AnimSchema,
   PlanObjectSchema,
@@ -15,24 +15,28 @@ import {
 } from "./plan.js";
 
 /**
- * Reusable attacks (plan §17, stage 3) — the reference/instance model.
+ * Reusable attacks (plan §17, remodelled in §18.2).
  *
- * An **AttackDef** is a small, self-contained bundle of objects and animations
- * authored once (the admin's attack designer). A plan never stores those
- * internals; it stores an {@link AttackInstance} — an id and a transform — and
- * {@link expandPlan} stamps the def in at render time. So the same three
- * renderers that draw a plan (Konva, the OG SVG, the WebM export) draw attacks
- * for free, and an attack is indivisible because its parts aren't in the
+ * An **AttackDef** is a small bundle of objects and animations authored once (the
+ * admin's designer). A plan never stores those internals; it stores an
+ * {@link AttackInstance} — an id and a **rectangle** — and {@link expandPlan}
+ * stamps the def into that rectangle at render time. So the three renderers draw
+ * attacks for free, and an attack is indivisible because its parts aren't in the
  * document to begin with.
  *
- * **Auto-follow:** an instance resolves to the *current* def by `attackId`, so
- * fixing a def improves every plan that uses it. (A `version` is kept for a
- * future "this attack changed" marker and opt-in pinning.)
+ * **Everything inside a def is in unit space: -1..1, centred.** Nothing absolute.
+ * `(0,0)` is the middle of the placed rectangle and `±1` its edges, so the same
+ * definition works at any size — which is what lets a planner drag a Transformer
+ * handle instead of typing pixel coordinates. Lengths are unit lengths, where
+ * `2` spans the rectangle: they scale by `w/2` and `h/2` **independently**, so a
+ * non-square rectangle stretches the attack (hold Shift to keep the aspect).
  *
- * v1 effect vocabulary for a def's animations is the params-driven set —
- * `appear`, `disappear`, `move` (via `params.toX/toY`/`path`), `fade` (via
- * `params.toOpacity`), `pulse`, `blink`. `scale`/`fly` want a per-object end
- * state, which a def doesn't carry yet; that's a documented follow-up.
+ * **Auto-follow:** an instance resolves to the *current* def by `attackId`, so
+ * fixing a def improves every plan using it. (`version` is kept for a future
+ * "this attack changed" marker and opt-in pinning.)
+ *
+ * A def is exactly a **base state plus one step** (§18.2) — objects are the start,
+ * `overrides` the settled end, `animations` the transition.
  */
 export const AttackDefSchema = z.object({
   id: z.string().min(1),
@@ -40,21 +44,20 @@ export const AttackDefSchema = z.object({
   name: z.string().min(1),
   /** Bumped on every edit; drives auto-follow's future "changed" marker. */
   version: z.number().int().positive().default(1),
-  /** The authoring canvas size, in the def's own pixel space. */
-  box: z.object({
-    w: z.number().finite().positive(),
-    h: z.number().finite().positive(),
-  }),
-  /** The grab point in def space; an instance's position places *this* point. */
-  anchor: PointSchema,
-  objects: z.array(PlanObjectSchema),
   /**
-   * The attack's settled **end state**, per object (def space) — a single
-   * "slide" the animations play toward, exactly like a plan step. This is what
-   * lets the designer author `move`/`scale`/`fly` by dragging on the canvas, and
-   * what `expandPlan` transforms into the instance's step. Optional/`{}` for an
-   * attack that only pulses or blinks in place.
+   * The rectangle a fresh instance gets, in plan pixels. Purely a **placement
+   * hint** so a long beam doesn't arrive square — it is not a coordinate space,
+   * and the planner resizes freely afterwards.
    */
+  defaultSize: z
+    .object({
+      w: z.number().finite().positive(),
+      h: z.number().finite().positive(),
+    })
+    .default({ w: 400, h: 400 }),
+  /** Start state, in unit space. */
+  objects: z.array(PlanObjectSchema),
+  /** Settled end state, in unit space (the def's single step). */
   overrides: z.record(z.string().min(1), StepOverrideSchema).default({}),
   animations: z.array(AnimSchema),
 });
@@ -65,8 +68,7 @@ export type AttackContent = Omit<AttackDef, "id" | "encounterId" | "version">;
 
 /**
  * The distinct attack ids a plan references, so a renderer can fetch just the
- * definitions it needs before calling {@link expandPlan}. Empty for the common
- * plan with no attacks.
+ * definitions it needs before calling {@link expandPlan}.
  */
 export function attackIdsInPlan(plan: Plan): string[] {
   const ids = new Set<string>();
@@ -76,29 +78,38 @@ export function attackIdsInPlan(plan: Plan): string[] {
   return [...ids];
 }
 
-/** A placement: how an instance maps def space into the plan's space. */
+/** Where an instance puts unit space: a centre, half-extents, and a rotation. */
 interface Placement {
-  anchor: Point;
-  x: number;
-  y: number;
+  cx: number;
+  cy: number;
+  hx: number;
+  hy: number;
   rotation: number;
-  scale: number;
+}
+
+function placementOf(instance: AttackInstance): Placement {
+  return {
+    cx: instance.x + instance.w / 2,
+    cy: instance.y + instance.h / 2,
+    hx: instance.w / 2,
+    hy: instance.h / 2,
+    rotation: instance.rotation,
+  };
 }
 
 /**
- * Map a point from def space into plan space: translate relative to the anchor,
- * scale, rotate (clockwise, matching Konva's y-down convention), then offset to
- * the instance position.
+ * Map a unit point into the plan: scale by the rectangle's half-extents, then
+ * rotate clockwise about its centre (Konva's y-down convention).
  */
-function placePoint(p: Point, t: Placement): Point {
-  const dx = (p.x - t.anchor.x) * t.scale;
-  const dy = (p.y - t.anchor.y) * t.scale;
+function placePoint(u: Point, t: Placement): Point {
+  const dx = u.x * t.hx;
+  const dy = u.y * t.hy;
   const rad = (t.rotation * Math.PI) / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
   return {
-    x: t.x + dx * cos - dy * sin,
-    y: t.y + dx * sin + dy * cos,
+    x: t.cx + dx * cos - dy * sin,
+    y: t.cy + dx * sin + dy * cos,
   };
 }
 
@@ -113,8 +124,8 @@ function placeBase(base: ObjectBase, t: Placement): ObjectBase {
     ...base,
     x: p.x,
     y: p.y,
-    w: base.w * t.scale,
-    h: base.h * t.scale,
+    w: base.w * t.hx,
+    h: base.h * t.hy,
     rotation: base.rotation + t.rotation,
     // Materialised hidden; expandPlan reveals it only on the instance's step.
     visible: false,
@@ -129,8 +140,8 @@ function placeOverride(ov: StepOverride, t: Placement): StepOverride {
     out.x = p.x;
     out.y = p.y;
   }
-  if (ov.w !== undefined) out.w = ov.w * t.scale;
-  if (ov.h !== undefined) out.h = ov.h * t.scale;
+  if (ov.w !== undefined) out.w = ov.w * t.hx;
+  if (ov.h !== undefined) out.h = ov.h * t.hy;
   if (ov.rotation !== undefined) out.rotation = ov.rotation + t.rotation;
   return out;
 }
@@ -156,13 +167,7 @@ function expandInstance(
   animations: Anim[];
   overrides: Record<string, StepOverride>;
 } {
-  const t: Placement = {
-    anchor: def.anchor,
-    x: instance.x,
-    y: instance.y,
-    rotation: instance.rotation,
-    scale: instance.scale,
-  };
+  const t = placementOf(instance);
 
   const objects = def.objects.map((o) => ({
     ...o,
@@ -198,13 +203,12 @@ function expandInstance(
  *
  * Each attack's objects exist **only during their step**: hidden before (base
  * `visible: false`), shown by a `visible: true` override on the step, and hidden
- * again by a `visible: false` override on the next one. The def's own animations
- * play on top of that.
+ * again on the next one. The def's own animations play on top of that.
  *
  * Pure and non-mutating. An instance whose `attackId` isn't in `defsById` is
  * skipped — a missing def leaves the rest of the plan renderable, like a missing
- * background. The no-attacks case returns the plan untouched, so it costs
- * nothing for the overwhelming majority of plans.
+ * background. A plan with no attacks is returned untouched, so the common case
+ * costs nothing.
  */
 export function expandPlan(
   plan: Plan,
@@ -245,52 +249,138 @@ export function expandPlan(
 }
 
 /**
- * The synthetic background an attack is authored on: a plain box the size of the
- * def's canvas. `getBackgroundSrc` doesn't recognise it, so it renders as an
- * empty floor — the designer draws the attack on a blank grid, not a map.
+ * The synthetic background an attack is authored on: a plain square the size of
+ * {@link ATTACK_AUTHORING_SIZE}. `getBackgroundSrc` doesn't recognise it, so it
+ * renders as an empty floor — the designer draws on a blank grid, not a map.
  */
 export const ATTACK_BOX_ASSET = "attack-box";
 
 /**
+ * The designer's canvas, in pixels, standing in for unit space.
+ *
+ * The editor works in pixels everywhere — drag, snapping, the properties panel —
+ * so the designer authors on this square and the conversions below are the only
+ * place unit space is entered or left. Storage and expansion stay unit-only.
+ */
+export const ATTACK_AUTHORING_SIZE = 1000;
+
+/** Authoring pixels → unit space (-1..1) for a position along one axis. */
+const toUnit = (px: number, size: number) => (px - size / 2) / (size / 2);
+/** Authoring pixels → unit space for a *length* (2 spans the rectangle). */
+const toUnitLength = (px: number, size: number) => px / (size / 2);
+const fromUnit = (u: number, size: number) => size / 2 + u * (size / 2);
+const fromUnitLength = (u: number, size: number) => u * (size / 2);
+
+/** Convert one object's transform between unit space and authoring pixels. */
+function convertBase(
+  base: ObjectBase,
+  size: number,
+  toPixels: boolean,
+): ObjectBase {
+  const pos = toPixels ? fromUnit : toUnit;
+  const len = toPixels ? fromUnitLength : toUnitLength;
+  return {
+    ...base,
+    x: pos(base.x, size),
+    y: pos(base.y, size),
+    w: len(base.w, size),
+    h: len(base.h, size),
+  };
+}
+
+function convertOverride(
+  ov: StepOverride,
+  size: number,
+  toPixels: boolean,
+): StepOverride {
+  const pos = toPixels ? fromUnit : toUnit;
+  const len = toPixels ? fromUnitLength : toUnitLength;
+  const out: StepOverride = { ...ov };
+  if (ov.x !== undefined) out.x = pos(ov.x, size);
+  if (ov.y !== undefined) out.y = pos(ov.y, size);
+  if (ov.w !== undefined) out.w = len(ov.w, size);
+  if (ov.h !== undefined) out.h = len(ov.h, size);
+  return out;
+}
+
+function convertParams(
+  params: AnimParams,
+  size: number,
+  toPixels: boolean,
+): AnimParams {
+  const pos = toPixels ? fromUnit : toUnit;
+  const out: AnimParams = { ...params };
+  if (params.toX !== undefined) out.toX = pos(params.toX, size);
+  if (params.toY !== undefined) out.toY = pos(params.toY, size);
+  if (params.path) {
+    out.path = params.path.map((p) => ({
+      x: pos(p.x, size),
+      y: pos(p.y, size),
+    }));
+  }
+  return out;
+}
+
+const convertAnim = (a: Anim, size: number, toPixels: boolean): Anim => ({
+  ...a,
+  ...(a.params ? { params: convertParams(a.params, size, toPixels) } : {}),
+});
+
+/**
  * Present an {@link AttackDef} as a one-step {@link Plan} the editor store can
- * load, so the attack designer *is* the editor (plan §17, stage 4). The def's
- * objects are the base layout, its `overrides` are the single step's end state,
- * and its animations are that step's timeline.
+ * load, so the attack designer *is* the editor (plan §17 stage 4 / §18.2). The
+ * def's unit-space content is scaled onto the authoring canvas on the way in.
  */
 export function defToPlan(def: AttackDef): Plan {
+  const size = ATTACK_AUTHORING_SIZE;
+  const overrides: Record<string, StepOverride> = {};
+  for (const [id, ov] of Object.entries(def.overrides)) {
+    overrides[id] = convertOverride(ov, size, true);
+  }
   return {
     id: def.id,
     title: def.name,
     raid: "",
-    background: {
-      assetId: ATTACK_BOX_ASSET,
-      width: def.box.w,
-      height: def.box.h,
-    },
-    objects: def.objects,
+    background: { assetId: ATTACK_BOX_ASSET, width: size, height: size },
+    objects: def.objects.map((o) => ({
+      ...o,
+      base: convertBase(o.base, size, true),
+    })),
     steps: [
-      { id: "attack", overrides: def.overrides, animations: def.animations },
+      {
+        id: "attack",
+        overrides,
+        animations: def.animations.map((a) => convertAnim(a, size, true)),
+      },
     ],
     schemaVersion: SCHEMA_VERSION,
   };
 }
 
 /**
- * Extract an attack's editable body back out of the designer's plan, combined
- * with the name and anchor the designer tracks separately. The inverse of
- * {@link defToPlan}.
+ * Extract an attack's editable body back out of the designer's plan, normalising
+ * it to unit space. The inverse of {@link defToPlan}.
  */
 export function planToAttackContent(
   plan: Plan,
-  meta: { name: string; anchor: Point },
+  meta: { name: string; defaultSize: { w: number; h: number } },
 ): AttackContent {
+  const size = plan.background.width;
   const step = plan.steps[0];
+  const overrides: Record<string, StepOverride> = {};
+  for (const [id, ov] of Object.entries(step?.overrides ?? {})) {
+    overrides[id] = convertOverride(ov, size, false);
+  }
   return {
     name: meta.name,
-    box: { w: plan.background.width, h: plan.background.height },
-    anchor: meta.anchor,
-    objects: plan.objects,
-    overrides: step?.overrides ?? {},
-    animations: step?.animations ?? [],
+    defaultSize: meta.defaultSize,
+    objects: plan.objects.map((o) => ({
+      ...o,
+      base: convertBase(o.base, size, false),
+    })),
+    overrides,
+    animations: (step?.animations ?? []).map((a) =>
+      convertAnim(a, size, false),
+    ),
   };
 }

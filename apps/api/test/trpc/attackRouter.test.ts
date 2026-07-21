@@ -16,8 +16,7 @@ const asAdmin = () => createCaller({ db, viewer: admin, isAdmin: true });
 
 const content = {
   name: "Cone",
-  box: { w: 100, h: 100 },
-  anchor: { x: 50, y: 50 },
+  defaultSize: { w: 100, h: 100 },
   objects: [],
   animations: [],
 };
@@ -32,8 +31,7 @@ const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   encounterId: "enc1",
   name: "Cone",
   version: 1,
-  box: { w: 100, h: 100 },
-  anchor: { x: 0, y: 0 },
+  defaultSize: { w: 100, h: 100 },
   objects: [],
   overrides: {},
   animations: [],

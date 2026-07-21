@@ -17,7 +17,7 @@ import { ObjectStyleSchema } from "./mechanics.js";
  */
 
 /** Current on-disk schema version. Bump when a migration is required. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** Opacity is always normalised to 0..1. */
 const OpacitySchema = z.number().min(0).max(1);
@@ -119,13 +119,18 @@ export const AttackInstanceSchema = z.object({
   id: z.string().min(1),
   /** Which attack definition to expand (resolved to the current version). */
   attackId: z.string().min(1),
-  /** Where the def's anchor point lands, in the plan's native pixel space. */
+  /**
+   * The rectangle the attack is drawn into, in the plan's native pixels —
+   * top-left plus size, like every other object. The def's unit space (-1..1) is
+   * mapped onto it, so this *is* the placement: a Transformer handle edits it
+   * directly (plan §18.2).
+   */
   x: z.number().finite(),
   y: z.number().finite(),
-  /** Degrees clockwise; rotates the whole attack about its anchor. */
+  w: z.number().finite().positive(),
+  h: z.number().finite().positive(),
+  /** Degrees clockwise, about the rectangle's centre. */
   rotation: z.number().finite().default(0),
-  /** Uniform scale about the anchor. */
-  scale: z.number().finite().positive().default(1),
   /** Delay from the step's start before the attack begins. */
   startMs: z.number().finite().nonnegative().default(0),
 });

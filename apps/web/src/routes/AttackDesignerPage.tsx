@@ -4,7 +4,6 @@ import {
   defToPlan,
   planToAttackContent,
   type AttackDef,
-  type Point,
 } from "@raidplan/shared";
 import { api } from "../api/client";
 import { AddObjectControls } from "../editor/AddObjectControls";
@@ -32,7 +31,7 @@ import { Centered, RequireAdmin } from "./RequireAdmin";
  * move/scale target) and its animations. `planToAttackContent` reads it back on
  * save. Unlike the plan editor, nothing here auto-persists as a plan.
  */
-const NEW_BOX = { w: 600, h: 600 };
+const DEFAULT_SIZE = { w: 400, h: 400 };
 
 function blankDef(encounterId: string): AttackDef {
   return {
@@ -40,8 +39,7 @@ function blankDef(encounterId: string): AttackDef {
     encounterId,
     name: "New attack",
     version: 1,
-    box: NEW_BOX,
-    anchor: { x: NEW_BOX.w / 2, y: NEW_BOX.h / 2 },
+    defaultSize: DEFAULT_SIZE,
     objects: [],
     overrides: {},
     animations: [],
@@ -77,7 +75,7 @@ function AttackDesigner({
 
   const [def, setDef] = useState<AttackDef | null>(null);
   const [name, setName] = useState("");
-  const [anchor, setAnchor] = useState<Point>({ x: 0, y: 0 });
+  const [size, setSize] = useState(DEFAULT_SIZE);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,7 +86,7 @@ function AttackDesigner({
       if (cancelled) return;
       setDef(d);
       setName(d.name);
-      setAnchor(d.anchor);
+      setSize(d.defaultSize);
       useEditorStore.getState().loadPlan(defToPlan(d));
       clearHistory();
       useEditorStore.getState().selectStep(BASE_STEP_INDEX);
@@ -114,7 +112,7 @@ function AttackDesigner({
       const plan = useEditorStore.getState().getPlan();
       const content = planToAttackContent(plan, {
         name: name.trim() || "Attack",
-        anchor,
+        defaultSize: size,
       });
       if (attackId)
         await api.attack.update.mutate({ id: attackId, ...content });
@@ -185,23 +183,28 @@ function AttackDesigner({
           </button>
         </div>
 
-        <label className="flex items-center gap-1 text-xs text-neutral-400">
-          anchor
+        <label
+          className="flex items-center gap-1 text-xs text-neutral-400"
+          title="The rectangle a freshly placed copy gets; the planner resizes it freely"
+        >
+          default size
           <input
-            aria-label="Anchor X"
+            aria-label="Default width"
             type="number"
-            value={anchor.x}
+            min="1"
+            value={size.w}
             onChange={(e) =>
-              setAnchor({ ...anchor, x: Number(e.target.value) })
+              setSize({ ...size, w: Number(e.target.value) || 1 })
             }
             className="w-16 rounded border border-panelborder bg-neutral-900 px-1 py-1"
           />
           <input
-            aria-label="Anchor Y"
+            aria-label="Default height"
             type="number"
-            value={anchor.y}
+            min="1"
+            value={size.h}
             onChange={(e) =>
-              setAnchor({ ...anchor, y: Number(e.target.value) })
+              setSize({ ...size, h: Number(e.target.value) || 1 })
             }
             className="w-16 rounded border border-panelborder bg-neutral-900 px-1 py-1"
           />
