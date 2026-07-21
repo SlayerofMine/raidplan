@@ -43,6 +43,13 @@ export function useEditorHotkeys() {
         store.duplicateSelected();
         return;
       }
+      // Ctrl/Cmd+G groups, +Shift ungroups — the usual design-tool binding.
+      if (mod && e.key.toLowerCase() === "g") {
+        e.preventDefault();
+        if (e.shiftKey) store.ungroupSelected();
+        else store.groupSelected();
+        return;
+      }
       if (mod && e.key.toLowerCase() === "c") {
         store.copySelected();
         return;

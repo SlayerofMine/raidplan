@@ -9,13 +9,6 @@ import {
   useEditorStore,
 } from "../../src/store/editorStore";
 
-vi.mock("../../src/api/client", () => ({
-  api: { attack: { listForEncounter: { query: vi.fn() } } },
-}));
-
-const { api } = await import("../../src/api/client");
-const listForEncounter = vi.mocked(api.attack.listForEncounter.query);
-
 const state = () => useEditorStore.getState();
 
 const def = (over: Partial<AttackDef> = {}): AttackDef => ({
@@ -45,9 +38,10 @@ const plan = (encounterId?: string): Plan => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  listForEncounter.mockResolvedValue([def()] as never);
   state().reset();
   clearHistory();
+  // Loaded by AttackDefResolver in the real app; seeded directly here.
+  state().setAttackDefs({ atk1: def() });
 });
 
 describe("AttacksPanel", () => {
@@ -55,7 +49,6 @@ describe("AttacksPanel", () => {
     state().loadPlan(plan());
     render(<AttacksPanel />);
     expect(screen.queryByTestId("attacks-panel")).not.toBeInTheDocument();
-    expect(listForEncounter).not.toHaveBeenCalled();
   });
 
   it("says attacks belong to a step while on the base layout", async () => {

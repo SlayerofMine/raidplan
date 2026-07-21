@@ -1,6 +1,11 @@
 import { useRef, useState, type ChangeEvent } from "react";
 import { Link } from "react-router-dom";
-import { BACKGROUNDS, isUploadedAsset, toBackground } from "@raidplan/shared";
+import {
+  BACKGROUNDS,
+  expandPlan,
+  isUploadedAsset,
+  toBackground,
+} from "@raidplan/shared";
 import { clearHistory, useEditorStore } from "../store/editorStore";
 import { useTemporal } from "../store/useTemporal";
 import { SCALE_MAX, SCALE_MIN } from "./canvas/coords";
@@ -54,6 +59,8 @@ export function Toolbar({
   const zoomAtPoint = useEditorStore((s) => s.zoomAtPoint);
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
   const duplicateSelected = useEditorStore((s) => s.duplicateSelected);
+  const groupSelected = useEditorStore((s) => s.groupSelected);
+  const ungroupSelected = useEditorStore((s) => s.ungroupSelected);
   const loadPlan = useEditorStore((s) => s.loadPlan);
   const getPlan = useEditorStore((s) => s.getPlan);
 
@@ -116,11 +123,15 @@ export function Toolbar({
 
     s.clearSelection();
     setExportingVideo(true);
+    // Stamp placed attacks into concrete objects and animations (plan §17) so
+    // the clip animates them exactly as the viewer does — the canvas already
+    // draws these nodes, which is what makes them capturable.
+    const expanded = expandPlan(s.getPlan(), s.attackDefs);
     const renderer = createFrameRenderer({
       stage,
-      steps: s.steps,
-      objects: s.objects,
-      objectIds: s.objectIds,
+      steps: expanded.steps,
+      objects: Object.fromEntries(expanded.objects.map((o) => [o.id, o])),
+      objectIds: expanded.objects.map((o) => o.id),
       background: s.background,
       view: s.view,
     });
@@ -130,7 +141,7 @@ export function Toolbar({
       await new Promise(requestAnimationFrame);
       const filename = videoFileName(s.title);
       await encodePlanVideo({
-        frames: planFrames(s.steps),
+        frames: planFrames(expanded.steps),
         renderFrame: renderer.renderFrame,
         size: renderer.size,
         filename,
@@ -198,6 +209,21 @@ export function Toolbar({
         label="Duplicate"
       />
       <Btn onClick={deleteSelected} disabled={!hasSelection} label="Delete" />
+
+      <Divider />
+
+      <Btn
+        onClick={groupSelected}
+        disabled={selectedIds.length < 2}
+        label="Group"
+        title="Group the selection so it moves as one (Ctrl+G)"
+      />
+      <Btn
+        onClick={ungroupSelected}
+        disabled={!hasSelection}
+        label="Ungroup"
+        title="Dissolve the selected group (Ctrl+Shift+G)"
+      />
 
       <Divider />
 

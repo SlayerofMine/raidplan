@@ -539,4 +539,77 @@ marker for v1; add pinning later.
 
 ---
 
+## 18. Groups, and the attack library rebuilt around them
+
+§17 shipped attacks end-to-end, but the authoring/placing UX was wrong: attacks lived in a
+right-hand panel tuned by typing numbers, definitions were authored in absolute pixels, and
+`collideWith` was baked into a definition that cannot know a plan's objects. This section
+rebuilds that on a **grouping** primitive.
+
+**Three findings make this cheaper than it looks.** `SelectionTransformer` already attaches to
+*multiple* nodes and `ObjectNode` already folds per-node scale back into `w`/`h`, so rigid
+multi-object transform exists today; the left palette already has tabs and a drag payload; and
+`ObjectVisual` is already a store-free renderer.
+
+**Decisions taken (user):** placing an attack keeps it a **live reference** (indivisible,
+auto-following) that merely *behaves* like a group; definitions are authored in **-1..1 centred**
+unit space; and there is **no migration** — the schema changes outright (bump `SCHEMA_VERSION`).
+
+### 18.1 Grouping
+
+`PlanObject.groupId?` — a group exists when ≥2 objects share one; an optional `Plan.groups`
+record holds names. The feature is mostly **selection resolution**: clicking a member selects
+every member, and because `selectedIds` already drives the multi-node transformer, rigid
+move/scale/rotate comes for free. Group/ungroup are two store actions; members stay contiguous
+in z-order. Double-click-to-enter is a later nicety.
+
+### 18.2 Attacks in unit space; instances as rects
+
+- Definition content — object positions **and** sizes, plus animation `toX`/`toY` and paths — is
+  authored in **-1..1 centred** unit space. Nothing absolute.
+- An instance becomes a **rect**: `{ x, y, w, h, rotation, startMs, args }`. `scale` and `anchor`
+  disappear; the rect *is* the placement, which is exactly what a Konva `Transformer` edits.
+- Expansion maps `plan = centre + unit × (size/2)`, then rotates about the rect centre. Lengths
+  scale by `w/2` and `h/2` independently, so non-uniform resize stretches an attack — Shift
+  preserves aspect.
+- **Codified constraint:** a definition is exactly *base state + one step*.
+
+### 18.3 Attacks as canvas citizens
+
+Each instance renders as a Konva `Group` (id = instance id, draggable) whose expanded children are
+drawn read-only through `ObjectVisual`. It joins selection and the transformer, so it is moved,
+scaled and rotated like any object — but never entered, because it is indivisible. This **removes
+the numeric `AttacksPanel`**; only timing and parameters remain in a properties panel.
+
+### 18.4 Parameters
+
+A definition declares `params: [{ key, label, type, default }]` over
+`objectRefs | number | color | text | boolean`; an instance supplies `args`. Internals bind through
+**typed slots** rather than a template language (an animation's `collideWithParam`, an object's
+`tintParam`, an animation's `durationParam`), so binding stays typed and testable. `expandPlan`
+resolves them from `args` with defaults as fallback — which is how **`collideWith` stops being
+hardcoded** and starts pointing at real plan objects. **Parameter sets** are named, reusable
+argument bundles ("Tanks" → [tankA, tankB]) so a planner picks rather than re-selects.
+
+### 18.5 Also folded in
+
+1. Shapes/mechanics move from the toolbar into the palette as a third tab (that toolbar is full).
+2. Drag-and-drop placement for attacks and shapes — drop at the cursor, as icons already do.
+3. Thumbnails in the attack palette; a library has to be browsable.
+4. Attack bars in the step timeline, so `startMs` is dragged rather than typed.
+5. An "updated" badge when a definition changed since an instance was placed (uses `version`).
+6. Copy/paste/duplicate of instances, once they're ordinary canvas citizens.
+
+### 18.6 Stages
+
+1. **Grouping** — schema, selection resolution, group/ungroup, tests.
+2. **Attack model v2** — unit space, rect instances, params schema; rewrite `expandPlan`; the
+   designer authors in unit space. (Breaking; do before real data exists.)
+3. **Canvas instances** — selectable/transformable attacks; delete the numeric panel.
+4. **Palette** — Attacks (and Shapes) tabs, drag-drop, thumbnails.
+5. **Parameters end-to-end** — bindings, args UI, parameter sets.
+6. **Timeline bars** for attack timing.
+
+---
+
 *End of plan. Suggested next actions: (a) confirm the three key decisions in §2, then (b) scaffold Phase 0–1, or (c) turn this document into a checklist/issue tracker.*

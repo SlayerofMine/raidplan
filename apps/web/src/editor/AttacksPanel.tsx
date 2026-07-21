@@ -1,6 +1,4 @@
-import { useEffect, useState } from "react";
-import type { AttackDef, AttackInstance } from "@raidplan/shared";
-import { api } from "../api/client";
+import type { AttackInstance } from "@raidplan/shared";
 import { BASE_STEP_INDEX, useEditorStore } from "../store/editorStore";
 
 /**
@@ -20,16 +18,10 @@ export function AttacksPanel() {
   const attacks = useEditorStore((s) => s.steps[s.currentStepIndex]?.attacks);
   const background = useEditorStore((s) => s.background);
   const addAttack = useEditorStore((s) => s.addAttack);
-
-  const [defs, setDefs] = useState<AttackDef[] | null>(null);
-
-  useEffect(() => {
-    if (!encounterId) return;
-    api.attack.listForEncounter
-      .query({ encounterId })
-      .then(setDefs)
-      .catch(() => setDefs([]));
-  }, [encounterId]);
+  // Loaded once per plan by `AttackDefResolver`, and shared with the canvas
+  // preview and the WebM export so all three expand from the same defs.
+  const defsById = useEditorStore((s) => s.attackDefs);
+  const defs = Object.values(defsById);
 
   if (!encounterId) return null;
 
@@ -47,12 +39,12 @@ export function AttacksPanel() {
       ) : (
         <>
           <ul className="mb-3 flex flex-col gap-1">
-            {defs?.length === 0 && (
+            {defs.length === 0 && (
               <li data-testid="no-attacks" className="text-xs text-neutral-500">
                 This encounter has no attacks yet.
               </li>
             )}
-            {defs?.map((def) => (
+            {defs.map((def) => (
               <li key={def.id} className="flex items-center gap-2">
                 <span className="flex-1 truncate text-sm">{def.name}</span>
                 <button
@@ -86,10 +78,7 @@ export function AttacksPanel() {
                 key={instance.id}
                 stepIndex={stepIndex}
                 instance={instance}
-                name={
-                  defs?.find((d) => d.id === instance.attackId)?.name ??
-                  "Attack"
-                }
+                name={defsById[instance.attackId]?.name ?? "Attack"}
               />
             ))}
           </ul>

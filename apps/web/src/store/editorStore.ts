@@ -5,6 +5,7 @@ import { immer } from "zustand/middleware/immer";
 import {
   resolveObjectState,
   type Anim,
+  type AttackDef,
   type AttackInstance,
   type Background,
   type ObjectBase,
@@ -19,7 +20,7 @@ import {
 } from "@raidplan/shared";
 import { DEFAULT_BACKGROUND } from "@raidplan/shared";
 import { getIconById } from "@raidplan/shared";
-import { nextAnimId, nextAttackId, nextStepId } from "./ids";
+import { nextAnimId, nextAttackId, nextGroupId, nextStepId } from "./ids";
 import {
   fitView,
   screenToNative,
@@ -93,6 +94,14 @@ export interface EditorState extends PlanDoc {
   toggleSelect: (id: string) => void;
   selectAll: () => void;
   clearSelection: () => void;
+  /**
+   * Tie the current selection together so it selects and transforms as one
+   * (plan §18.1). Returns the new group id, or undefined for a selection of
+   * fewer than two. Members already in other groups are merged into this one.
+   */
+  groupSelected: () => string | undefined;
+  /** Dissolve the groups any selected object belongs to. */
+  ungroupSelected: () => void;
 
   // --- steps (plan §3.2) ---
   addStep: () => string;
@@ -110,6 +119,15 @@ export interface EditorState extends PlanDoc {
     patch: Partial<Omit<Anim, "id">>,
   ) => void;
   deleteAnimation: (stepIndex: number, animId: string) => void;
+
+  /**
+   * Definitions for the attacks this plan can use, keyed by id (plan §17).
+   * Ephemeral: fetched per plan, never part of the document, undo or autosave —
+   * a plan references attacks, it doesn't own them. Shared by the canvas preview
+   * and the WebM export so both expand from the same defs.
+   */
+  attackDefs: Record<string, AttackDef>;
+  setAttackDefs: (defs: Record<string, AttackDef>) => void;
 
   // --- placed attacks (plan §17) ---
   /** Drop a pre-designed attack onto a step at a point. Returns its instance id. */
@@ -210,6 +228,33 @@ function reindexZ(s: {
   });
 }
 
+/**
+ * Expand ids to whole groups: selecting any member selects them all (plan
+ * §18.1). Returned in document order so a selection is deterministic. This is
+ * the single choke point that makes grouping work for clicks, marquee sweeps
+ * and select-all alike — and it's why the existing multi-node transformer
+ * transforms a group rigidly with no extra maths.
+ */
+function withGroupMembers(
+  objects: Record<string, PlanObject>,
+  objectIds: string[],
+  ids: string[],
+): string[] {
+  const groups = new Set<string>();
+  for (const id of ids) {
+    const groupId = objects[id]?.groupId;
+    if (groupId) groups.add(groupId);
+  }
+  const wanted = new Set(ids.filter((id) => objects[id]));
+  if (groups.size > 0) {
+    for (const id of objectIds) {
+      const groupId = objects[id]?.groupId;
+      if (groupId && groups.has(groupId)) wanted.add(id);
+    }
+  }
+  return objectIds.filter((id) => wanted.has(id));
+}
+
 /** Offset (native px) applied to duplicated/pasted copies so they're visible. */
 const CLONE_OFFSET = 20;
 
@@ -265,6 +310,7 @@ export const useEditorStore = create<EditorState>()(
       title: "Untitled plan",
       raid: "",
       encounterId: undefined,
+      attackDefs: {},
       background: DEFAULT_BACKGROUND,
       objects: {},
       objectIds: [],
@@ -491,14 +537,17 @@ export const useEditorStore = create<EditorState>()(
 
       select: (ids) =>
         set((s) => {
-          s.selectedIds = ids.filter((id) => s.objects[id]);
+          s.selectedIds = withGroupMembers(s.objects, s.objectIds, ids);
         }),
       toggleSelect: (id) =>
         set((s) => {
           if (!s.objects[id]) return;
-          s.selectedIds = s.selectedIds.includes(id)
-            ? s.selectedIds.filter((x) => x !== id)
-            : [...s.selectedIds, id];
+          // A group toggles as a unit, never member by member.
+          const members = withGroupMembers(s.objects, s.objectIds, [id]);
+          const selected = new Set(s.selectedIds);
+          s.selectedIds = members.some((m) => selected.has(m))
+            ? s.selectedIds.filter((x) => !members.includes(x))
+            : [...s.selectedIds, ...members.filter((m) => !selected.has(m))];
         }),
       selectAll: () =>
         set((s) => {
@@ -507,6 +556,33 @@ export const useEditorStore = create<EditorState>()(
       clearSelection: () =>
         set((s) => {
           s.selectedIds = [];
+        }),
+
+      groupSelected: () => {
+        if (get().selectedIds.length < 2) return undefined;
+        const groupId = nextGroupId();
+        set((s) => {
+          for (const id of s.selectedIds) {
+            const object = s.objects[id];
+            if (object) object.groupId = groupId;
+          }
+        });
+        return groupId;
+      },
+
+      ungroupSelected: () =>
+        set((s) => {
+          const groups = new Set<string>();
+          for (const id of s.selectedIds) {
+            const groupId = s.objects[id]?.groupId;
+            if (groupId) groups.add(groupId);
+          }
+          for (const id of s.objectIds) {
+            const object = s.objects[id];
+            if (object?.groupId && groups.has(object.groupId)) {
+              delete object.groupId;
+            }
+          }
         }),
 
       addStep: () => {
@@ -610,6 +686,11 @@ export const useEditorStore = create<EditorState>()(
           const step = s.steps[stepIndex];
           if (!step) return;
           step.animations = step.animations.filter((a) => a.id !== animId);
+        }),
+
+      setAttackDefs: (defs) =>
+        set((s) => {
+          s.attackDefs = defs;
         }),
 
       addAttack: (stepIndex, attackId, at) => {

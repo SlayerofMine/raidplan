@@ -1,4 +1,5 @@
 import { AnimationPanel } from "./AnimationPanel";
+import { AttackDefResolver } from "./AttackDefResolver";
 import { AttacksPanel } from "./AttacksPanel";
 import { CanvasStage } from "./canvas/CanvasStage";
 import { IconPalette } from "./IconPalette";
@@ -60,6 +61,8 @@ export function EditorLayout({ planId }: { planId: string }) {
       </div>
       {/* Fetches URLs for synced WoW tokens a reopened plan references. */}
       <SyncedIconResolver />
+      {/* Loads this encounter's attack definitions for the preview + export. */}
+      <AttackDefResolver />
       <div
         style={{ gridArea: "props" }}
         className="flex min-h-0 flex-col overflow-y-auto border-l border-panelborder bg-panel"

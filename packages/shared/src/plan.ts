@@ -66,6 +66,13 @@ export const PlanObjectSchema = z.object({
   toId: z.string().min(1).optional(),
   base: ObjectBaseSchema,
   locked: z.boolean().optional(),
+  /**
+   * Objects sharing a `groupId` are selected and transformed as one (plan
+   * §18.1). A group exists precisely when two or more objects share the id —
+   * there's no separate record to keep in step, so deleting members can never
+   * strand one.
+   */
+  groupId: z.string().min(1).optional(),
 });
 export type PlanObject = z.infer<typeof PlanObjectSchema>;
 

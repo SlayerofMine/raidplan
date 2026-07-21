@@ -18,6 +18,7 @@ import {
   normalizeRect,
   objectsInMarquee,
 } from "./marquee";
+import { AttackPreviewLayer } from "./AttackPreviewLayer";
 import { ObjectNode } from "./ObjectNode";
 import { SelectionTransformer } from "./SelectionTransformer";
 import { setStageNode } from "./stageHandle";
@@ -237,6 +238,8 @@ export function CanvasStage() {
           {objectIds.map((id) => (
             <ObjectNode key={id} objectId={id} draggable={!isPanning} />
           ))}
+          {/* Placed attacks, drawn read-only above the plan's own objects. */}
+          <AttackPreviewLayer />
           {marquee && (
             <Rect
               {...normalizeRect(marquee.start, marquee.current)}
