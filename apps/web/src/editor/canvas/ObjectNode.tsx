@@ -46,7 +46,7 @@ export const ObjectNode = memo(function ObjectNode({
     others: { node: KonvaNode; x: number; y: number }[];
   } | null>(null);
 
-  if (!object || !state || !state.visible) return null;
+  if (!object || !state) return null;
   // A tether has no transform of its own — it's drawn from its endpoints.
   if (object.type === "tether") return <TetherNode objectId={objectId} />;
   // Transforms come from the resolved step state; tint/label are step-independent.
@@ -117,6 +117,12 @@ export const ObjectNode = memo(function ObjectNode({
       y={y}
       rotation={rotation}
       opacity={opacity}
+      // Hidden objects keep their node rather than unmounting: playback drives
+      // Konva by id, so an object that starts a step invisible — every attack
+      // part does (plan §17) — must already be there for an entrance effect to
+      // reveal. Konva skips invisible nodes when drawing and hit-testing, so
+      // this costs nothing on screen.
+      visible={state.visible}
       draggable={draggable && !object.locked}
       // Selection is an *editor* concern. The viewer enables listening on steps
       // with onClick animations, and must not mutate the editor's selection.

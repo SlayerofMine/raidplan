@@ -40,7 +40,10 @@ function endpointCentre(
 ): { x: number; y: number } | null {
   const layer = shape.getLayer();
   const node = layer?.findOne(`#${objectId}`);
-  if (!layer || !node) return null;
+  // A hidden endpoint counts as absent: hidden objects keep their nodes so
+  // playback can reveal them, and a tether to something not on screen has
+  // nothing to draw.
+  if (!layer || !node || !node.visible()) return null;
   const box = node.getClientRect({ relativeTo: layer });
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
@@ -75,7 +78,7 @@ export function TetherNode({ objectId }: { objectId: string }) {
   const select = useEditorStore((s) => s.select);
   const toggleSelect = useEditorStore((s) => s.toggleSelect);
 
-  if (!object || !self || !self.visible) return null;
+  if (!object || !self) return null;
   const { fromId, toId } = object;
   if (!fromId || !toId) return null;
 
@@ -92,6 +95,8 @@ export function TetherNode({ objectId }: { objectId: string }) {
     <Shape
       id={objectId}
       opacity={self.opacity}
+      // Kept mounted while hidden, like every other object — see `ObjectNode`.
+      visible={self.visible}
       // Re-read the endpoints every draw — this is the per-frame follow.
       sceneFunc={(ctx: Context, shape: ShapeNode) => {
         const geometry = geometryFor(shape, fromId, toId, style);

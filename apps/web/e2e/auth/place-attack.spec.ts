@@ -42,6 +42,13 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
   await expect(page.getByTestId("attacks-need-step")).toBeVisible();
   await page.getByTestId("add-step").click();
 
+  // Autosave is debounced, so listen for the save that carries the attack
+  // itself before trusting the viewer to have it.
+  const attackSaved = page.waitForResponse(
+    (r) =>
+      r.url().includes("saveDoc") &&
+      (r.request().postData() ?? "").includes('"attacks":[{'),
+  );
   await page.getByRole("button", { name: "Place Sweeping Flame" }).click();
 
   // It's placed on the step. Every value has one home now, so the panel itself
@@ -57,7 +64,28 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
     page.getByRole("button", { name: /Sweeping Flame · starts 0ms/ }),
   ).toBeVisible();
 
+  // --- and it is actually on screen while its step plays (§17's whole point) ---
+  const planUrl = page.url();
+  await attackSaved;
+  await page.getByTestId("open-viewer").click();
+  await expect(page.getByTestId("viewer-step")).toContainText("1 / 1");
+
+  // Nothing else on this plan moves, so the board changing *is* the attack
+  // arriving. Asserted on real pixels rather than on the scene graph: an attack
+  // that expands, resolves and animates but never gets drawn is the bug.
+  const board = page.getByTestId("viewer-canvas");
+  await expect(board).toBeVisible();
+  const before = await board.screenshot();
+
+  await page.getByTestId("play-toggle").click();
+  await expect
+    .poll(async () => (await board.screenshot()).equals(before))
+    .toBe(false);
+
   // --- it's a canvas citizen: clickable there, and Delete removes it ---
+  await page.goto(planUrl);
+  // A reload lands on the base layout; attacks live on a step.
+  await page.getByTestId("step-0").click();
   const canvas = (await page.getByTestId("canvas-container").boundingBox())!;
   // Placed at the middle of the board, which "fit" puts at the canvas centre.
   await page.mouse.click(

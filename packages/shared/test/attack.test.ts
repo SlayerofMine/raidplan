@@ -108,6 +108,10 @@ const makePlan = (steps: Step[], objects: PlanObject[] = []): Plan => ({
 /** The last object in the expanded plan — the one an attack just added. */
 const lastObject = (plan: Plan) => plan.objects.at(-1)!;
 
+/** One expanded animation, by its namespaced id. */
+const animById = (plan: Plan, id: string, stepIndex = 0) =>
+  plan.steps[stepIndex]!.animations.find((a) => a.id === id)!;
+
 const expandOne = (def: AttackDef, instance: AttackInstance) =>
   expandPlan(makePlan([step({ attacks: [instance] })]), { atk: def });
 
@@ -257,7 +261,8 @@ describe("expandPlan — stamping", () => {
     const out = expandPlan(plan, { atk: def });
     expect(out.objects[0]).toBe(own);
     expect(out.steps[0]!.animations[0]).toBe(ownAnim);
-    expect(out.steps[0]!.animations).toHaveLength(2); // own + expanded
+    // own + the def's, + the implicit entrance that reveals the attack.
+    expect(out.steps[0]!.animations).toHaveLength(3);
   });
 });
 
@@ -360,6 +365,136 @@ describe("expandPlan — animations", () => {
   });
 });
 
+describe("expandPlan — an attack shows itself", () => {
+  /**
+   * Materialising an attack's parts hidden is what keeps them off the steps
+   * around it — but nothing tweens `visible`, so without an entrance the attack
+   * would play out invisibly. The expansion supplies one.
+   */
+  it("reveals a part with no entrance of its own, when the attack fires", () => {
+    const out = expandOne(
+      makeDef({ objects: [defObj("cone")] }),
+      inst({ startMs: 300 }),
+    );
+    const enter = animById(out, "i1::cone#enter");
+    expect(enter).toMatchObject({
+      objectId: "i1::cone",
+      kind: "entrance",
+      effect: "appear",
+      trigger: "onEnter",
+      delayMs: 300,
+    });
+    expect(out.steps[0]!.overrides["i1::cone"]).toEqual({ visible: true });
+  });
+
+  it("leaves a part that has its own entrance alone", () => {
+    const def = makeDef({
+      objects: [defObj("cone")],
+      animations: [
+        defAnim({
+          id: "in",
+          objectId: "cone",
+          kind: "entrance",
+          effect: "fade",
+        }),
+      ],
+    });
+    const out = expandOne(def, inst());
+    expect(
+      out.steps[0]!.animations.filter((a) => a.effect === "appear"),
+    ).toHaveLength(0);
+  });
+
+  it("keeps a part the author hid hidden, and never reveals it", () => {
+    const def = makeDef({ objects: [defObj("ghost", { visible: false })] });
+    const out = expandOne(def, inst());
+    expect(out.steps[0]!.overrides["i1::ghost"]).toEqual({ visible: false });
+    expect(out.steps[0]!.animations).toHaveLength(0);
+  });
+
+  it("ends visible when the def's own entrance brings a hidden part on", () => {
+    const def = makeDef({
+      objects: [defObj("orb", { visible: false })],
+      animations: [
+        defAnim({
+          id: "in",
+          objectId: "orb",
+          kind: "entrance",
+          effect: "appear",
+        }),
+      ],
+    });
+    const out = expandOne(def, inst());
+    expect(out.steps[0]!.overrides["i1::orb"]).toMatchObject({ visible: true });
+  });
+});
+
+describe("expandPlan — an attack owns its own timing", () => {
+  /** Two chained animations: the second follows the first by 500ms. */
+  const chained = makeDef({
+    objects: [defObj("o1")],
+    animations: [
+      defAnim({ id: "a1", objectId: "o1", durationMs: 500 }),
+      defAnim({
+        id: "a2",
+        objectId: "o1",
+        trigger: "afterPrevious",
+        durationMs: 200,
+      }),
+    ],
+  });
+
+  it("flattens the def's chain onto absolute delays", () => {
+    const out = expandOne(chained, inst());
+    expect(animById(out, "i1::a1")).toMatchObject({
+      trigger: "onEnter",
+      delayMs: 0,
+    });
+    expect(animById(out, "i1::a2")).toMatchObject({
+      trigger: "onEnter",
+      delayMs: 500,
+    });
+  });
+
+  it("shifts the whole bundle by startMs exactly once", () => {
+    const out = expandOne(chained, inst({ startMs: 1000 }));
+    // Not 1000 + 500 + 1000: the offset moves the attack, it doesn't compound
+    // down the chain.
+    expect(animById(out, "i1::a1").delayMs).toBe(1000);
+    expect(animById(out, "i1::a2").delayMs).toBe(1500);
+  });
+
+  it("keeps a deferred animation's own trigger and delay", () => {
+    const def = makeDef({
+      objects: [defObj("o1")],
+      animations: [
+        defAnim({
+          id: "hit",
+          objectId: "o1",
+          trigger: "onCollision",
+          delayMs: 50,
+        }),
+      ],
+    });
+    const out = expandOne(def, inst({ startMs: 400 }));
+    // It fires from the collision, not from the step — offsetting it would
+    // delay the *reaction*.
+    expect(animById(out, "i1::hit")).toMatchObject({
+      trigger: "onCollision",
+      delayMs: 50,
+    });
+  });
+
+  it("keeps two attacks on one step from chaining into each other", () => {
+    const plan = makePlan([
+      step({ attacks: [inst({ id: "i1" }), inst({ id: "i2" })] }),
+    ]);
+    const out = expandPlan(plan, { atk: chained });
+    // i2's first animation still starts at 0 — it does not queue up behind i1.
+    expect(animById(out, "i2::a1").delayMs).toBe(0);
+  });
+});
+
 describe("expandPlan — parameters", () => {
   /** A pickup whose collision targets the *plan* supplies (plan §18.4). */
   const catchable = (over = {}) =>
@@ -442,7 +577,7 @@ describe("expandPlan — parameters", () => {
       inst({ args: { colour: "#ff0000", speed: 1200 } }),
     );
     expect(lastObject(out).base.tint).toBe("#ff0000");
-    expect(out.steps[0]!.animations[0]!.durationMs).toBe(1200);
+    expect(animById(out, "i1::a1").durationMs).toBe(1200);
   });
 
   it("leaves values alone when a binding has no argument or default", () => {
@@ -458,7 +593,7 @@ describe("expandPlan — parameters", () => {
     });
     const out = expandOne(def, inst());
     expect(lastObject(out).base.tint).toBe("#123456");
-    expect(out.steps[0]!.animations[0]!.durationMs).toBe(500);
+    expect(animById(out, "i1::a1").durationMs).toBe(500);
   });
 });
 

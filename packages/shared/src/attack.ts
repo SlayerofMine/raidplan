@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type Point } from "./transform.js";
+import { isDeferredTrigger, layoutStepTimeline } from "./timeline.js";
 import {
   AnimSchema,
   PlanObjectSchema,
@@ -175,6 +176,20 @@ function placePoint(u: Point, t: Placement): Point {
 const scopedId = (instanceId: string, localId: string) =>
   `${instanceId}::${localId}`;
 
+/**
+ * Objects an entrance effect brings on screen during the attack. They're
+ * authored hidden (or become hidden when materialised) and the animation is what
+ * reveals them, so their settled state must be *visible* even though their base
+ * isn't.
+ */
+function entranceTargets(def: AttackDef): Set<string> {
+  const ids = new Set<string>();
+  for (const anim of def.animations) {
+    if (anim.kind === "entrance") ids.add(anim.objectId);
+  }
+  return ids;
+}
+
 /** Place an object's base transform, hidden until its step reveals it. */
 function placeBase(base: ObjectBase, t: Placement): ObjectBase {
   const p = placePoint({ x: base.x, y: base.y }, t);
@@ -226,6 +241,7 @@ function expandInstance(
   overrides: Record<string, StepOverride>;
 } {
   const t = placementOf(instance);
+  const entrances = entranceTargets(def);
 
   /** An argument the plan supplied, else the parameter's declared default. */
   const argOf = (key: string): AttackParamValue | undefined =>
@@ -243,7 +259,15 @@ function expandInstance(
     };
   });
 
-  const animations = def.animations.map((a) => {
+  // Resolve the def's own trigger chain *before* it joins the host step, using
+  // the very rules the player will apply to it. An attack is one indivisible
+  // bundle: its internals must not chain off whatever the plan happens to have
+  // animated just before, and `startMs` must shift it exactly once.
+  const spans = new Map(
+    layoutStepTimeline(def.animations).spans.map((s) => [s.animId, s]),
+  );
+
+  const animations: Anim[] = def.animations.map((a) => {
     // A bound collideWith names objects in the **plan**, so those ids are used
     // as given; only a definition's own literal ids get namespaced.
     const boundTargets = argOf(def.bindings.collideWith[a.id] ?? "");
@@ -258,8 +282,14 @@ function expandInstance(
       id: scopedId(instance.id, a.id),
       objectId: scopedId(instance.id, a.objectId),
       ...(collideWith ? { collideWith } : {}),
-      // The instance's start offset shifts the whole attack within its step.
-      delayMs: a.delayMs + instance.startMs,
+      // A deferred animation is timed from the event that fires it (a click, a
+      // collision), not from the step, so its delay is left exactly as authored.
+      ...(isDeferredTrigger(a.trigger)
+        ? {}
+        : {
+            trigger: "onEnter" as const,
+            delayMs: instance.startMs + (spans.get(a.id)?.startMs ?? a.delayMs),
+          }),
       ...(typeof boundDuration === "number"
         ? { durationMs: boundDuration }
         : {}),
@@ -267,9 +297,36 @@ function expandInstance(
     };
   });
 
+  // An attack's parts are materialised hidden so they can't show on the steps
+  // around it, which leaves the author on the hook for an entrance on every
+  // single one. Give the ones that have none an implicit `appear` when the
+  // attack fires — otherwise the attack plays out invisibly (the step's end
+  // state alone can't reveal it, because nothing tweens `visible`).
+  for (const o of def.objects) {
+    if (!o.base.visible || entrances.has(o.id)) continue;
+    animations.unshift({
+      id: scopedId(instance.id, `${o.id}#enter`),
+      objectId: scopedId(instance.id, o.id),
+      kind: "entrance",
+      effect: "appear",
+      trigger: "onEnter",
+      delayMs: instance.startMs,
+      durationMs: 0,
+      easing: "none",
+    });
+  }
+
   const overrides: Record<string, StepOverride> = {};
-  for (const [localId, ov] of Object.entries(def.overrides)) {
-    overrides[scopedId(instance.id, localId)] = placeOverride(ov, t);
+  for (const o of def.objects) {
+    const id = scopedId(instance.id, o.id);
+    const end = def.overrides[o.id];
+    // The settled state: the def's placed end state, present unless the def
+    // says otherwise — an object the author left hidden and never brings on
+    // stays hidden.
+    overrides[id] = {
+      ...(end ? placeOverride(end, t) : {}),
+      visible: end?.visible ?? (o.base.visible || entrances.has(o.id)),
+    };
   }
 
   return { objects, animations, overrides };
@@ -281,7 +338,13 @@ function expandInstance(
  *
  * Each attack's objects exist **only during their step**: hidden before (base
  * `visible: false`), shown by a `visible: true` override on the step, and hidden
- * again on the next one. The def's own animations play on top of that.
+ * again on the next one. That override is the *settled* state, which is what a
+ * renderer draws when the step is parked — but nothing tweens `visible`, so
+ * mid-playback an attack is revealed by an entrance effect instead: the def's
+ * own, or an implicit `appear` at the instant the attack fires.
+ *
+ * The def's animations are flattened onto absolute delays on the way in, so an
+ * attack keeps its own timing no matter what else shares the step.
  *
  * Pure and non-mutating. An instance whose `attackId` isn't in `defsById` is
  * skipped — a missing def leaves the rest of the plan renderable, like a missing
@@ -313,10 +376,9 @@ export function expandPlan(
       const here = steps[stepIndex]!;
       const after = steps[stepIndex + 1];
       for (const object of expanded.objects) {
-        // The def's placed end state, made present on its step (unless the def
-        // explicitly ends it hidden, e.g. a disappear).
-        const end = expanded.overrides[object.id] ?? {};
-        here.overrides[object.id] = { ...end, visible: end.visible ?? true };
+        // The def's settled state lands on the attack's step; the next step
+        // takes it away again, so an attack is over when the step is.
+        here.overrides[object.id] = expanded.overrides[object.id] ?? {};
         if (after) after.overrides[object.id] = { visible: false };
       }
       here.animations.push(...expanded.animations);

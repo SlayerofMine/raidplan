@@ -37,7 +37,12 @@ export function SelectionTransformer() {
       // instance id (plan §18.3) — resizing it *is* resizing the rectangle.
       .concat(selectedAttackIds)
       .map((id) => stage.findOne(`#${id}`))
-      .filter((node): node is KonvaNode => node !== undefined);
+      // Hidden objects keep their nodes so playback can reveal them, but they
+      // can't be clicked or dragged — handles floating over nothing would be a
+      // lie about what you can grab.
+      .filter(
+        (node): node is KonvaNode => node !== undefined && node.isVisible(),
+      );
 
     transformer.nodes(nodes);
     transformer.getLayer()?.batchDraw();

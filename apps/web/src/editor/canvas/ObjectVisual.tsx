@@ -37,7 +37,6 @@ export function ObjectVisual({
 }) {
   const icon = useImageElement(useIconSrc(object.iconId));
 
-  if (!state.visible) return null;
   // A tether derives its geometry from two *store* objects, so it has no
   // standalone visual to preview. Attack tethers show in the viewer/preview.
   if (object.type === "tether") return null;
@@ -52,6 +51,9 @@ export function ObjectVisual({
       y={y}
       rotation={rotation}
       opacity={opacity}
+      // Mounted even while hidden, so the exporter's GSAP pass can reveal it —
+      // the same rule `ObjectNode` follows.
+      visible={state.visible}
       listening={false}
     >
       <ObjectContent
