@@ -70,19 +70,15 @@ describe("AttacksPanel", () => {
     ).toBeNull();
   });
 
-  it("tunes only what the canvas can't express — when it fires", async () => {
-    const user = userEvent.setup();
+  it("has no number boxes left — every value has its own home", async () => {
     state().loadPlan(plan("enc1"));
     state().selectStep(0);
     state().addAttack(0, "atk1", { x: 0, y: 0 });
     render(<AttacksPanel />);
 
-    const start = await screen.findByLabelText("Frontal Cone start");
-    await user.clear(start);
-    await user.type(start, "250");
-    expect(state().steps[0]!.attacks![0]!.startMs).toBe(250);
-
-    // Position/size/rotation are edited on the canvas, not here.
+    // Position/size/rotation are on the canvas; timing is on the timeline.
+    await screen.findByTestId("placed-attack");
+    expect(screen.queryByLabelText("Frontal Cone start")).toBeNull();
     expect(screen.queryByLabelText("Frontal Cone rotation")).toBeNull();
     expect(screen.queryByLabelText("Frontal Cone x")).toBeNull();
   });

@@ -602,13 +602,30 @@ argument bundles ("Tanks" → [tankA, tankB]) so a planner picks rather than re-
 
 ### 18.6 Stages
 
-1. **Grouping** — schema, selection resolution, group/ungroup, tests.
-2. **Attack model v2** — unit space, rect instances, params schema; rewrite `expandPlan`; the
-   designer authors in unit space. (Breaking; do before real data exists.)
-3. **Canvas instances** — selectable/transformable attacks; delete the numeric panel.
-4. **Palette** — Attacks (and Shapes) tabs, drag-drop, thumbnails.
-5. **Parameters end-to-end** — bindings, args UI, parameter sets.
-6. **Timeline bars** for attack timing.
+1. **Grouping** [DONE] — `PlanObject.groupId?`; selection expands to the whole group at the one
+   choke point `select`/`toggleSelect` share, so the existing multi-node transformer moves a
+   group rigidly with no new maths. Ctrl+G / Ctrl+Shift+G.
+2. **Attack model v2** [DONE] — definitions entirely in -1..1 centred unit space; an instance is
+   a rectangle `{x,y,w,h,rotation,startMs,args}`. `defToPlan`/`planToAttackContent` are the only
+   places unit space is entered or left, so the designer kept working in pixels unchanged.
+   SCHEMA_VERSION → 2, clean break.
+3. **Canvas instances** [DONE] — one invisible frame per instance is the click/drag/transform
+   target and what the Transformer attaches to; the drawn parts stay absolute and inert so the
+   WebM exporter can still drive them by id.
+4. **Palette** [DONE] — Attacks and Shapes tabs with drag-drop; attack thumbnails are the
+   definition drawn into a `-1 -1 2 2` viewBox. Shapes left the toolbar; Tether stayed, being an
+   operation on a selection.
+5. **Parameters** [DONE] — declared on the def, answered per instance, read through typed slots
+   (`collideWith`/`durationMs`/`tint`). A *bound* collideWith names plan objects, so those ids
+   are used as given rather than namespaced. **Still open: reusable parameter *sets*** (named
+   bundles like "Tanks" → [tankA, tankB]).
+6. **Timeline bars** [DONE] — a placed attack gets a bar at `startMs`, as long as its definition
+   runs, dragged or arrow-keyed like an animation. No duration handle: an attack's length is its
+   definition's, not something a plan retunes.
+
+Net effect: the attacks panel has **no number boxes left** — the palette places, the canvas
+positions and sizes, the timeline says when, and the panel carries only the arguments the
+definition asked the plan for.
 
 ---
 

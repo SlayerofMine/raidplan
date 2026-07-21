@@ -4,13 +4,11 @@ import { AttackArgs } from "./AttackArgs";
 /**
  * The attacks placed on the current step (plan §18.3).
  *
- * **Placing** happens in the palette, alongside tokens and shapes; **position,
- * size and rotation** happen on the canvas. So this is purely an inspector for
- * what's already down: what's here, which one is selected, when each fires, and
- * removing one. No coordinate boxes, no second copy of the library.
+ * Each job has one home: the **palette** places, the **canvas** positions and
+ * sizes, the **timeline** says when it fires. So this is an inspector plus the
+ * one thing with nowhere else to live — the arguments the definition asked the
+ * plan for. No number boxes at all.
  */
-const NUM = "w-20 rounded border border-panelborder bg-neutral-900 px-1 py-0.5";
-
 export function AttacksPanel() {
   const encounterId = useEditorStore((s) => s.encounterId);
   const stepIndex = useEditorStore((s) => s.currentStepIndex);
@@ -74,23 +72,10 @@ export function AttacksPanel() {
                   Remove
                 </button>
               </div>
-              <label className="flex items-center gap-1 text-xs text-neutral-400">
-                starts
-                <input
-                  type="number"
-                  step="50"
-                  min="0"
-                  aria-label={`${name} start`}
-                  value={instance.startMs}
-                  onChange={(e) =>
-                    updateAttack(stepIndex, instance.id, {
-                      startMs: Number(e.target.value),
-                    })
-                  }
-                  className={NUM}
-                />
-                ms into the step
-              </label>
+              <p className="text-xs text-neutral-500">
+                starts {Math.round(instance.startMs)}ms in — drag its bar on the
+                timeline to change that.
+              </p>
               <AttackArgs
                 params={defsById[instance.attackId]?.params ?? []}
                 instance={instance}

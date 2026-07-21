@@ -44,13 +44,18 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
 
   await page.getByRole("button", { name: "Place Sweeping Flame" }).click();
 
-  // It's placed on the step, and exposes only its timing here — position, size
-  // and rotation are edited on the canvas (plan §18.3).
+  // It's placed on the step. Every value has one home now, so the panel itself
+  // carries no number boxes at all (§18.3/§18.6).
   await expect(
     page.getByRole("button", { name: "Remove Sweeping Flame" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Sweeping Flame start")).toHaveValue("0");
   await expect(page.getByLabel("Sweeping Flame rotation")).toHaveCount(0);
+
+  // When it fires is a draggable bar on the timeline.
+  await page.getByTestId("timeline-toggle").click();
+  await expect(
+    page.getByRole("button", { name: /Sweeping Flame · starts 0ms/ }),
+  ).toBeVisible();
 
   // --- it's a canvas citizen: clickable there, and Delete removes it ---
   const canvas = (await page.getByTestId("canvas-container").boundingBox())!;

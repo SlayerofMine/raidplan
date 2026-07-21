@@ -1,5 +1,5 @@
 import { useMemo, type PointerEvent as ReactPointerEvent } from "react";
-import type { AnimKind } from "@raidplan/shared";
+import type { AnimKind, AttackInstance } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { objectDisplayName } from "../objectName";
 import { useContainerSize } from "../canvas/useContainerSize";
@@ -61,6 +61,23 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
     [step?.animations],
   );
 
+  // Placed attacks get a row each: they occupy the step from `startMs` for as
+  // long as their definition runs — the same `layoutStepTimeline` the player
+  // uses, so a bar means the same thing whether it's an animation or an attack.
+  const attackDefs = useEditorStore((s) => s.attackDefs);
+  const attackRows = useMemo(
+    () =>
+      (step?.attacks ?? []).map((instance) => {
+        const def = attackDefs[instance.attackId];
+        return {
+          instance,
+          name: def?.name ?? "Attack",
+          spanMs: def ? layoutStepTimeline(def.animations).totalMs : 0,
+        };
+      }),
+    [step?.attacks, attackDefs],
+  );
+
   // Object rows in first-appearance order, so the chart reads top-to-bottom the
   // way the animation list does.
   const rows = useMemo(() => {
@@ -81,7 +98,13 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
   // The track column is the measured width minus the fixed label column (there
   // is no column gap), so the scale is known even before the first row exists.
   const trackWidth = Math.max(0, measured.width - LABEL_W);
-  const scale = timelineScale(trackWidth, timeline.totalMs);
+  // An attack can outlast the step's own animations, so the ruler has to cover
+  // it or its bar would run off the end.
+  const contentMs = attackRows.reduce(
+    (longest, row) => Math.max(longest, row.instance.startMs + row.spanMs),
+    timeline.totalMs,
+  );
+  const scale = timelineScale(trackWidth, contentMs);
 
   return (
     <section
@@ -109,7 +132,7 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
 
       {/* Always mounted, so its width is known before any row appears. */}
       <div ref={measureRef} data-testid={`timeline-track-${stepIndex}`}>
-        {rows.length === 0 ? (
+        {rows.length === 0 && attackRows.length === 0 ? (
           <p
             data-testid={`timeline-empty-${stepIndex}`}
             className="py-1 text-xs text-neutral-600"
@@ -147,10 +170,109 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
                 />
               );
             })}
+
+            {attackRows.map((row) => (
+              <AttackRow
+                key={row.instance.id}
+                stepIndex={stepIndex}
+                instance={row.instance}
+                name={row.name}
+                spanMs={row.spanMs}
+                pxPerMs={scale.pxPerMs}
+              />
+            ))}
           </div>
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * A placed attack's bar: drag it (or Arrow keys) to change when it fires within
+ * the step. There's no duration handle — an attack's length is its definition's,
+ * not something a plan retunes.
+ */
+function AttackRow({
+  stepIndex,
+  instance,
+  name,
+  spanMs,
+  pxPerMs,
+}: {
+  stepIndex: number;
+  instance: AttackInstance;
+  name: string;
+  spanMs: number;
+  pxPerMs: number;
+}) {
+  const updateAttack = useEditorStore((s) => s.updateAttack);
+  const selectAttack = useEditorStore((s) => s.selectAttack);
+  const selected = useEditorStore((s) =>
+    s.selectedAttackIds.includes(instance.id),
+  );
+
+  const setStart = (startMs: number) =>
+    updateAttack(stepIndex, instance.id, { startMs });
+
+  const describe = `${name} · starts ${Math.round(instance.startMs)}ms · ${Math.round(spanMs)}ms`;
+
+  const beginDrag = (e: ReactPointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const from = instance.startMs;
+    const move = (ev: PointerEvent) =>
+      setStart(dragValueMs(from, ev.clientX - startX, pxPerMs, 0));
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => selectAttack([instance.id])}
+        data-testid={`timeline-attack-row-${instance.id}`}
+        className="min-w-0 truncate pr-2 text-right text-xs text-neutral-300 hover:text-accent"
+        title={`Select ${name}`}
+        style={{ height: LANE_H }}
+      >
+        {name}
+      </button>
+      <div className="relative" style={{ height: LANE_H }}>
+        <button
+          type="button"
+          data-testid={`timeline-attack-${instance.id}`}
+          aria-label={describe}
+          title={describe}
+          onPointerDown={beginDrag}
+          onClick={() => selectAttack([instance.id])}
+          onKeyDown={(e) => {
+            const dir =
+              e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+            if (!dir) return;
+            e.preventDefault();
+            setStart(
+              nudgeValueMs(instance.startMs, dir * (e.shiftKey ? 5 : 1)),
+            );
+          }}
+          className={`absolute flex h-full min-w-[6px] items-center overflow-hidden rounded-sm bg-violet-500/80 text-[10px] text-black/80 ${
+            selected ? "ring-1 ring-inset ring-white/70" : ""
+          }`}
+          style={{
+            left: msToPx(instance.startMs, pxPerMs),
+            width: Math.max(msToPx(spanMs, pxPerMs), 6),
+          }}
+        >
+          <span className="pointer-events-none truncate px-1">{name}</span>
+        </button>
+      </div>
+    </>
   );
 }
 
