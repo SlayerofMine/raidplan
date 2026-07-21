@@ -44,10 +44,11 @@ test("z-order controls reorder without changing the object count", async ({
   await expect(page.getByTestId("object-count")).toHaveText("2");
 });
 
-test("primitives can be added from the toolbar", async ({ page }) => {
+test("primitives can be added from the palette", async ({ page }) => {
   await page.goto("/plan/local/edit");
+  await page.getByRole("tab", { name: "Shapes" }).click();
   for (const name of ["Text", "Rect", "Circle", "Cone", "Arrow"]) {
-    await page.getByRole("button", { name, exact: true }).click();
+    await page.getByRole("button", { name: `Add ${name}` }).click();
   }
   await expect(page.getByTestId("object-count")).toHaveText("5");
 });

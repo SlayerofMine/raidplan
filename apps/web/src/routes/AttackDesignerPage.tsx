@@ -6,7 +6,7 @@ import {
   type AttackDef,
 } from "@raidplan/shared";
 import { api } from "../api/client";
-import { AddObjectControls } from "../editor/AddObjectControls";
+import { TetherButton } from "../editor/TetherButton";
 import { AnimationPanel } from "../editor/AnimationPanel";
 import { CanvasStage } from "../editor/canvas/CanvasStage";
 import { IconPalette } from "../editor/IconPalette";
@@ -162,7 +162,7 @@ function AttackDesigner({
           className="rounded border border-panelborder bg-neutral-900 px-2 py-1 text-sm"
         />
 
-        <AddObjectControls />
+        <TetherButton />
 
         <div className="flex overflow-hidden rounded border border-panelborder text-xs">
           <button

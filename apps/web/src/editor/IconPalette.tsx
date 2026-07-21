@@ -6,8 +6,9 @@ import {
   type IconCategory,
 } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
+import { AttacksTab, ShapesTab } from "./PaletteTabs";
 import { WowIconGrid } from "./WowIconGrid";
-import { ICON_DATA_TYPE } from "./iconDrag";
+import { ICON_DATA_TYPE } from "./paletteDrag";
 const COLUMNS = 4;
 const ROW_HEIGHT = 56;
 
@@ -21,7 +22,9 @@ const ROW_HEIGHT = 56;
  */
 export function IconPalette() {
   const addIcon = useEditorStore((s) => s.addIcon);
-  const [tab, setTab] = useState<"tokens" | "wow">("tokens");
+  const [tab, setTab] = useState<"tokens" | "wow" | "shapes" | "attacks">(
+    "tokens",
+  );
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<IconCategory | "all">("all");
 
@@ -38,17 +41,17 @@ export function IconPalette() {
 
   return (
     <aside
-      aria-label="Icons"
+      aria-label="Palette"
       className="flex h-full min-h-0 flex-col border-r border-panelborder bg-panel"
     >
       <h2 className="px-3 pt-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
-        Icons
+        Palette
       </h2>
 
       <div
-        className="flex gap-1 px-3 pt-1"
+        className="flex flex-wrap gap-1 px-3 pt-1"
         role="tablist"
-        aria-label="Icon source"
+        aria-label="Palette section"
       >
         <TabButton
           label="Tokens"
@@ -60,10 +63,24 @@ export function IconPalette() {
           active={tab === "wow"}
           onClick={() => setTab("wow")}
         />
+        <TabButton
+          label="Shapes"
+          active={tab === "shapes"}
+          onClick={() => setTab("shapes")}
+        />
+        <TabButton
+          label="Attacks"
+          active={tab === "attacks"}
+          onClick={() => setTab("attacks")}
+        />
       </div>
 
       {tab === "wow" ? (
         <WowIconGrid />
+      ) : tab === "shapes" ? (
+        <ShapesTab />
+      ) : tab === "attacks" ? (
+        <AttacksTab />
       ) : (
         <>
           <div className="flex flex-col gap-2 p-3 pb-2">

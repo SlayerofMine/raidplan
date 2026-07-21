@@ -25,7 +25,7 @@ import {
   videoFileName,
 } from "./videoExport";
 import { uploadBackground } from "./uploadBackground";
-import { AddObjectControls } from "./AddObjectControls";
+import { TetherButton } from "./TetherButton";
 import { Btn, Divider } from "./ToolbarButton";
 import { useToast } from "../ui/toastContext";
 
@@ -199,10 +199,6 @@ export function Toolbar({
 
       <Divider />
 
-      <AddObjectControls />
-
-      <Divider />
-
       <Btn
         onClick={duplicateSelected}
         disabled={!hasSelection}
@@ -224,6 +220,7 @@ export function Toolbar({
         label="Ungroup"
         title="Dissolve the selected group (Ctrl+Shift+G)"
       />
+      <TetherButton />
 
       <Divider />
 

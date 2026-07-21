@@ -18,7 +18,8 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
     .first()
     .click();
   await page.getByTestId("new-attack").click();
-  await page.getByRole("button", { name: "Cone" }).click();
+  await page.getByRole("tab", { name: "Shapes" }).click();
+  await page.getByRole("button", { name: "Add Cone" }).click();
   await page.getByTestId("attack-name").fill("Sweeping Flame");
   await page.getByTestId("save-attack").click();
   await expect(page.getByText("Sweeping Flame")).toBeVisible();

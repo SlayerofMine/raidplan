@@ -7,11 +7,15 @@ import {
 } from "react";
 import { Layer, Line, Image as KonvaImage, Rect, Stage } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
-import type { PlanObject } from "@raidplan/shared";
+import type { PlanObject, ShapeKind } from "@raidplan/shared";
 import { getBackgroundSrc } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { isEditableTarget } from "../isEditableTarget";
-import { ICON_DATA_TYPE } from "../iconDrag";
+import {
+  ATTACK_DATA_TYPE,
+  ICON_DATA_TYPE,
+  SHAPE_DATA_TYPE,
+} from "../paletteDrag";
 import { screenToNative, type Point } from "./coords";
 import {
   MARQUEE_THRESHOLD_PX,
@@ -57,6 +61,8 @@ export function CanvasStage() {
   const clearSelection = useEditorStore((s) => s.clearSelection);
   const select = useEditorStore((s) => s.select);
   const addIcon = useEditorStore((s) => s.addIcon);
+  const addPrimitive = useEditorStore((s) => s.addPrimitive);
+  const addAttack = useEditorStore((s) => s.addAttack);
 
   // The sweep lives in state (to draw it) and a ref (to read it from the
   // window-level mouseup without stale-closure games).
@@ -174,19 +180,34 @@ export function CanvasStage() {
     }
   };
 
+  /** Palette drops land at the cursor, whatever kind of tile was dragged. */
   const handleDrop = (e: ReactDragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const iconId = e.dataTransfer.getData(ICON_DATA_TYPE);
     const container = containerRef.current;
-    if (!iconId || !container) return;
+    if (!container) return;
     const rect = container.getBoundingClientRect();
-    addIcon(
-      iconId,
-      screenToNative(
-        { x: e.clientX - rect.left, y: e.clientY - rect.top },
-        view,
-      ),
+    const at = screenToNative(
+      { x: e.clientX - rect.left, y: e.clientY - rect.top },
+      view,
     );
+
+    const iconId = e.dataTransfer.getData(ICON_DATA_TYPE);
+    if (iconId) return void addIcon(iconId, at);
+
+    const shape = e.dataTransfer.getData(SHAPE_DATA_TYPE);
+    if (shape) {
+      // "text"/"arrow" are primitives in their own right; the rest are shapes.
+      if (shape === "text" || shape === "arrow")
+        addPrimitive(shape, undefined, at);
+      else addPrimitive("shape", shape as ShapeKind, at);
+      return;
+    }
+
+    const attackId = e.dataTransfer.getData(ATTACK_DATA_TYPE);
+    if (attackId) {
+      const { currentStepIndex } = useEditorStore.getState();
+      addAttack(currentStepIndex, attackId, at);
+    }
   };
 
   return (

@@ -27,7 +27,7 @@ describe("IconPalette", () => {
   it("exposes the palette as a labelled landmark (a11y, plan §5.3)", () => {
     render(<IconPalette />);
     expect(
-      screen.getByRole("complementary", { name: "Icons" }),
+      screen.getByRole("complementary", { name: "Palette" }),
     ).toBeInTheDocument();
   });
 

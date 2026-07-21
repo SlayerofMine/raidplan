@@ -7,7 +7,7 @@ import {
 import { useEditorStore } from "../store/editorStore";
 import { fetchIconCatalog, IconCatalogError } from "../api/iconCatalog";
 import { registerSyncedIconUrl } from "./iconSrc";
-import { ICON_DATA_TYPE } from "./iconDrag";
+import { ICON_DATA_TYPE } from "./paletteDrag";
 
 /**
  * The synced WoW icon browser (plan §11.1 "Frontend integration").

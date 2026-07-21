@@ -64,7 +64,8 @@ export interface EditorState extends PlanDoc {
 
   // --- creation ---
   addIcon: (iconId: string, native?: Point) => string;
-  addPrimitive: (type: ObjectType, shape?: ShapeKind) => string;
+  /** `native` places it at a point (a palette drop); otherwise the view centre. */
+  addPrimitive: (type: ObjectType, shape?: ShapeKind, native?: Point) => string;
   /** Link two existing objects with a tether. Returns its id, or undefined. */
   addTether: (fromId: string, toId: string) => string | undefined;
 
@@ -348,11 +349,11 @@ export const useEditorStore = create<EditorState>()(
         return object.id;
       },
 
-      addPrimitive: (type, shape) => {
+      addPrimitive: (type, shape, native) => {
         const state = get();
         const object = createObject({
           type,
-          center: viewCentreNative(state),
+          center: native ?? viewCentreNative(state),
           z: state.objectIds.length,
           ...(shape ? { shape } : {}),
           ...(type === "text" ? { label: "Text" } : {}),
