@@ -13,10 +13,6 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
 
   // --- author the attack (admin) ---
   await page.goto("/admin");
-  const encounterName = await page
-    .getByLabel(/^Name of /)
-    .first()
-    .inputValue();
   await page
     .getByRole("link", { name: /Attacks for/ })
     .first()
@@ -29,7 +25,13 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
 
   // --- start a plan on that encounter and place the attack ---
   await page.goto("/");
-  await page.getByTestId("start-choice").selectOption({ label: encounterName });
+  // Seeded encounters share their names with the bundled maps, so pick by value:
+  // only encounter options carry the `encounter:` prefix.
+  const encounterOption = await page
+    .locator('[data-testid="start-choice"] option[value^="encounter:"]')
+    .first()
+    .getAttribute("value");
+  await page.getByTestId("start-choice").selectOption(encounterOption!);
   await page.getByTestId("new-plan").click();
   await expect(page).toHaveURL(/\/plan\/.+\/edit/);
 

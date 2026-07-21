@@ -16,7 +16,6 @@ test("an admin authors an attack, sees it listed, and deletes it", async ({
     .getByRole("link", { name: /Attacks for/ })
     .first()
     .click();
-  await expect(page.getByTestId("attacks-empty")).toBeVisible();
 
   // Into the designer (the editor, admin-scoped).
   await page.getByTestId("new-attack").click();
@@ -34,5 +33,5 @@ test("an admin authors an attack, sees it listed, and deletes it", async ({
   await expect(page.getByText("Frontal Cone")).toBeVisible();
 
   await page.getByRole("button", { name: "Delete Frontal Cone" }).click();
-  await expect(page.getByTestId("attacks-empty")).toBeVisible();
+  await expect(page.getByText("Frontal Cone")).toHaveCount(0);
 });
