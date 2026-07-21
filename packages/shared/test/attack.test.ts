@@ -66,6 +66,8 @@ const makeDef = (over: Partial<AttackDef> = {}): AttackDef => ({
   objects: [defObj("o1")],
   overrides: {},
   animations: [],
+  params: [],
+  bindings: { collideWith: {}, durationMs: {}, tint: {} },
   ...over,
 });
 
@@ -82,6 +84,7 @@ const inst = (over: Partial<AttackInstance> = {}): AttackInstance => ({
   h: 200,
   rotation: 0,
   startMs: 0,
+  args: {},
   ...over,
 });
 
@@ -354,6 +357,108 @@ describe("expandPlan — animations", () => {
       fromId: "i1::orb",
       toId: "i1::tank",
     });
+  });
+});
+
+describe("expandPlan — parameters", () => {
+  /** A pickup whose collision targets the *plan* supplies (plan §18.4). */
+  const catchable = (over = {}) =>
+    makeDef({
+      objects: [defObj("orb")],
+      animations: [
+        defAnim({
+          id: "caught",
+          objectId: "orb",
+          trigger: "onCollision",
+          collideWith: ["orb"],
+        }),
+      ],
+      params: [{ key: "victims", label: "Caught by", type: "objectRefs" }],
+      bindings: {
+        collideWith: { caught: "victims" },
+        durationMs: {},
+        tint: {},
+      },
+      ...over,
+    });
+
+  it("takes collision targets from the plan, un-namespaced", () => {
+    const out = expandOne(catchable(), inst({ args: { victims: ["tank-1"] } }));
+    const anim = out.steps[0]!.animations.find((a) => a.id === "i1::caught")!;
+    // A plan's own object id, used as given — namespacing it would point at
+    // nothing.
+    expect(anim.collideWith).toEqual(["tank-1"]);
+  });
+
+  it("falls back to the parameter's default when the plan says nothing", () => {
+    const def = catchable({
+      params: [
+        {
+          key: "victims",
+          label: "Caught by",
+          type: "objectRefs",
+          default: ["boss"],
+        },
+      ],
+    });
+    const out = expandOne(def, inst());
+    const anim = out.steps[0]!.animations.find((a) => a.id === "i1::caught")!;
+    expect(anim.collideWith).toEqual(["boss"]);
+  });
+
+  it("still namespaces an unbound, literal collideWith", () => {
+    const def = makeDef({
+      objects: [defObj("orb"), defObj("tank")],
+      animations: [
+        defAnim({
+          id: "hit",
+          objectId: "orb",
+          trigger: "onCollision",
+          collideWith: ["tank"],
+        }),
+      ],
+    });
+    const out = expandOne(def, inst());
+    const anim = out.steps[0]!.animations.find((a) => a.id === "i1::hit")!;
+    expect(anim.collideWith).toEqual(["i1::tank"]);
+  });
+
+  it("binds a tint and a duration", () => {
+    const def = makeDef({
+      objects: [defObj("orb")],
+      animations: [defAnim({ id: "a1", objectId: "orb", durationMs: 500 })],
+      params: [
+        { key: "colour", label: "Colour", type: "color" },
+        { key: "speed", label: "Duration", type: "number" },
+      ],
+      bindings: {
+        collideWith: {},
+        durationMs: { a1: "speed" },
+        tint: { orb: "colour" },
+      },
+    });
+    const out = expandOne(
+      def,
+      inst({ args: { colour: "#ff0000", speed: 1200 } }),
+    );
+    expect(lastObject(out).base.tint).toBe("#ff0000");
+    expect(out.steps[0]!.animations[0]!.durationMs).toBe(1200);
+  });
+
+  it("leaves values alone when a binding has no argument or default", () => {
+    const def = makeDef({
+      objects: [defObj("orb", { tint: "#123456" })],
+      animations: [defAnim({ id: "a1", objectId: "orb", durationMs: 500 })],
+      params: [{ key: "colour", label: "Colour", type: "color" }],
+      bindings: {
+        collideWith: {},
+        durationMs: { a1: "missing" },
+        tint: { orb: "colour" },
+      },
+    });
+    const out = expandOne(def, inst());
+    expect(lastObject(out).base.tint).toBe("#123456");
+    expect(out.steps[0]!.animations[0]!.durationMs).toBe(500);
   });
 });
 

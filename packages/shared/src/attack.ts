@@ -38,6 +38,60 @@ import {
  * A def is exactly a **base state plus one step** (§18.2) — objects are the start,
  * `overrides` the settled end, `animations` the transition.
  */
+/**
+ * What a definition can be *told* by the plan that uses it (plan §18.4).
+ *
+ * Some of an attack's behaviour can't live in the definition, because it refers
+ * to things only the plan knows — the canonical case being **which objects set a
+ * collision off**. A definition therefore declares parameters, and each placed
+ * instance supplies arguments.
+ */
+export const ATTACK_PARAM_TYPES = [
+  /** Ids of objects **in the plan** — e.g. who a pickup can be caught by. */
+  "objectRefs",
+  "number",
+  "color",
+  "text",
+  "boolean",
+] as const;
+export const AttackParamTypeSchema = z.enum(ATTACK_PARAM_TYPES);
+export type AttackParamType = z.infer<typeof AttackParamTypeSchema>;
+
+export const AttackParamValueSchema = z.union([
+  z.array(z.string()),
+  z.number(),
+  z.string(),
+  z.boolean(),
+]);
+export type AttackParamValue = z.infer<typeof AttackParamValueSchema>;
+
+export const AttackParamSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  type: AttackParamTypeSchema,
+  default: AttackParamValueSchema.optional(),
+});
+export type AttackParam = z.infer<typeof AttackParamSchema>;
+
+/**
+ * Which of a definition's internals read which parameter.
+ *
+ * Deliberately a small set of **typed slots** keyed by target id, rather than a
+ * template language over arbitrary fields: binding stays type-checked and
+ * testable, and the general `Plan` schemas don't grow attack-authoring fields.
+ */
+export const AttackBindingsSchema = z
+  .object({
+    /** animation id → parameter supplying its collision targets. */
+    collideWith: z.record(z.string().min(1), z.string().min(1)).default({}),
+    /** animation id → parameter supplying its duration, in ms. */
+    durationMs: z.record(z.string().min(1), z.string().min(1)).default({}),
+    /** object id → parameter supplying its tint. */
+    tint: z.record(z.string().min(1), z.string().min(1)).default({}),
+  })
+  .default({ collideWith: {}, durationMs: {}, tint: {} });
+export type AttackBindings = z.infer<typeof AttackBindingsSchema>;
+
 export const AttackDefSchema = z.object({
   id: z.string().min(1),
   encounterId: z.string().min(1),
@@ -60,6 +114,10 @@ export const AttackDefSchema = z.object({
   /** Settled end state, in unit space (the def's single step). */
   overrides: z.record(z.string().min(1), StepOverrideSchema).default({}),
   animations: z.array(AnimSchema),
+  /** What a plan must (or may) tell this attack (plan §18.4). */
+  params: z.array(AttackParamSchema).default([]),
+  /** Which internals read which parameter. */
+  bindings: AttackBindingsSchema,
 });
 export type AttackDef = z.infer<typeof AttackDefSchema>;
 
@@ -169,25 +227,45 @@ function expandInstance(
 } {
   const t = placementOf(instance);
 
-  const objects = def.objects.map((o) => ({
-    ...o,
-    id: scopedId(instance.id, o.id),
-    ...(o.fromId ? { fromId: scopedId(instance.id, o.fromId) } : {}),
-    ...(o.toId ? { toId: scopedId(instance.id, o.toId) } : {}),
-    base: placeBase(o.base, t),
-  }));
+  /** An argument the plan supplied, else the parameter's declared default. */
+  const argOf = (key: string): AttackParamValue | undefined =>
+    instance.args[key] ?? def.params.find((p) => p.key === key)?.default;
 
-  const animations = def.animations.map((a) => ({
-    ...a,
-    id: scopedId(instance.id, a.id),
-    objectId: scopedId(instance.id, a.objectId),
-    ...(a.collideWith
-      ? { collideWith: a.collideWith.map((id) => scopedId(instance.id, id)) }
-      : {}),
-    // The instance's start offset shifts the whole attack within its step.
-    delayMs: a.delayMs + instance.startMs,
-    ...(a.params ? { params: placeParams(a.params, t) } : {}),
-  }));
+  const objects = def.objects.map((o) => {
+    const tint = argOf(def.bindings.tint[o.id] ?? "");
+    const placed = placeBase(o.base, t);
+    return {
+      ...o,
+      id: scopedId(instance.id, o.id),
+      ...(o.fromId ? { fromId: scopedId(instance.id, o.fromId) } : {}),
+      ...(o.toId ? { toId: scopedId(instance.id, o.toId) } : {}),
+      base: typeof tint === "string" ? { ...placed, tint } : placed,
+    };
+  });
+
+  const animations = def.animations.map((a) => {
+    // A bound collideWith names objects in the **plan**, so those ids are used
+    // as given; only a definition's own literal ids get namespaced.
+    const boundTargets = argOf(def.bindings.collideWith[a.id] ?? "");
+    const collideWith = Array.isArray(boundTargets)
+      ? boundTargets
+      : a.collideWith?.map((id) => scopedId(instance.id, id));
+
+    const boundDuration = argOf(def.bindings.durationMs[a.id] ?? "");
+
+    return {
+      ...a,
+      id: scopedId(instance.id, a.id),
+      objectId: scopedId(instance.id, a.objectId),
+      ...(collideWith ? { collideWith } : {}),
+      // The instance's start offset shifts the whole attack within its step.
+      delayMs: a.delayMs + instance.startMs,
+      ...(typeof boundDuration === "number"
+        ? { durationMs: boundDuration }
+        : {}),
+      ...(a.params ? { params: placeParams(a.params, t) } : {}),
+    };
+  });
 
   const overrides: Record<string, StepOverride> = {};
   for (const [localId, ov] of Object.entries(def.overrides)) {
@@ -363,7 +441,12 @@ export function defToPlan(def: AttackDef): Plan {
  */
 export function planToAttackContent(
   plan: Plan,
-  meta: { name: string; defaultSize: { w: number; h: number } },
+  meta: {
+    name: string;
+    defaultSize: { w: number; h: number };
+    params?: AttackParam[];
+    bindings?: AttackBindings;
+  },
 ): AttackContent {
   const size = plan.background.width;
   const step = plan.steps[0];
@@ -382,5 +465,9 @@ export function planToAttackContent(
     animations: (step?.animations ?? []).map((a) =>
       convertAnim(a, size, false),
     ),
+    // Parameters and their bindings aren't spatial, so they pass straight
+    // through from the designer rather than round-tripping via the canvas.
+    params: meta.params ?? [],
+    bindings: meta.bindings ?? { collideWith: {}, durationMs: {}, tint: {} },
   };
 }

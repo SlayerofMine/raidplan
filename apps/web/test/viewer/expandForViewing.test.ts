@@ -44,6 +44,8 @@ const def: AttackDef = {
   ],
   overrides: {},
   animations: [],
+  params: [],
+  bindings: { collideWith: {}, durationMs: {}, tint: {} },
 };
 
 beforeEach(() => vi.clearAllMocks());
@@ -68,6 +70,7 @@ describe("expandForViewing", () => {
         h: 200,
         rotation: 0,
         startMs: 0,
+        args: {},
       },
     ]);
 

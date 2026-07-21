@@ -2,6 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   AnimSchema,
+  AttackBindingsSchema,
+  AttackParamSchema,
   PlanObjectSchema,
   StepOverrideSchema,
 } from "@raidplan/shared";
@@ -32,6 +34,8 @@ const attackContent = {
   objects: z.array(PlanObjectSchema),
   overrides: z.record(z.string().min(1), StepOverrideSchema).default({}),
   animations: z.array(AnimSchema),
+  params: z.array(AttackParamSchema).default([]),
+  bindings: AttackBindingsSchema,
 };
 
 export const attackRouter = router({

@@ -40,6 +40,8 @@ const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   ],
   overrides: {},
   animations: [],
+  params: [],
+  bindings: { collideWith: {}, durationMs: {}, tint: {} },
   ...over,
 });
 
@@ -64,6 +66,7 @@ const planWith = (attackId: string): Plan => ({
           h: 200,
           rotation: 0,
           startMs: 0,
+          args: {},
         },
       ],
     },

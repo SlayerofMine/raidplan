@@ -20,6 +20,8 @@ const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   objects: [],
   overrides: {},
   animations: [],
+  params: [],
+  bindings: { collideWith: {}, durationMs: {}, tint: {} },
   ...over,
 });
 

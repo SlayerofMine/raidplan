@@ -3,7 +3,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   defToPlan,
   planToAttackContent,
+  type AttackBindings,
   type AttackDef,
+  type AttackParam,
 } from "@raidplan/shared";
 import { api } from "../api/client";
 import { TetherButton } from "../editor/TetherButton";
@@ -43,6 +45,8 @@ function blankDef(encounterId: string): AttackDef {
     objects: [],
     overrides: {},
     animations: [],
+    params: [],
+    bindings: { collideWith: {}, durationMs: {}, tint: {} },
   };
 }
 
@@ -76,6 +80,14 @@ function AttackDesigner({
   const [def, setDef] = useState<AttackDef | null>(null);
   const [name, setName] = useState("");
   const [size, setSize] = useState(DEFAULT_SIZE);
+  // Declared parameters and their bindings aren't spatial, so they live beside
+  // the canvas rather than in it — and must survive a save untouched.
+  const [params, setParams] = useState<AttackParam[]>([]);
+  const [bindings, setBindings] = useState<AttackBindings>({
+    collideWith: {},
+    durationMs: {},
+    tint: {},
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,6 +99,8 @@ function AttackDesigner({
       setDef(d);
       setName(d.name);
       setSize(d.defaultSize);
+      setParams(d.params);
+      setBindings(d.bindings);
       useEditorStore.getState().loadPlan(defToPlan(d));
       clearHistory();
       useEditorStore.getState().selectStep(BASE_STEP_INDEX);
@@ -113,6 +127,8 @@ function AttackDesigner({
       const content = planToAttackContent(plan, {
         name: name.trim() || "Attack",
         defaultSize: size,
+        params,
+        bindings,
       });
       if (attackId)
         await api.attack.update.mutate({ id: attackId, ...content });

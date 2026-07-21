@@ -133,6 +133,17 @@ export const AttackInstanceSchema = z.object({
   rotation: z.number().finite().default(0),
   /** Delay from the step's start before the attack begins. */
   startMs: z.number().finite().nonnegative().default(0),
+  /**
+   * Arguments for the definition's declared parameters (plan §18.4), keyed by
+   * parameter. This is how a plan tells an attack things only it knows — such as
+   * which of *its* objects can set a collision off.
+   */
+  args: z
+    .record(
+      z.string().min(1),
+      z.union([z.array(z.string()), z.number(), z.string(), z.boolean()]),
+    )
+    .default({}),
 });
 export type AttackInstance = z.infer<typeof AttackInstanceSchema>;
 

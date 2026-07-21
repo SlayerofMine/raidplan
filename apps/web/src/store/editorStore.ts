@@ -741,6 +741,7 @@ export const useEditorStore = create<EditorState>()(
           h: size.h,
           rotation: 0,
           startMs: 0,
+          args: {},
         };
         set((s) => {
           const step = s.steps[stepIndex];
