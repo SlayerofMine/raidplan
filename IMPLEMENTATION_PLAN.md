@@ -527,7 +527,15 @@ marker for v1; add pinning later.
    lists and the designer saves. Verified by a signed-in e2e. *(Custom exposed knobs beyond
    position/rotation/scale/timing, and an interactive on-canvas anchor handle, are follow-ups —
    the anchor is set numerically for now.)*
-5. **Planner side** — attacks in the palette; drop / position / time.
+5. **Planner side** [MOSTLY DONE] — `Plan.encounterId` records which encounter seeded a plan,
+   so the editor offers *that* encounter's attacks. Store actions place/retune/remove instances,
+   and an Attacks panel drops one on the current step and tunes x/y, rotation, scale and start
+   offset. Placed attacks already render in the **viewer** and the **share preview** (stage 3).
+   **Remaining:** an in-editor canvas preview of a placed attack. `ObjectNode` resolves what it
+   draws from the store, so it can't draw an attack's *expanded* (ephemeral) objects; that needs
+   its drawing split from its selection/drag behaviour. The same change lets the **WebM export**
+   — which captures the live editor stage — include attacks. Until then the planner positions
+   numerically and checks the result in the viewer.
 
 ---
 
