@@ -1,4 +1,5 @@
 import { AnimationPanel } from "./AnimationPanel";
+import { AttacksPanel } from "./AttacksPanel";
 import { CanvasStage } from "./canvas/CanvasStage";
 import { IconPalette } from "./IconPalette";
 import { isLocalPlan, LOCAL_PLAN_ID } from "./planScope";
@@ -65,6 +66,7 @@ export function EditorLayout({ planId }: { planId: string }) {
       >
         <PropertiesPanel />
         <AnimationPanel />
+        <AttacksPanel />
       </div>
       <div style={{ gridArea: "steps" }} className="flex min-h-0 flex-col">
         <StepStrip />
