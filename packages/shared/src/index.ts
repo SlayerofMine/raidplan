@@ -3,6 +3,9 @@ export * from "./transform.js";
 export * from "./effects.js";
 export * from "./plan.js";
 export * from "./resolve.js";
+// When each animation of a step runs (plan §7). Document-level, so the player,
+// the Gantt and `expandPlan` can never disagree about where a bar sits.
+export * from "./timeline.js";
 // The mechanic-shape visual language (soaks/voidzones/frontals/tethers), shared
 // so the Konva editor and the server-side OG SVG draw them identically.
 export * from "./mechanics.js";

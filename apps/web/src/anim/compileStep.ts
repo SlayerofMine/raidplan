@@ -1,6 +1,12 @@
 import gsap from "gsap";
-import type { Anim, ObjectState, ResolvedStates, Step } from "@raidplan/shared";
-import { isDeferredTrigger, layoutStepTimeline } from "./stepTimeline";
+import {
+  isDeferredTrigger,
+  layoutStepTimeline,
+  type Anim,
+  type ObjectState,
+  type ResolvedStates,
+  type Step,
+} from "@raidplan/shared";
 
 /**
  * Compile a step into a GSAP timeline (plan §3.5 / §7 "Playback engine").

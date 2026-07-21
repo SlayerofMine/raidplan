@@ -1,6 +1,5 @@
 import { Muxer, ArrayBufferTarget } from "webm-muxer";
-import type { Step } from "@raidplan/shared";
-import { layoutStepTimeline, occupiedMs } from "../anim/stepTimeline";
+import { layoutStepTimeline, occupiedMs, type Step } from "@raidplan/shared";
 import { slugify } from "./planFile";
 
 /**

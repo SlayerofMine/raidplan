@@ -1,16 +1,19 @@
 import { useMemo, type PointerEvent as ReactPointerEvent } from "react";
-import type { AnimKind, AttackInstance } from "@raidplan/shared";
+import {
+  layoutStepTimeline,
+  type AnimKind,
+  type AnimSpan,
+  type AttackInstance,
+} from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { objectDisplayName } from "../objectName";
 import { useContainerSize } from "../canvas/useContainerSize";
 import {
   dragValueMs,
-  layoutStepTimeline,
   msToPx,
   nudgeValueMs,
   packLanes,
   timelineScale,
-  type AnimSpan,
 } from "../../anim/stepTimeline";
 
 /**
