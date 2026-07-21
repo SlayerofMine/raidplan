@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type DragEvent as ReactDragEvent,
+  type ReactNode,
 } from "react";
 import { Layer, Line, Image as KonvaImage, Rect, Stage } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
@@ -44,7 +45,7 @@ const ZOOM_STEP = 1.1;
  * turns the stage into a pan surface. Palette drops are converted to native
  * coordinates and added at the cursor.
  */
-export function CanvasStage() {
+export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
   const [containerRef, size] = useContainerSize<HTMLDivElement>();
   const [isPanning, setIsPanning] = useState(false);
   const didFit = useRef(false);
@@ -261,6 +262,8 @@ export function CanvasStage() {
           ))}
           {/* Placed attacks, drawn read-only above the plan's own objects. */}
           <AttackPreviewLayer />
+          {/* Chrome only one caller wants — the designer's bounding box. */}
+          {overlay}
           {marquee && (
             <Rect
               {...normalizeRect(marquee.start, marquee.current)}

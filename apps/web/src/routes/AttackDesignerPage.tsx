@@ -11,6 +11,7 @@ import { api } from "../api/client";
 import { TetherButton } from "../editor/TetherButton";
 import { AnimationPanel } from "../editor/AnimationPanel";
 import { AttackParamsPanel } from "../editor/AttackParamsPanel";
+import { AttackBoundsOverlay } from "../editor/canvas/AttackBoundsOverlay";
 import { CanvasStage } from "../editor/canvas/CanvasStage";
 import { IconPalette } from "../editor/IconPalette";
 import { PropertiesPanel } from "../editor/PropertiesPanel";
@@ -80,7 +81,6 @@ function AttackDesigner({
 
   const [def, setDef] = useState<AttackDef | null>(null);
   const [name, setName] = useState("");
-  const [size, setSize] = useState(DEFAULT_SIZE);
   // Declared parameters and their bindings aren't spatial, so they live beside
   // the canvas rather than in it — and must survive a save untouched.
   const [params, setParams] = useState<AttackParam[]>([]);
@@ -99,7 +99,6 @@ function AttackDesigner({
       if (cancelled) return;
       setDef(d);
       setName(d.name);
-      setSize(d.defaultSize);
       setParams(d.params);
       setBindings(d.bindings);
       useEditorStore.getState().loadPlan(defToPlan(d));
@@ -127,7 +126,6 @@ function AttackDesigner({
       const plan = useEditorStore.getState().getPlan();
       const content = planToAttackContent(plan, {
         name: name.trim() || "Attack",
-        defaultSize: size,
         params,
         bindings,
       });
@@ -200,33 +198,6 @@ function AttackDesigner({
           </button>
         </div>
 
-        <label
-          className="flex items-center gap-1 text-xs text-neutral-400"
-          title="The rectangle a freshly placed copy gets; the planner resizes it freely"
-        >
-          default size
-          <input
-            aria-label="Default width"
-            type="number"
-            min="1"
-            value={size.w}
-            onChange={(e) =>
-              setSize({ ...size, w: Number(e.target.value) || 1 })
-            }
-            className="w-16 rounded border border-panelborder bg-neutral-900 px-1 py-1"
-          />
-          <input
-            aria-label="Default height"
-            type="number"
-            min="1"
-            value={size.h}
-            onChange={(e) =>
-              setSize({ ...size, h: Number(e.target.value) || 1 })
-            }
-            className="w-16 rounded border border-panelborder bg-neutral-900 px-1 py-1"
-          />
-        </label>
-
         {error && (
           <span data-testid="designer-error" className="text-xs text-amber-400">
             {error}
@@ -248,7 +219,9 @@ function AttackDesigner({
         <IconPalette />
       </div>
       <div style={{ gridArea: "canvas" }} className="min-h-0">
-        <CanvasStage />
+        {/* The dashed box is the attack: what a planner grabs, and the size
+            stored as its `defaultSize`. Measured, never typed. */}
+        <CanvasStage overlay={<AttackBoundsOverlay />} />
       </div>
       <SyncedIconResolver />
       <div

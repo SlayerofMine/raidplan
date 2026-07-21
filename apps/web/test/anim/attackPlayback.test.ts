@@ -30,11 +30,13 @@ const def: AttackDef = {
       id: "cone",
       type: "shape",
       shape: "circle",
+      // Unit space: a narrow band that sweeps from the left edge to the right,
+      // so the attack's extent — and its rectangle — is the whole sweep.
       base: {
         x: -1,
-        y: 0,
+        y: -1,
         w: 0.5,
-        h: 0.5,
+        h: 2,
         rotation: 0,
         opacity: 1,
         z: 0,
@@ -43,7 +45,7 @@ const def: AttackDef = {
     },
   ],
   // It sweeps to the right edge over the step.
-  overrides: { cone: { x: 1, y: 0 } },
+  overrides: { cone: { x: 0.5, y: -1 } },
   animations: [
     {
       id: "sweep",
@@ -127,8 +129,9 @@ describe("a placed attack during playback", () => {
     const { timeline, applied } = playStep(expanded, 0);
 
     timeline.progress(1);
-    // Unit x = 1 is the rectangle's right edge: 200 across a 0..200 instance.
-    expect(applied["i1::cone"]!.x).toBeCloseTo(200);
+    // The band is a quarter of the width, so its left edge settles at 150 —
+    // flush with the right edge of a 0..200 instance.
+    expect(applied["i1::cone"]!.x).toBeCloseTo(150);
   });
 
   it("is gone once the step after it is entered", () => {

@@ -1,10 +1,17 @@
-import type { AttackDef, PlanObject } from "@raidplan/shared";
+import {
+  attackContentBox,
+  type AttackDef,
+  type PlanObject,
+} from "@raidplan/shared";
 
 /**
  * A small silhouette of an attack, for browsing the library (plan §18.5).
  *
  * Definitions are stored in unit space (-1..1), so the thumbnail *is* the
- * definition drawn into a `-1 -1 2 2` viewBox — no scaling maths and no canvas.
+ * definition drawn into its own viewBox — no scaling maths and no canvas. That
+ * box is measured rather than assumed, so the silhouette fills its tile the way
+ * the attack fills the rectangle it's placed in.
+ *
  * It's a silhouette, not a faithful render: enough to tell a cone from a soak
  * and to see the layout at a glance.
  */
@@ -14,9 +21,10 @@ const DEFAULT_TINT = "#4f9dff";
 const ROUND = new Set(["circle", "soak", "voidzone", "pickup"]);
 
 export function AttackThumbnail({ def }: { def: AttackDef }) {
+  const box = attackContentBox(def) ?? { cx: 0, cy: 0, hx: 1, hy: 1 };
   return (
     <svg
-      viewBox="-1 -1 2 2"
+      viewBox={`${box.cx - box.hx} ${box.cy - box.hy} ${box.hx * 2} ${box.hy * 2}`}
       preserveAspectRatio="xMidYMid meet"
       aria-hidden="true"
       className="h-full w-full"

@@ -32,6 +32,11 @@ import {
  * `2` spans the rectangle: they scale by `w/2` and `h/2` **independently**, so a
  * non-square rectangle stretches the attack (hold Shift to keep the aspect).
  *
+ * Unit space is pinned to the attack's **own extent** ({@link attackContentBox}),
+ * measured across its whole life — where its parts start, where they settle, and
+ * everywhere a motion carries them. So the rectangle a planner grabs is the
+ * attack's bounding box, not an arbitrary square it was drawn inside.
+ *
  * **Auto-follow:** an instance resolves to the *current* def by `attackId`, so
  * fixing a def improves every plan using it. (`version` is kept for a future
  * "this attack changed" marker and opt-in pinning.)
@@ -100,9 +105,10 @@ export const AttackDefSchema = z.object({
   /** Bumped on every edit; drives auto-follow's future "changed" marker. */
   version: z.number().int().positive().default(1),
   /**
-   * The rectangle a fresh instance gets, in plan pixels. Purely a **placement
-   * hint** so a long beam doesn't arrive square — it is not a coordinate space,
-   * and the planner resizes freely afterwards.
+   * The rectangle a fresh instance gets, in plan pixels: the size the attack was
+   * drawn at, measured when it was saved. Not a coordinate space and not typed in
+   * by hand — it carries the attack's real proportions, so a long beam doesn't
+   * arrive square. The planner resizes freely afterwards.
    */
   defaultSize: z
     .object({
@@ -137,38 +143,139 @@ export function attackIdsInPlan(plan: Plan): string[] {
   return [...ids];
 }
 
-/** Where an instance puts unit space: a centre, half-extents, and a rotation. */
-interface Placement {
+/** An axis-aligned box: a centre and half-extents. Never zero-sized. */
+export interface AttackBox {
   cx: number;
   cy: number;
   hx: number;
   hy: number;
+}
+
+/** Unit space itself: -1..1 on both axes, centred on the origin. */
+const UNIT_BOX: AttackBox = { cx: 0, cy: 0, hx: 1, hy: 1 };
+
+/** A box can't have a zero half-extent, or mapping through it divides by zero. */
+const MIN_HALF = 1e-6;
+
+const boxFrom = (
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): AttackBox => ({
+  cx: (minX + maxX) / 2,
+  cy: (minY + maxY) / 2,
+  hx: Math.max((maxX - minX) / 2, MIN_HALF),
+  hy: Math.max((maxY - minY) / 2, MIN_HALF),
+});
+
+/** The rectangle an instance was placed at, as a box. */
+const instanceBox = (i: AttackInstance): AttackBox => ({
+  cx: i.x + i.w / 2,
+  cy: i.y + i.h / 2,
+  hx: i.w / 2,
+  hy: i.h / 2,
+});
+
+/** The four corners of a transform, rotated clockwise about its own origin. */
+function cornersOf(t: {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
   rotation: number;
-}
-
-function placementOf(instance: AttackInstance): Placement {
-  return {
-    cx: instance.x + instance.w / 2,
-    cy: instance.y + instance.h / 2,
-    hx: instance.w / 2,
-    hy: instance.h / 2,
-    rotation: instance.rotation,
-  };
-}
-
-/**
- * Map a unit point into the plan: scale by the rectangle's half-extents, then
- * rotate clockwise about its centre (Konva's y-down convention).
- */
-function placePoint(u: Point, t: Placement): Point {
-  const dx = u.x * t.hx;
-  const dy = u.y * t.hy;
+}): Point[] {
   const rad = (t.rotation * Math.PI) / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
+  return [
+    [0, 0],
+    [t.w, 0],
+    [t.w, t.h],
+    [0, t.h],
+  ].map(([dx, dy]) => ({
+    x: t.x + dx! * cos - dy! * sin,
+    y: t.y + dx! * sin + dy! * cos,
+  }));
+}
+
+/**
+ * Everything an attack covers **over its whole life**: where its parts start,
+ * where they settle, and everywhere a motion carries them in between.
+ *
+ * This box *is* the attack, and it's what an instance's rectangle is mapped onto
+ * — so the frame a planner grabs hugs the artwork instead of floating around it.
+ * Returns `null` for an attack with nothing in it.
+ *
+ * Tethers are skipped: their geometry comes from their endpoints, so their own
+ * transform is degenerate and would drag the box to the origin.
+ */
+export function attackContentBox(content: {
+  objects: PlanObject[];
+  overrides: Record<string, StepOverride>;
+  animations: Anim[];
+}): AttackBox | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const add = (p: Point) => {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  };
+
+  for (const o of content.objects) {
+    if (o.type === "tether") continue;
+    const base = o.base;
+    const end = { ...base, ...content.overrides[o.id] };
+    for (const corner of cornersOf(base)) add(corner);
+    for (const corner of cornersOf(end)) add(corner);
+
+    for (const anim of content.animations) {
+      if (anim.objectId !== o.id || !anim.params) continue;
+      const { toX, toY, path } = anim.params;
+      // A motion target is a *position* for the object, so the whole footprint
+      // travels there.
+      if (toX !== undefined && toY !== undefined) {
+        for (const corner of cornersOf({ ...base, x: toX, y: toY }))
+          add(corner);
+      }
+      for (const point of path ?? []) {
+        for (const corner of cornersOf({ ...base, x: point.x, y: point.y })) {
+          add(corner);
+        }
+      }
+    }
+  }
+
+  return Number.isFinite(minX) ? boxFrom(minX, minY, maxX, maxY) : null;
+}
+
+/** The box a definition's own coordinates occupy — unit space when normalised. */
+const defBox = (def: AttackDef): AttackBox => attackContentBox(def) ?? UNIT_BOX;
+
+/**
+ * Map a point from one box to another, then rotate it clockwise about the
+ * destination's centre (Konva's y-down convention). The single primitive behind
+ * both placing an attack into a plan and moving it on and off the designer's
+ * canvas.
+ */
+function mapPoint(
+  p: Point,
+  from: AttackBox,
+  to: AttackBox,
+  rotation = 0,
+): Point {
+  const dx = ((p.x - from.cx) / from.hx) * to.hx;
+  const dy = ((p.y - from.cy) / from.hy) * to.hy;
+  const rad = (rotation * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
   return {
-    x: t.cx + dx * cos - dy * sin,
-    y: t.cy + dx * sin + dy * cos,
+    x: to.cx + dx * cos - dy * sin,
+    y: to.cy + dx * sin + dy * cos,
   };
 }
 
@@ -190,44 +297,68 @@ function entranceTargets(def: AttackDef): Set<string> {
   return ids;
 }
 
-/** Place an object's base transform, hidden until its step reveals it. */
-function placeBase(base: ObjectBase, t: Placement): ObjectBase {
-  const p = placePoint({ x: base.x, y: base.y }, t);
+/** Move an object's base transform from one box to another. */
+function mapBase(
+  base: ObjectBase,
+  from: AttackBox,
+  to: AttackBox,
+  rotation = 0,
+): ObjectBase {
+  const p = mapPoint({ x: base.x, y: base.y }, from, to, rotation);
   return {
     ...base,
     x: p.x,
     y: p.y,
-    w: base.w * t.hx,
-    h: base.h * t.hy,
-    rotation: base.rotation + t.rotation,
-    // Materialised hidden; expandPlan reveals it only on the instance's step.
-    visible: false,
+    w: (base.w / from.hx) * to.hx,
+    h: (base.h / from.hy) * to.hy,
+    rotation: base.rotation + rotation,
   };
 }
 
-/** Transform a step override's spatial fields (its end-state position/size). */
-function placeOverride(ov: StepOverride, t: Placement): StepOverride {
+/**
+ * Move a step override's spatial fields (its end-state position/size).
+ *
+ * A missing coordinate is filled in from `base`, because a rotated placement
+ * mixes the axes: "ends 30 to the right" can't be expressed as an x alone once
+ * the attack is turned, so both come out together or neither does.
+ */
+function mapOverride(
+  ov: StepOverride,
+  base: ObjectBase | undefined,
+  from: AttackBox,
+  to: AttackBox,
+  rotation = 0,
+): StepOverride {
   const out: StepOverride = { ...ov };
-  if (ov.x !== undefined && ov.y !== undefined) {
-    const p = placePoint({ x: ov.x, y: ov.y }, t);
+  const x = ov.x ?? base?.x;
+  const y = ov.y ?? base?.y;
+  if (x !== undefined && y !== undefined) {
+    const p = mapPoint({ x, y }, from, to, rotation);
     out.x = p.x;
     out.y = p.y;
   }
-  if (ov.w !== undefined) out.w = ov.w * t.hx;
-  if (ov.h !== undefined) out.h = ov.h * t.hy;
-  if (ov.rotation !== undefined) out.rotation = ov.rotation + t.rotation;
+  if (ov.w !== undefined) out.w = (ov.w / from.hx) * to.hx;
+  if (ov.h !== undefined) out.h = (ov.h / from.hy) * to.hy;
+  if (ov.rotation !== undefined) out.rotation = ov.rotation + rotation;
   return out;
 }
 
-/** Transform an animation's spatial params (motion targets and paths). */
-function placeParams(params: AnimParams, t: Placement): AnimParams {
+/** Move an animation's spatial params (motion targets and paths). */
+function mapParams(
+  params: AnimParams,
+  from: AttackBox,
+  to: AttackBox,
+  rotation = 0,
+): AnimParams {
   const next: AnimParams = { ...params };
   if (params.toX !== undefined && params.toY !== undefined) {
-    const p = placePoint({ x: params.toX, y: params.toY }, t);
+    const p = mapPoint({ x: params.toX, y: params.toY }, from, to, rotation);
     next.toX = p.x;
     next.toY = p.y;
   }
-  if (params.path) next.path = params.path.map((pt) => placePoint(pt, t));
+  if (params.path) {
+    next.path = params.path.map((pt) => mapPoint(pt, from, to, rotation));
+  }
   return next;
 }
 
@@ -240,7 +371,11 @@ function expandInstance(
   animations: Anim[];
   overrides: Record<string, StepOverride>;
 } {
-  const t = placementOf(instance);
+  // The def's own extent is mapped onto the instance's rectangle, so the frame
+  // hugs the attack whatever coordinates it happens to be authored in.
+  const from = defBox(def);
+  const to = instanceBox(instance);
+  const spin = instance.rotation;
   const entrances = entranceTargets(def);
 
   /** An argument the plan supplied, else the parameter's declared default. */
@@ -249,7 +384,11 @@ function expandInstance(
 
   const objects = def.objects.map((o) => {
     const tint = argOf(def.bindings.tint[o.id] ?? "");
-    const placed = placeBase(o.base, t);
+    const placed = {
+      ...mapBase(o.base, from, to, spin),
+      // Materialised hidden; the attack's step is what reveals it.
+      visible: false,
+    };
     return {
       ...o,
       id: scopedId(instance.id, o.id),
@@ -293,7 +432,7 @@ function expandInstance(
       ...(typeof boundDuration === "number"
         ? { durationMs: boundDuration }
         : {}),
-      ...(a.params ? { params: placeParams(a.params, t) } : {}),
+      ...(a.params ? { params: mapParams(a.params, from, to, spin) } : {}),
     };
   });
 
@@ -324,7 +463,7 @@ function expandInstance(
     // says otherwise — an object the author left hidden and never brings on
     // stays hidden.
     overrides[id] = {
-      ...(end ? placeOverride(end, t) : {}),
+      ...(end ? mapOverride(end, o.base, from, to, spin) : {}),
       visible: end?.visible ?? (o.base.visible || entrances.has(o.id)),
     };
   }
@@ -396,86 +535,45 @@ export function expandPlan(
 export const ATTACK_BOX_ASSET = "attack-box";
 
 /**
- * The designer's canvas, in pixels, standing in for unit space.
+ * The designer's canvas, in pixels: a square to draw on, and nothing more.
  *
  * The editor works in pixels everywhere — drag, snapping, the properties panel —
- * so the designer authors on this square and the conversions below are the only
- * place unit space is entered or left. Storage and expansion stay unit-only.
+ * so the designer authors here and the two conversions below are the only place
+ * unit space is entered or left. Storage and expansion stay unit-only.
+ *
+ * It is deliberately **not** the coordinate space: an attack's own extent is,
+ * which is why an attack drawn small in one corner still fills the rectangle a
+ * planner drops it into.
  */
 export const ATTACK_AUTHORING_SIZE = 1000;
 
-/** Authoring pixels → unit space (-1..1) for a position along one axis. */
-const toUnit = (px: number, size: number) => (px - size / 2) / (size / 2);
-/** Authoring pixels → unit space for a *length* (2 spans the rectangle). */
-const toUnitLength = (px: number, size: number) => px / (size / 2);
-const fromUnit = (u: number, size: number) => size / 2 + u * (size / 2);
-const fromUnitLength = (u: number, size: number) => u * (size / 2);
-
-/** Convert one object's transform between unit space and authoring pixels. */
-function convertBase(
-  base: ObjectBase,
-  size: number,
-  toPixels: boolean,
-): ObjectBase {
-  const pos = toPixels ? fromUnit : toUnit;
-  const len = toPixels ? fromUnitLength : toUnitLength;
-  return {
-    ...base,
-    x: pos(base.x, size),
-    y: pos(base.y, size),
-    w: len(base.w, size),
-    h: len(base.h, size),
-  };
-}
-
-function convertOverride(
-  ov: StepOverride,
-  size: number,
-  toPixels: boolean,
-): StepOverride {
-  const pos = toPixels ? fromUnit : toUnit;
-  const len = toPixels ? fromUnitLength : toUnitLength;
-  const out: StepOverride = { ...ov };
-  if (ov.x !== undefined) out.x = pos(ov.x, size);
-  if (ov.y !== undefined) out.y = pos(ov.y, size);
-  if (ov.w !== undefined) out.w = len(ov.w, size);
-  if (ov.h !== undefined) out.h = len(ov.h, size);
-  return out;
-}
-
-function convertParams(
-  params: AnimParams,
-  size: number,
-  toPixels: boolean,
-): AnimParams {
-  const pos = toPixels ? fromUnit : toUnit;
-  const out: AnimParams = { ...params };
-  if (params.toX !== undefined) out.toX = pos(params.toX, size);
-  if (params.toY !== undefined) out.toY = pos(params.toY, size);
-  if (params.path) {
-    out.path = params.path.map((p) => ({
-      x: pos(p.x, size),
-      y: pos(p.y, size),
-    }));
-  }
-  return out;
-}
-
-const convertAnim = (a: Anim, size: number, toPixels: boolean): Anim => ({
+const mapAnim = (a: Anim, from: AttackBox, to: AttackBox): Anim => ({
   ...a,
-  ...(a.params ? { params: convertParams(a.params, size, toPixels) } : {}),
+  ...(a.params ? { params: mapParams(a.params, from, to) } : {}),
 });
 
 /**
  * Present an {@link AttackDef} as a one-step {@link Plan} the editor store can
- * load, so the attack designer *is* the editor (plan §17 stage 4 / §18.2). The
- * def's unit-space content is scaled onto the authoring canvas on the way in.
+ * load, so the attack designer *is* the editor (plan §17 stage 4 / §18.2).
+ *
+ * The def is laid out at the size a fresh instance gets, centred on the canvas:
+ * what the author draws is life-size, so "how big is this attack" is answered by
+ * looking at it rather than by typing numbers.
  */
 export function defToPlan(def: AttackDef): Plan {
   const size = ATTACK_AUTHORING_SIZE;
+  const from = defBox(def);
+  const to: AttackBox = {
+    cx: size / 2,
+    cy: size / 2,
+    hx: def.defaultSize.w / 2,
+    hy: def.defaultSize.h / 2,
+  };
+
+  const baseById = new Map(def.objects.map((o) => [o.id, o.base]));
   const overrides: Record<string, StepOverride> = {};
   for (const [id, ov] of Object.entries(def.overrides)) {
-    overrides[id] = convertOverride(ov, size, true);
+    overrides[id] = mapOverride(ov, baseById.get(id), from, to);
   }
   return {
     id: def.id,
@@ -484,13 +582,13 @@ export function defToPlan(def: AttackDef): Plan {
     background: { assetId: ATTACK_BOX_ASSET, width: size, height: size },
     objects: def.objects.map((o) => ({
       ...o,
-      base: convertBase(o.base, size, true),
+      base: mapBase(o.base, from, to),
     })),
     steps: [
       {
         id: "attack",
         overrides,
-        animations: def.animations.map((a) => convertAnim(a, size, true)),
+        animations: def.animations.map((a) => mapAnim(a, from, to)),
       },
     ],
     schemaVersion: SCHEMA_VERSION,
@@ -500,32 +598,52 @@ export function defToPlan(def: AttackDef): Plan {
 /**
  * Extract an attack's editable body back out of the designer's plan, normalising
  * it to unit space. The inverse of {@link defToPlan}.
+ *
+ * Normalising means **shrink-wrapping**: the box the attack actually occupies
+ * becomes -1..1, and its pixel size becomes `defaultSize`. That's what makes the
+ * frame a planner grabs hug the artwork, keeps a long beam from arriving square,
+ * and makes the stored definition its own thumbnail. An empty attack keeps the
+ * default rectangle, because there's nothing to wrap.
  */
 export function planToAttackContent(
   plan: Plan,
   meta: {
     name: string;
-    defaultSize: { w: number; h: number };
     params?: AttackParam[];
     bindings?: AttackBindings;
   },
 ): AttackContent {
-  const size = plan.background.width;
   const step = plan.steps[0];
+  const content = {
+    objects: plan.objects,
+    overrides: step?.overrides ?? {},
+    animations: step?.animations ?? [],
+  };
+  const from = attackContentBox(content);
+  const defaultSize = from
+    ? { w: from.hx * 2, h: from.hy * 2 }
+    : { w: 400, h: 400 };
+
+  const baseById = new Map(content.objects.map((o) => [o.id, o.base]));
   const overrides: Record<string, StepOverride> = {};
-  for (const [id, ov] of Object.entries(step?.overrides ?? {})) {
-    overrides[id] = convertOverride(ov, size, false);
+  for (const [id, ov] of Object.entries(content.overrides)) {
+    overrides[id] = mapOverride(
+      ov,
+      baseById.get(id),
+      from ?? UNIT_BOX,
+      UNIT_BOX,
+    );
   }
   return {
     name: meta.name,
-    defaultSize: meta.defaultSize,
-    objects: plan.objects.map((o) => ({
+    defaultSize,
+    objects: content.objects.map((o) => ({
       ...o,
-      base: convertBase(o.base, size, false),
+      base: mapBase(o.base, from ?? UNIT_BOX, UNIT_BOX),
     })),
     overrides,
-    animations: (step?.animations ?? []).map((a) =>
-      convertAnim(a, size, false),
+    animations: content.animations.map((a) =>
+      mapAnim(a, from ?? UNIT_BOX, UNIT_BOX),
     ),
     // Parameters and their bindings aren't spatial, so they pass straight
     // through from the designer rather than round-tripping via the canvas.

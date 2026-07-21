@@ -30,11 +30,12 @@ const def: AttackDef = {
       id: "cone",
       type: "shape",
       shape: "cone",
+      // Unit space: the attack spans its own extent, -1..1.
       base: {
-        x: 0,
-        y: 0,
-        w: 100,
-        h: 100,
+        x: -1,
+        y: -1,
+        w: 2,
+        h: 2,
         rotation: 0,
         opacity: 1,
         z: 0,
@@ -78,12 +79,9 @@ describe("expandForViewing", () => {
 
     expect(byIds).toHaveBeenCalledWith({ ids: ["atk1"] });
     expect(result.objects.map((o) => o.id)).toContain("i1::cone");
-    // Placed at the instance position (anchor at origin).
+    // Mapped onto the instance's rectangle, which is the attack's own box.
     expect(result.objects.find((o) => o.id === "i1::cone")!.base).toMatchObject(
-      {
-        x: 400,
-        y: 300,
-      },
+      { x: 300, y: 200, w: 200, h: 200 },
     );
   });
 });

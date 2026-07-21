@@ -25,12 +25,17 @@ import {
  * of the placed rectangle and ±1 its edges. Lengths are unit lengths, so 2 spans
  * the rectangle and a length scales by `w/2` / `h/2` — independently, which is
  * why a non-square rectangle stretches an attack.
+ *
+ * Unit space is the attack's *own* extent, so a stored definition always spans
+ * -1..1 exactly: nothing can sit outside its own bounding box. The default
+ * fixture object therefore fills unit space, and tests that place a part inside
+ * it add a second object.
  */
 const base = (over: Partial<ObjectBase> = {}): ObjectBase => ({
-  x: 0,
-  y: 0,
-  w: 0.5,
-  h: 0.5,
+  x: -1,
+  y: -1,
+  w: 2,
+  h: 2,
   rotation: 0,
   opacity: 1,
   z: 0,
@@ -155,34 +160,31 @@ describe("expandPlan — the common case is free", () => {
 });
 
 describe("expandPlan — placement maths", () => {
-  it("puts unit origin at the centre of the instance rectangle", () => {
+  /** A part inside the attack, alongside something that spans its extent. */
+  const withPart = (part: Partial<ObjectBase>) =>
+    makeDef({ objects: [defObj("span"), defObj("part", part)] });
+  const part = (plan: Plan) => plan.objects.find((o) => o.id === "i1::part")!;
+
+  it("fits the attack's own extent onto the instance rectangle", () => {
     const out = expandOne(makeDef({ objects: [defObj("c")] }), inst());
-    expect(lastObject(out).base).toMatchObject({ x: 100, y: 100 });
+    // The rectangle *is* the attack's bounding box — that's the whole point of
+    // dragging a Transformer handle instead of typing coordinates.
+    expect(lastObject(out).base).toMatchObject({ x: 0, y: 0, w: 200, h: 200 });
   });
 
-  it("puts unit ±1 on the rectangle's edges", () => {
-    const def = makeDef({ objects: [defObj("c", { x: 1, y: -1 })] });
-    const out = expandOne(def, inst());
-    expect(lastObject(out).base).toMatchObject({ x: 200, y: 0 });
-  });
-
-  it("scales lengths by the half-extents", () => {
-    // A unit length of 2 spans the rectangle, so 0.5 → a quarter of it.
-    const def = makeDef({ objects: [defObj("c", { w: 0.5, h: 2 })] });
-    const out = expandOne(def, inst());
-    expect(lastObject(out).base).toMatchObject({ w: 50, h: 200 });
+  it("puts a part where its unit coordinates say, ±1 being the edges", () => {
+    const out = expandOne(withPart({ x: 0.5, y: -1, w: 0.5, h: 0.5 }), inst());
+    // Centre (100,100), half-extents 100: 0.5 → 150 across, -1 → the top edge.
+    expect(part(out).base).toMatchObject({ x: 150, y: 0, w: 50, h: 50 });
   });
 
   it("stretches independently in a non-square rectangle", () => {
-    const def = makeDef({ objects: [defObj("c", { x: 1, y: 1, w: 1, h: 1 })] });
-    const out = expandOne(def, inst({ w: 400, h: 100 }));
-    // centre (200,50), halves (200,50).
-    expect(lastObject(out).base).toMatchObject({
-      x: 400,
-      y: 100,
-      w: 200,
-      h: 50,
-    });
+    const out = expandOne(
+      withPart({ x: 0.5, y: -1, w: 0.5, h: 0.5 }),
+      inst({ w: 400, h: 100 }),
+    );
+    // Centre (200,50), halves (200,50) — x and y scale by different factors.
+    expect(part(out).base).toMatchObject({ x: 300, y: 0, w: 100, h: 25 });
   });
 
   it("follows the rectangle when it moves", () => {
@@ -190,19 +192,38 @@ describe("expandPlan — placement maths", () => {
       makeDef({ objects: [defObj("c")] }),
       inst({ x: 1000, y: 500 }),
     );
-    expect(lastObject(out).base).toMatchObject({ x: 1100, y: 600 });
+    expect(lastObject(out).base).toMatchObject({ x: 1000, y: 500 });
   });
 
-  it("rotates clockwise about the centre and adds to the object's rotation", () => {
-    const def = makeDef({
-      objects: [defObj("c", { x: 1, y: 0, rotation: 15 })],
-    });
-    const out = expandOne(def, inst({ rotation: 90 }));
+  it("rotates clockwise about the rectangle's centre", () => {
+    const out = expandOne(
+      makeDef({ objects: [defObj("c")] }),
+      inst({ rotation: 90 }),
+    );
     const b = lastObject(out).base;
-    // (1,0) is the right edge; a quarter turn puts it at the bottom edge.
-    expect(b.x).toBeCloseTo(100);
-    expect(b.y).toBeCloseTo(200);
-    expect(b.rotation).toBe(105);
+    // Its top-left corner is at unit (-1,-1); a quarter turn swings that round
+    // to the rectangle's top-right.
+    expect(b.x).toBeCloseTo(200);
+    expect(b.y).toBeCloseTo(0);
+  });
+
+  it("adds the instance's rotation to a part's own", () => {
+    const out = expandOne(
+      withPart({ x: -0.5, y: -0.5, w: 1, h: 1, rotation: 15 }),
+      inst({ rotation: 90 }),
+    );
+    expect(part(out).base.rotation).toBe(105);
+  });
+
+  it("fits a definition drawn well inside its own space, so old ones self-correct", () => {
+    // Nothing guarantees stored coordinates span -1..1 — a definition authored
+    // before the extent rule, say. It still fills the rectangle it is dropped
+    // into rather than rattling around in the middle of it.
+    const def = makeDef({
+      objects: [defObj("c", { x: -0.2, y: -0.2, w: 0.4, h: 0.4 })],
+    });
+    const out = expandOne(def, inst());
+    expect(lastObject(out).base).toMatchObject({ x: 0, y: 0, w: 200, h: 200 });
   });
 });
 
@@ -268,14 +289,18 @@ describe("expandPlan — stamping", () => {
 
 describe("expandPlan — end-state overrides", () => {
   it("places the def's end state onto the instance's step, made present", () => {
+    // A half-width part that slides across: its life spans unit space, so the
+    // rectangle covers the whole sweep.
     const def = makeDef({
-      objects: [defObj("c")],
-      overrides: { c: { x: 1, y: 0 } },
+      objects: [defObj("c", { x: -1, y: -1, w: 1, h: 2 })],
+      overrides: { c: { x: 0 } },
     });
     const out = expandOne(def, inst());
+    // Ends at the middle of the rectangle; the y it never changed comes along,
+    // because a rotated placement can't express one axis alone.
     expect(out.steps[0]!.overrides["i1::c"]).toEqual({
-      x: 200,
-      y: 100,
+      x: 100,
+      y: 0,
       visible: true,
     });
   });
@@ -286,50 +311,50 @@ describe("expandPlan — end-state overrides", () => {
       overrides: { c: { visible: false } },
     });
     const out = expandOne(def, inst());
-    expect(out.steps[0]!.overrides["i1::c"]).toEqual({ visible: false });
+    expect(out.steps[0]!.overrides["i1::c"]).toMatchObject({ visible: false });
   });
 });
 
 describe("expandPlan — animations", () => {
   it("retargets and offsets animations, and maps their params", () => {
     const def = makeDef({
-      objects: [defObj("c")],
+      objects: [defObj("c", { x: -1, y: -1, w: 1, h: 2 })],
       animations: [
         defAnim({
           objectId: "c",
           effect: "move",
           delayMs: 100,
-          params: { toX: 1, toY: 0 },
+          params: { toX: 0, toY: -1 },
         }),
       ],
     });
     const out = expandOne(def, inst({ startMs: 200 }));
-    const anim = out.steps[0]!.animations.find((a) => a.id === "i1::a1")!;
+    const anim = animById(out, "i1::a1");
     expect(anim.objectId).toBe("i1::c");
     expect(anim.delayMs).toBe(300); // 100 + startMs 200
-    expect(anim.params).toMatchObject({ toX: 200, toY: 100 });
+    expect(anim.params).toMatchObject({ toX: 100, toY: 0 });
   });
 
   it("maps a motion path point by point", () => {
     const def = makeDef({
-      objects: [defObj("c")],
+      objects: [defObj("c", { x: -1, y: -1, w: 0.5, h: 0.5 })],
       animations: [
         defAnim({
           objectId: "c",
           params: {
             path: [
               { x: -1, y: -1 },
-              { x: 1, y: 1 },
+              { x: 0.5, y: 0.5 },
             ],
           },
         }),
       ],
     });
     const out = expandOne(def, inst());
-    const anim = out.steps[0]!.animations.find((a) => a.id === "i1::a1")!;
-    expect(anim.params!.path).toEqual([
+    // The path is part of the attack's extent, so the sweep spans the rectangle.
+    expect(animById(out, "i1::a1").params!.path).toEqual([
       { x: 0, y: 0 },
-      { x: 200, y: 200 },
+      { x: 150, y: 150 },
     ]);
   });
 
@@ -598,10 +623,8 @@ describe("expandPlan — parameters", () => {
 });
 
 describe("defToPlan / planToAttackContent", () => {
-  it("denormalises unit space onto the square authoring canvas", () => {
-    const def = makeDef({
-      objects: [defObj("o1", { x: 0.5, y: -0.5, w: 0.25 })],
-    });
+  it("lays the def out at its own size, centred on the authoring canvas", () => {
+    const def = makeDef({ defaultSize: { w: 300, h: 200 } });
     const plan = defToPlan(def);
 
     expect(plan.background).toEqual({
@@ -609,28 +632,103 @@ describe("defToPlan / planToAttackContent", () => {
       width: ATTACK_AUTHORING_SIZE,
       height: ATTACK_AUTHORING_SIZE,
     });
-    // Half the canvas is 500, so 0.5 → 750 and -0.5 → 250.
-    expect(plan.objects[0]!.base).toMatchObject({ x: 750, y: 250, w: 125 });
+    // What you drew is what you get: 300×200, centred on the 1000² canvas. The
+    // author sees the attack life-size instead of typing its dimensions.
+    expect(plan.objects[0]!.base).toMatchObject({
+      x: 350,
+      y: 400,
+      w: 300,
+      h: 200,
+    });
     expect(plan.steps).toHaveLength(1);
   });
 
-  it("round-trips a def's body back to unit space", () => {
+  it("shrink-wraps what was drawn: its extent becomes unit space", () => {
+    // Drawn small, off in a corner of the canvas — the usual case.
+    const drawn = defToPlan(makeDef({ objects: [] }));
+    drawn.objects = [
+      {
+        id: "o1",
+        type: "shape",
+        shape: "circle",
+        base: {
+          x: 100,
+          y: 200,
+          w: 50,
+          h: 80,
+          rotation: 0,
+          opacity: 1,
+          z: 0,
+          visible: true,
+        },
+      },
+    ];
+
+    const content = planToAttackContent(drawn, { name: "Wrapped" });
+    // Stored spanning -1..1 exactly...
+    expect(content.objects[0]!.base).toMatchObject({
+      x: -1,
+      y: -1,
+      w: 2,
+      h: 2,
+    });
+    // ...and remembering the size and proportions it was drawn at, so a fresh
+    // copy doesn't arrive square.
+    expect(content.defaultSize).toEqual({ w: 50, h: 80 });
+  });
+
+  it("wraps the whole sweep, not just where things start", () => {
+    const drawn = defToPlan(makeDef({ objects: [] }));
+    drawn.objects = [
+      {
+        id: "o1",
+        type: "shape",
+        base: {
+          x: 0,
+          y: 0,
+          w: 100,
+          h: 100,
+          rotation: 0,
+          opacity: 1,
+          z: 0,
+          visible: true,
+        },
+      },
+    ];
+    drawn.steps[0]!.overrides = { o1: { x: 300, y: 0 } };
+
+    const content = planToAttackContent(drawn, { name: "Sweep" });
+    // 0‥400 across, 0‥100 down: the rectangle covers everywhere it goes.
+    expect(content.defaultSize).toEqual({ w: 400, h: 100 });
+    expect(content.objects[0]!.base).toMatchObject({ x: -1, y: -1, w: 0.5 });
+    expect(content.overrides["o1"]).toMatchObject({ x: 0.5 });
+  });
+
+  it("keeps the default rectangle for an attack with nothing in it", () => {
+    const empty = defToPlan(makeDef({ objects: [] }));
+    expect(planToAttackContent(empty, { name: "Empty" }).defaultSize).toEqual({
+      w: 400,
+      h: 400,
+    });
+  });
+
+  it("round-trips a def's body, size and all", () => {
     const def = makeDef({
-      objects: [defObj("o1", { x: 0.5, y: -0.5, w: 0.25, h: 0.75 })],
-      overrides: { o1: { x: -1, w: 2 } },
-      animations: [defAnim({ objectId: "o1", params: { toX: 0.25, toY: 0 } })],
+      defaultSize: { w: 300, h: 200 },
+      objects: [defObj("o1", { x: -1, y: -1, w: 1, h: 2 })],
+      overrides: { o1: { x: 0, y: -1 } },
+      animations: [defAnim({ objectId: "o1", params: { toX: 0, toY: -1 } })],
     });
 
-    const content = planToAttackContent(defToPlan(def), {
-      name: "Renamed",
-      defaultSize: { w: 300, h: 200 },
-    });
+    const content = planToAttackContent(defToPlan(def), { name: "Renamed" });
 
     expect(content.name).toBe("Renamed");
+    // Already shrink-wrapped, so a round trip is a no-op — editing an attack
+    // and saving it unchanged must not drift.
     expect(content.defaultSize).toEqual({ w: 300, h: 200 });
     expect(content.objects[0]!.base).toMatchObject(def.objects[0]!.base);
-    expect(content.overrides).toEqual(def.overrides);
-    expect(content.animations[0]!.params).toEqual({ toX: 0.25, toY: 0 });
+    expect(content.overrides["o1"]).toMatchObject({ x: 0, y: -1 });
+    expect(content.animations[0]!.params).toEqual({ toX: 0, toY: -1 });
   });
 });
 
