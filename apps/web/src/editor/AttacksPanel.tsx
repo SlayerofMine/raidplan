@@ -92,8 +92,25 @@ export function AttacksPanel() {
                 </select>
               </label>
               <p className="text-xs text-neutral-500">
-                {Math.round(instance.startMs)}ms in — drag its bar on the
-                timeline to change that.
+                {Math.round(instance.startMs)}ms in
+                {instance.durationMs !== undefined && (
+                  <>
+                    {" "}
+                    · stretched to {Math.round(instance.durationMs)}ms{" "}
+                    <button
+                      type="button"
+                      aria-label={`Reset ${name} duration`}
+                      onClick={() =>
+                        updateAttack(instance.id, { durationMs: undefined })
+                      }
+                      className="underline hover:text-accent"
+                    >
+                      reset
+                    </button>
+                  </>
+                )}
+                {" — "}drag its bar on the timeline to move it, its right edge
+                to stretch it.
               </p>
 
               <AttackArgs

@@ -28,11 +28,41 @@ test("an admin authors an attack, sees it listed, and deletes it", async ({
   await page.getByRole("button", { name: "Add Cone" }).click();
 
   await page.getByTestId("attack-name").fill("Frontal Cone");
+
+  // --- a parameter: the blank a plan fills in (§18.4) ---
+  // Declaring one is only half of it; until it's pointed at something inside
+  // the attack it does nothing, and the panel has to say so.
+  await page.getByLabel("New parameter key").fill("victims");
+  await page.getByLabel("New parameter label").fill("Caught by");
+  await page.getByRole("button", { name: "Add parameter" }).click();
+  await expect(
+    page.getByText(/Not pointed at anything yet|Add an animation/),
+  ).toBeVisible();
+
+  // Give it something to drive: an animation that fires on contact.
+  await page.getByTestId("mode-animate").click();
+  await page.getByTestId("add-animation").click();
+  await page.getByLabel("Trigger").selectOption("onCollision");
+
+  // Now the parameter can supply that animation's collision targets — and the
+  // option names the animation *and* its object, not just "move".
+  const supplies = page.getByLabel("Caught by supplies");
+  const target = supplies.locator("option").nth(1);
+  await expect(target).toHaveText(/move · /);
+  await supplies.selectOption((await target.getAttribute("value"))!);
+  await expect(page.getByText(/Plans are asked for a tick-list/)).toBeVisible();
+
   await page.getByTestId("save-attack").click();
 
   // Back on the list, now with the attack.
   await expect(page.getByText("Frontal Cone")).toBeVisible();
 
+  // Reopening shows the binding survived the round trip — the designer is the
+  // only place it can be seen, so it had better be there.
+  await page.getByRole("link", { name: "Frontal Cone" }).click();
+  await expect(page.getByLabel("Caught by supplies")).not.toHaveValue("");
+
+  await page.goBack();
   await page.getByRole("button", { name: "Delete Frontal Cone" }).click();
   await expect(page.getByText("Frontal Cone")).toHaveCount(0);
 });

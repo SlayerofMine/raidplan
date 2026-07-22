@@ -21,6 +21,10 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
   await page.getByRole("tab", { name: "Shapes" }).click();
   await page.getByRole("button", { name: "Add Cone" }).click();
   await page.getByTestId("attack-name").fill("Sweeping Flame");
+  // A parameter: the blank this definition leaves for whichever plan uses it.
+  await page.getByLabel("New parameter key").fill("victims");
+  await page.getByLabel("New parameter label").fill("Caught by");
+  await page.getByRole("button", { name: "Add parameter" }).click();
   await page.getByTestId("save-attack").click();
   await expect(page.getByText("Sweeping Flame")).toBeVisible();
 
@@ -61,6 +65,14 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
   ).toBeVisible();
   await expect(page.getByLabel("Sweeping Flame rotation")).toHaveCount(0);
   await expect(page.getByLabel("Sweeping Flame fires on")).toHaveValue(/.+/);
+
+  // The definition's parameter surfaces here as a tick-list of *this plan's*
+  // objects — the thing a reusable definition can never know for itself.
+  await page.getByRole("tab", { name: "Shapes" }).click();
+  await page.getByRole("button", { name: "Add Soak" }).click();
+  await expect(
+    page.getByRole("checkbox", { name: /^Caught by: / }),
+  ).toHaveCount(1);
 
   // When within that step is a draggable bar on the timeline.
   await page.getByTestId("step-0").click();

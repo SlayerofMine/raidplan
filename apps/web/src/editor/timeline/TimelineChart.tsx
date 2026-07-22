@@ -1,5 +1,6 @@
 import { useMemo, type PointerEvent as ReactPointerEvent } from "react";
 import {
+  attackNaturalMs,
   layoutStepTimeline,
   type AnimKind,
   type AnimSpan,
@@ -76,10 +77,12 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
         .filter((instance) => instance.stepId === step?.id)
         .map((instance) => {
           const def = attackDefs[instance.attackId];
+          const naturalMs = def ? attackNaturalMs(def) : 0;
           return {
             instance,
             name: def?.name ?? "Attack",
-            spanMs: def ? layoutStepTimeline(def.animations).totalMs : 0,
+            naturalMs,
+            spanMs: instance.durationMs ?? naturalMs,
           };
         }),
     [attacks, step?.id, attackDefs],
@@ -184,6 +187,7 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
                 instance={row.instance}
                 name={row.name}
                 spanMs={row.spanMs}
+                naturalMs={row.naturalMs}
                 pxPerMs={scale.pxPerMs}
               />
             ))}
@@ -195,19 +199,29 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
 }
 
 /**
- * A placed attack's bar: drag it (or Arrow keys) to change when it fires within
- * the step. There's no duration handle — an attack's length is its definition's,
- * not something a plan retunes.
+ * A placed attack's bar, with the same two grips every animation bar has:
+ *
+ *  - the **body** moves the whole attack within the step (`startMs`);
+ *  - the **handle** stretches it in time — the attack still plays exactly as
+ *    authored, just slower or faster, because the whole bundle is scaled rather
+ *    than re-timed part by part.
+ *
+ * Until the handle is touched an attack has no duration of its own and follows
+ * its definition's, so improving the definition still reaches this plan.
  */
 function AttackRow({
   instance,
   name,
   spanMs,
+  naturalMs,
   pxPerMs,
 }: {
   instance: AttackInstance;
   name: string;
+  /** How long it runs here — stretched if this plan said so. */
   spanMs: number;
+  /** How long the definition runs on its own. */
+  naturalMs: number;
   pxPerMs: number;
 }) {
   const updateAttack = useEditorStore((s) => s.updateAttack);
@@ -217,16 +231,26 @@ function AttackRow({
   );
 
   const setStart = (startMs: number) => updateAttack(instance.id, { startMs });
+  const setDuration = (durationMs: number) =>
+    updateAttack(instance.id, { durationMs });
 
-  const describe = `${name} · starts ${Math.round(instance.startMs)}ms · ${Math.round(spanMs)}ms`;
+  const stretched = instance.durationMs !== undefined && naturalMs > 0;
+  const speed = stretched ? naturalMs / spanMs : 1;
+  const describe =
+    `${name} · starts ${Math.round(instance.startMs)}ms · ${Math.round(spanMs)}ms` +
+    (stretched ? ` · ${speed.toFixed(2)}× speed` : "");
 
-  const beginDrag = (e: ReactPointerEvent) => {
+  const beginDrag = (
+    e: ReactPointerEvent,
+    from: number,
+    min: number,
+    apply: (ms: number) => void,
+  ) => {
     e.preventDefault();
     e.stopPropagation();
     const startX = e.clientX;
-    const from = instance.startMs;
     const move = (ev: PointerEvent) =>
-      setStart(dragValueMs(from, ev.clientX - startX, pxPerMs, 0));
+      apply(dragValueMs(from, ev.clientX - startX, pxPerMs, min));
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
@@ -253,7 +277,7 @@ function AttackRow({
           data-testid={`timeline-attack-${instance.id}`}
           aria-label={describe}
           title={describe}
-          onPointerDown={beginDrag}
+          onPointerDown={(e) => beginDrag(e, instance.startMs, 0, setStart)}
           onClick={() => selectAttack([instance.id])}
           onKeyDown={(e) => {
             const dir =
@@ -273,6 +297,32 @@ function AttackRow({
           }}
         >
           <span className="pointer-events-none truncate px-1">{name}</span>
+          {/* Handle: stretch the whole attack in time. */}
+          <span
+            role="button"
+            tabIndex={0}
+            data-testid={`timeline-attack-handle-${instance.id}`}
+            aria-label={`Stretch ${name}`}
+            title="Drag to make the whole attack run slower or faster"
+            onPointerDown={(e) =>
+              beginDrag(e, spanMs, DURATION_MIN_MS, setDuration)
+            }
+            onKeyDown={(e) => {
+              const dir =
+                e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+              if (!dir) return;
+              e.preventDefault();
+              e.stopPropagation();
+              setDuration(
+                nudgeValueMs(
+                  spanMs,
+                  dir * (e.shiftKey ? 5 : 1),
+                  DURATION_MIN_MS,
+                ),
+              );
+            }}
+            className="absolute right-0 top-0 h-full w-1.5 cursor-ew-resize bg-black/30 hover:bg-black/50"
+          />
         </button>
       </div>
     </>

@@ -620,8 +620,11 @@ argument bundles ("Tanks" → [tankA, tankB]) so a planner picks rather than re-
    are used as given rather than namespaced. **Still open: reusable parameter *sets*** (named
    bundles like "Tanks" → [tankA, tankB]).
 6. **Timeline bars** [DONE] — a placed attack gets a bar at `startMs`, as long as its definition
-   runs, dragged or arrow-keyed like an animation. No duration handle: an attack's length is its
-   definition's, not something a plan retunes.
+   runs, dragged or arrow-keyed like an animation. The right edge **stretches** it: an instance
+   `durationMs` scales the whole bundle, so a 1000ms attack pulled to 2000ms plays exactly as
+   authored at half speed. (Originally specced without a duration handle, on the grounds that an
+   attack's length belongs to its definition — which is still true: stretching doesn't edit the
+   definition, and an instance that has never been stretched keeps following it.)
 
 Net effect: the attacks panel has **no number boxes left** — the palette places, the canvas
 positions and sizes, the timeline says when, and the panel carries only the arguments the
@@ -660,3 +663,14 @@ Three things the first hands-on pass found, each a hole in §18.2–18.3 rather 
 ---
 
 *End of plan. Suggested next actions: (a) confirm the three key decisions in §2, then (b) scaffold Phase 0–1, or (c) turn this document into a checklist/issue tracker.*
+
+### 18.8 Parameters, made legible
+
+The mechanism worked; nothing explained it, so it read as a dead end. A parameter has **two**
+halves — declare it, then point it at something inside the attack — and only the first was
+visible. Now: the panel says what a parameter is and what the plan will be asked for; binding
+targets read `move · Cone` rather than `move`, which is unusable the moment an attack has three
+moves; an unbound parameter, a type nothing can read (`text`/`boolean`), and "no animation to
+drive yet" each say so where the control would be. The e2e authors a parameter, binds it, saves,
+reopens to prove the binding survived, and then ticks a plan object for it in a plan — the whole
+loop in one test. [DONE]

@@ -31,7 +31,7 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
     expect(screen.getByTestId("no-params")).toBeInTheDocument();
     await user.type(screen.getByLabelText("New parameter key"), "victims");
     await user.type(screen.getByLabelText("New parameter label"), "Caught by");
-    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(screen.getByRole("button", { name: "Add parameter" }));
 
     expect(onParamsChange).toHaveBeenCalledWith([
       { key: "victims", label: "Caught by", type: "objectRefs" },
@@ -42,6 +42,7 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
     const user = userEvent.setup();
     // The designer's plan *is* the definition: one step holds its animations.
     const objectId = state().addPrimitive("shape", "circle");
+    state().updateObject(objectId, { name: "Orb" });
     state().addStep();
     const animId = state().addAnimation(0, objectId)!;
 
@@ -58,12 +59,62 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
       />,
     );
 
-    await user.selectOptions(screen.getByLabelText("Caught by drives"), animId);
+    // The option says which animation, on which object — "move" alone is
+    // unreadable the moment an attack has three of them.
+    await user.selectOptions(
+      screen.getByLabelText("Caught by supplies"),
+      screen.getByRole("option", { name: "move · Orb" }),
+    );
+    expect(animId).toBeTruthy();
     expect(onBindingsChange).toHaveBeenCalledWith({
       collideWith: { [animId]: "victims" },
       durationMs: {},
       tint: {},
     });
+  });
+
+  it("says so when a parameter drives nothing — the half everyone misses", () => {
+    const objectId = state().addPrimitive("shape", "circle");
+    state().addStep();
+    state().addAnimation(0, objectId);
+
+    render(
+      <AttackParamsPanel
+        params={[{ key: "victims", label: "Caught by", type: "objectRefs" }]}
+        bindings={EMPTY}
+        onParamsChange={vi.fn()}
+        onBindingsChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Not pointed at anything yet/)).toBeInTheDocument();
+  });
+
+  it("points at the missing half when there's nothing to drive", () => {
+    render(
+      <AttackParamsPanel
+        params={[{ key: "victims", label: "Caught by", type: "objectRefs" }]}
+        bindings={EMPTY}
+        onParamsChange={vi.fn()}
+        onBindingsChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("no-targets-victims")).toHaveTextContent(
+      "Add an animation",
+    );
+  });
+
+  it("admits when a type drives nothing at all rather than offering a dead select", () => {
+    render(
+      <AttackParamsPanel
+        params={[{ key: "note", label: "Note", type: "text" }]}
+        bindings={EMPTY}
+        onParamsChange={vi.fn()}
+        onBindingsChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/inert/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Note supplies")).toBeNull();
   });
 
   it("drops bindings that pointed at a removed parameter", async () => {

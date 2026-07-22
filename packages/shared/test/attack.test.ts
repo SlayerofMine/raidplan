@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   ATTACK_AUTHORING_SIZE,
   ATTACK_BOX_ASSET,
+  attackNaturalMs,
+  attackSpanMs,
   AttackDefSchema,
   attackIdsInPlan,
   defToPlan,
@@ -535,6 +537,85 @@ describe("expandPlan — an attack owns its own timing", () => {
     const out = expandPlan(plan, { atk: chained });
     // i2's first animation still starts at 0 — it does not queue up behind i1.
     expect(animById(out, "i2::a1").delayMs).toBe(0);
+  });
+});
+
+describe("expandPlan — a stretched attack", () => {
+  /** 500ms, then 200ms after it: 700ms of attack. */
+  const chained = makeDef({
+    objects: [defObj("o1")],
+    animations: [
+      defAnim({ id: "a1", objectId: "o1", durationMs: 500 }),
+      defAnim({
+        id: "a2",
+        objectId: "o1",
+        trigger: "afterPrevious",
+        durationMs: 200,
+      }),
+    ],
+  });
+
+  it("reports the definition's own length", () => {
+    expect(attackNaturalMs(chained)).toBe(700);
+    expect(attackSpanMs(chained, inst())).toBe(700);
+  });
+
+  it("plays at the definition's speed when the plan says nothing", () => {
+    const out = expandOne(chained, inst());
+    expect(animById(out, "i1::a1").durationMs).toBe(500);
+    expect(animById(out, "i1::a2").delayMs).toBe(500);
+  });
+
+  it("stretches every part in proportion, so it just runs slower", () => {
+    const out = expandOne(chained, inst({ durationMs: 1400 }));
+    // Twice as long: everything takes twice as long and starts twice as late,
+    // in the same order — it is not re-authored, only slowed down.
+    expect(animById(out, "i1::a1").durationMs).toBe(1000);
+    expect(animById(out, "i1::a2").durationMs).toBe(400);
+    expect(animById(out, "i1::a2").delayMs).toBe(1000);
+    expect(attackSpanMs(chained, inst({ durationMs: 1400 }))).toBe(1400);
+  });
+
+  it("compresses just as happily", () => {
+    const out = expandOne(chained, inst({ durationMs: 350 }));
+    expect(animById(out, "i1::a1").durationMs).toBe(250);
+    expect(animById(out, "i1::a2").delayMs).toBe(250);
+  });
+
+  it("stacks with the start offset without scaling it", () => {
+    // `startMs` says when the attack fires within the step; stretching says how
+    // long it then takes. Scaling the offset too would couple the two.
+    const out = expandOne(chained, inst({ startMs: 300, durationMs: 1400 }));
+    expect(animById(out, "i1::a1").delayMs).toBe(300);
+    expect(animById(out, "i1::a2").delayMs).toBe(1300);
+  });
+
+  it("measures the stretch against a parameter-set duration, not the authored one", () => {
+    const def = makeDef({
+      objects: [defObj("o1")],
+      animations: [defAnim({ id: "a1", objectId: "o1", durationMs: 500 })],
+      params: [{ key: "speed", label: "Duration", type: "number" }],
+      bindings: { collideWith: {}, durationMs: { a1: "speed" }, tint: {} },
+    });
+    // The plan says the part runs 1000ms, then the whole attack is stretched to
+    // 2000ms: 2×, not 4×.
+    const out = expandOne(
+      def,
+      inst({ args: { speed: 1000 }, durationMs: 2000 }),
+    );
+    expect(animById(out, "i1::a1").durationMs).toBe(2000);
+  });
+
+  it("leaves an attack with no animations alone rather than dividing by zero", () => {
+    const out = expandOne(
+      makeDef({ animations: [] }),
+      inst({ durationMs: 900 }),
+    );
+    expect(attackNaturalMs(makeDef({ animations: [] }))).toBe(0);
+    // Only the implicit entrance, still instant.
+    expect(out.steps[0]!.animations.every((a) => a.durationMs === 0)).toBe(
+      true,
+    );
   });
 });
 

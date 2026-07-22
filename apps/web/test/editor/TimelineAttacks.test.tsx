@@ -71,6 +71,36 @@ describe("attack bars", () => {
     expect(state().attacks[0]!.startMs).toBeGreaterThan(0);
   });
 
+  it("stretches the whole attack from the bar's right edge", async () => {
+    const user = userEvent.setup();
+    state().addStep();
+    const id = state().addAttack("atk1", { x: 0, y: 0 })!;
+    render(<TimelineChart stepIndex={0} />);
+
+    const handle = screen.getByTestId(`timeline-attack-handle-${id}`);
+    handle.focus();
+    await user.keyboard("{ArrowRight}");
+
+    // It starts with no duration of its own — following the definition — and
+    // only pins one once you pull it.
+    expect(state().attacks[0]!.durationMs).toBeGreaterThan(800);
+  });
+
+  it("says how much slower it now runs", async () => {
+    const user = userEvent.setup();
+    state().addStep();
+    const id = state().addAttack("atk1", { x: 0, y: 0 })!;
+    render(<TimelineChart stepIndex={0} />);
+
+    state().updateAttack(id, { durationMs: 1600 });
+    await user.click(screen.getByTestId(`timeline-attack-row-${id}`));
+
+    // 800ms of attack played over 1600ms is half speed.
+    expect(screen.getByTestId(`timeline-attack-${id}`)).toHaveAccessibleName(
+      /1600ms · 0.50× speed/,
+    );
+  });
+
   it("selects the attack when its bar is clicked", async () => {
     const user = userEvent.setup();
     state().addStep();

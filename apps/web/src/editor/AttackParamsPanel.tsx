@@ -15,9 +15,13 @@ const NO_ANIMATIONS: never[] = [];
  * Declaring an attack's parameters, in the designer (plan §18.4).
  *
  * Some behaviour can't live in a definition because it refers to things only the
- * using plan knows — above all *which objects set a collision off*. Here the
- * author declares what the plan must supply, then points one of the definition's
- * internals at it.
+ * using plan knows — above all *which objects set a collision off*. A parameter
+ * is the blank left for that: declare one here, **point it at something inside
+ * the attack**, and every plan that places the attack is asked to fill it in.
+ *
+ * Two halves, and the second is the one that's easy to miss: a parameter that
+ * isn't pointed at anything does nothing at all. Hence the "supplies …" row on
+ * every parameter, and the running summary of what a plan will be asked.
  *
  * Binding is driven from the parameter rather than from the animation editor on
  * purpose: the animation panel is shared with the plan editor, and attacks have
@@ -35,10 +39,20 @@ const SLOT_FOR: Record<AttackParamType, keyof AttackBindings | null> = {
   boolean: null,
 };
 
+/** Read as "supplies the …" — the thing inside the attack a parameter drives. */
 const SLOT_LABEL: Record<keyof AttackBindings, string> = {
-  collideWith: "collides with",
+  collideWith: "collision targets of",
   durationMs: "duration of",
-  tint: "tint of",
+  tint: "colour of",
+};
+
+/** What the planner will be shown, so the author knows what they're asking for. */
+const ASKED_FOR: Record<AttackParamType, string> = {
+  objectRefs: "a tick-list of their own objects",
+  number: "a number",
+  color: "a colour",
+  text: "some text",
+  boolean: "a yes/no",
 };
 
 export function AttackParamsPanel({
@@ -112,6 +126,10 @@ export function AttackParamsPanel({
     return object?.base.name ?? object?.base.label ?? id;
   };
 
+  /** "move · Cone" — an effect alone is unreadable once there are three moves. */
+  const animLabel = (a: { effect: string; objectId: string }) =>
+    `${a.effect} · ${nameOf(a.objectId)}`;
+
   return (
     <section
       className="border-t border-panelborder p-3"
@@ -121,8 +139,10 @@ export function AttackParamsPanel({
         Parameters
       </h2>
       <p className="mb-2 text-xs text-neutral-500">
-        What the plan has to tell this attack — like who a pickup can be caught
-        by.
+        A blank the plan fills in. Add one below, then point it at something
+        inside this attack — a parameter that drives nothing is never asked for.
+        The classic use is <em>who gets caught</em>: a definition can&apos;t
+        know a plan&apos;s tokens, so it asks for them.
       </p>
 
       <ul className="mb-3 flex flex-col gap-2" data-testid="param-list">
@@ -136,7 +156,8 @@ export function AttackParamsPanel({
           const targets =
             slot === "tint"
               ? objectIds.map((id) => ({ id, label: nameOf(id) }))
-              : animations.map((a) => ({ id: a.id, label: a.effect }));
+              : animations.map((a) => ({ id: a.id, label: animLabel(a) }));
+          const bound = slot ? boundTarget(slot, param.key) : "";
           return (
             <li
               key={param.key}
@@ -156,23 +177,51 @@ export function AttackParamsPanel({
                   Remove
                 </button>
               </div>
-              {slot && (
-                <label className="flex items-center gap-1 text-xs text-neutral-400">
-                  {SLOT_LABEL[slot]}
-                  <select
-                    aria-label={`${param.label} drives`}
-                    value={boundTarget(slot, param.key)}
-                    onChange={(e) => bind(slot, e.target.value, param.key)}
-                    className={FIELD}
-                  >
-                    <option value="">nothing</option>
-                    {targets.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              {slot ? (
+                <>
+                  <label className="flex flex-wrap items-center gap-1 text-xs text-neutral-400">
+                    supplies the {SLOT_LABEL[slot]}
+                    <select
+                      aria-label={`${param.label} supplies`}
+                      value={bound}
+                      onChange={(e) => bind(slot, e.target.value, param.key)}
+                      className={FIELD}
+                    >
+                      <option value="">nothing yet</option>
+                      {targets.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {targets.length === 0 && (
+                    <p
+                      data-testid={`no-targets-${param.key}`}
+                      className="text-xs text-amber-400/80"
+                    >
+                      {slot === "tint"
+                        ? "Add an object for it to colour."
+                        : "Add an animation for it to drive."}
+                    </p>
+                  )}
+                  {!bound && targets.length > 0 && (
+                    <p className="text-xs text-amber-400/80">
+                      Not pointed at anything yet, so nothing in the attack
+                      would use the answer.
+                    </p>
+                  )}
+                  {bound && (
+                    <p className="text-xs text-neutral-500">
+                      Plans are asked for {ASKED_FOR[param.type]}.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-neutral-500">
+                  Nothing inside an attack reads a {param.type} value yet — this
+                  parameter is inert.
+                </p>
               )}
             </li>
           );
@@ -208,6 +257,7 @@ export function AttackParamsPanel({
         </select>
         <button
           type="button"
+          aria-label="Add parameter"
           onClick={add}
           disabled={!key.trim()}
           className="rounded border border-panelborder px-2 py-0.5 text-xs hover:border-accent disabled:opacity-40"

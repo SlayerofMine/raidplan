@@ -141,6 +141,23 @@ export function attackIdsInPlan(plan: Plan): string[] {
   return [...ids];
 }
 
+/**
+ * How long a definition runs on its own — its **natural** length.
+ *
+ * An instance may be stretched away from this ({@link AttackInstance.durationMs}),
+ * which scales the whole bundle rather than editing it. Both the timeline's bar
+ * and the expansion read the length from here, so a bar can't disagree with what
+ * plays.
+ */
+export function attackNaturalMs(def: AttackDef): number {
+  return layoutStepTimeline(def.animations).totalMs;
+}
+
+/** How long a *placed* attack runs: its own duration if stretched, else the def's. */
+export function attackSpanMs(def: AttackDef, instance: AttackInstance): number {
+  return instance.durationMs ?? attackNaturalMs(def);
+}
+
 /** An axis-aligned box: a centre and half-extents. Never zero-sized. */
 export interface AttackBox {
   cx: number;
@@ -396,15 +413,30 @@ function expandInstance(
     };
   });
 
+  // A parameter can change how long a part runs, so bound durations are settled
+  // first — everything below measures against the result.
+  const effective: Anim[] = def.animations.map((a) => {
+    const bound = argOf(def.bindings.durationMs[a.id] ?? "");
+    return typeof bound === "number" ? { ...a, durationMs: bound } : a;
+  });
+
   // Resolve the def's own trigger chain *before* it joins the host step, using
   // the very rules the player will apply to it. An attack is one indivisible
   // bundle: its internals must not chain off whatever the plan happens to have
   // animated just before, and `startMs` must shift it exactly once.
-  const spans = new Map(
-    layoutStepTimeline(def.animations).spans.map((s) => [s.animId, s]),
-  );
+  const layout = layoutStepTimeline(effective);
+  const spans = new Map(layout.spans.map((s) => [s.animId, s]));
 
-  const animations: Anim[] = def.animations.map((a) => {
+  // A placed attack can be stretched or compressed in time. That scales the
+  // whole bundle — every delay and every duration — so it plays out exactly as
+  // authored, just slower or faster. An attack with no length can't be
+  // stretched, and an instance that says nothing keeps following its definition.
+  const stretch =
+    instance.durationMs && layout.totalMs > 0
+      ? instance.durationMs / layout.totalMs
+      : 1;
+
+  const animations: Anim[] = effective.map((a) => {
     // A bound collideWith names objects in the **plan**, so those ids are used
     // as given; only a definition's own literal ids get namespaced.
     const boundTargets = argOf(def.bindings.collideWith[a.id] ?? "");
@@ -412,24 +444,23 @@ function expandInstance(
       ? boundTargets
       : a.collideWith?.map((id) => scopedId(instance.id, id));
 
-    const boundDuration = argOf(def.bindings.durationMs[a.id] ?? "");
-
     return {
       ...a,
       id: scopedId(instance.id, a.id),
       objectId: scopedId(instance.id, a.objectId),
       ...(collideWith ? { collideWith } : {}),
+      durationMs: a.durationMs * stretch,
       // A deferred animation is timed from the event that fires it (a click, a
-      // collision), not from the step, so its delay is left exactly as authored.
+      // collision), not from the step, so it keeps its own delay — stretched
+      // like everything else, because it's still part of this attack.
       ...(isDeferredTrigger(a.trigger)
-        ? {}
+        ? { delayMs: a.delayMs * stretch }
         : {
             trigger: "onEnter" as const,
-            delayMs: instance.startMs + (spans.get(a.id)?.startMs ?? a.delayMs),
+            delayMs:
+              instance.startMs +
+              (spans.get(a.id)?.startMs ?? a.delayMs) * stretch,
           }),
-      ...(typeof boundDuration === "number"
-        ? { durationMs: boundDuration }
-        : {}),
       ...(a.params ? { params: mapParams(a.params, from, to, spin) } : {}),
     };
   });

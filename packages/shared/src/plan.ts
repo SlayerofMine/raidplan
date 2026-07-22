@@ -142,6 +142,16 @@ export const AttackInstanceSchema = z.object({
   /** Delay from the step's start before the attack begins. */
   startMs: z.number().finite().nonnegative().default(0),
   /**
+   * How long the whole attack takes, in ms. Absent means "however long the
+   * definition runs" — which is the default, so improving a definition's timing
+   * still reaches every plan using it.
+   *
+   * Setting it **stretches time inside the attack** rather than editing it: an
+   * attack that naturally runs 1000ms, placed at 2000ms, plays every part of
+   * itself at half speed, in the same order and the same proportions.
+   */
+  durationMs: z.number().finite().positive().optional(),
+  /**
    * Arguments for the definition's declared parameters (plan §18.4), keyed by
    * parameter. This is how a plan tells an attack things only it knows — such as
    * which of *its* objects can set a collision off.
