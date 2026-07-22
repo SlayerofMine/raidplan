@@ -36,21 +36,26 @@ test("an admin authors an attack, sees it listed, and deletes it", async ({
   await page.getByLabel("New parameter label").fill("Caught by");
   await page.getByRole("button", { name: "Add parameter" }).click();
   await expect(
-    page.getByText(/Not pointed at anything yet|Add an animation/),
+    page.getByTestId("no-targets-victims-collideWith"),
   ).toBeVisible();
 
-  // Give it something to drive: an animation that fires on contact.
+  // Give it something to drive: two animations that fire on contact.
   await page.getByTestId("mode-animate").click();
   await page.getByTestId("add-animation").click();
   await page.getByLabel("Trigger").selectOption("onCollision");
+  await page.getByTestId("add-animation").click();
+  await page.getByLabel("Trigger").last().selectOption("onCollision");
 
-  // Now the parameter can supply that animation's collision targets — and the
-  // option names the animation *and* its object, not just "move".
-  const supplies = page.getByLabel("Caught by supplies");
-  const target = supplies.locator("option").nth(1);
-  await expect(target).toHaveText(/move · /);
-  await supplies.selectOption((await target.getAttribute("value"))!);
-  await expect(page.getByText(/Plans are asked for a tick-list/)).toBeVisible();
+  // One answer, several places: the parameter supplies *both* animations'
+  // collision targets. Each place is named for its position, effect and object,
+  // because "move" alone stops meaning anything at two.
+  await page
+    .getByRole("checkbox", { name: /^Caught by collision targets of: 1\./ })
+    .check();
+  await page
+    .getByRole("checkbox", { name: /^Caught by collision targets of: 2\./ })
+    .check();
+  await expect(page.getByText(/it drives 2 places/)).toBeVisible();
 
   await page.getByTestId("save-attack").click();
 
@@ -60,7 +65,7 @@ test("an admin authors an attack, sees it listed, and deletes it", async ({
   // Reopening shows the binding survived the round trip — the designer is the
   // only place it can be seen, so it had better be there.
   await page.getByRole("link", { name: "Frontal Cone" }).click();
-  await expect(page.getByLabel("Caught by supplies")).not.toHaveValue("");
+  await expect(page.getByText(/it drives 2 places/)).toBeVisible();
 
   await page.goBack();
   await page.getByRole("button", { name: "Delete Frontal Cone" }).click();

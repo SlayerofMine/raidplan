@@ -47,7 +47,7 @@ const def: AttackDef = {
   overrides: {},
   animations: [],
   params: [],
-  bindings: { collideWith: {}, durationMs: {}, tint: {} },
+  bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
 };
 
 beforeEach(() => vi.clearAllMocks());

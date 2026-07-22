@@ -74,7 +74,7 @@ const makeDef = (over: Partial<AttackDef> = {}): AttackDef => ({
   overrides: {},
   animations: [],
   params: [],
-  bindings: { collideWith: {}, durationMs: {}, tint: {} },
+  bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
   ...over,
 });
 
@@ -595,7 +595,12 @@ describe("expandPlan — a stretched attack", () => {
       objects: [defObj("o1")],
       animations: [defAnim({ id: "a1", objectId: "o1", durationMs: 500 })],
       params: [{ key: "speed", label: "Duration", type: "number" }],
-      bindings: { collideWith: {}, durationMs: { a1: "speed" }, tint: {} },
+      bindings: {
+        collideWith: {},
+        durationMs: { a1: "speed" },
+        delayMs: {},
+        tint: {},
+      },
     });
     // The plan says the part runs 1000ms, then the whole attack is stretched to
     // 2000ms: 2×, not 4×.
@@ -636,6 +641,7 @@ describe("expandPlan — parameters", () => {
       bindings: {
         collideWith: { caught: "victims" },
         durationMs: {},
+        delayMs: {},
         tint: {},
       },
       ...over,
@@ -682,6 +688,62 @@ describe("expandPlan — parameters", () => {
     expect(anim.collideWith).toEqual(["i1::tank"]);
   });
 
+  it("feeds every place it was pointed at, from one answer", () => {
+    // The whole reason a parameter is named: "the tanks" is decided once and
+    // used by everything in the attack that needs to know.
+    const def = makeDef({
+      objects: [defObj("orb"), defObj("cone")],
+      animations: [
+        defAnim({
+          id: "hitA",
+          objectId: "orb",
+          trigger: "onCollision",
+        }),
+        defAnim({
+          id: "hitB",
+          objectId: "cone",
+          trigger: "onCollision",
+        }),
+      ],
+      params: [{ key: "tanks", label: "Tanks", type: "objectRefs" }],
+      bindings: {
+        collideWith: { hitA: "tanks", hitB: "tanks" },
+        durationMs: {},
+        delayMs: {},
+        tint: {},
+      },
+    });
+    const out = expandOne(def, inst({ args: { tanks: ["t1", "t2"] } }));
+    expect(animById(out, "i1::hitA").collideWith).toEqual(["t1", "t2"]);
+    expect(animById(out, "i1::hitB").collideWith).toEqual(["t1", "t2"]);
+  });
+
+  it("supplies a delay, and the chain lays out around it", () => {
+    const def = makeDef({
+      objects: [defObj("orb")],
+      animations: [
+        defAnim({ id: "a1", objectId: "orb", durationMs: 500 }),
+        defAnim({
+          id: "a2",
+          objectId: "orb",
+          trigger: "afterPrevious",
+          durationMs: 100,
+        }),
+      ],
+      params: [{ key: "cast", label: "Cast time", type: "number" }],
+      bindings: {
+        collideWith: {},
+        durationMs: {},
+        delayMs: { a1: "cast" },
+        tint: {},
+      },
+    });
+    const out = expandOne(def, inst({ args: { cast: 300 } }));
+    expect(animById(out, "i1::a1").delayMs).toBe(300);
+    // What follows it moves too — the plan's answer is part of the timing.
+    expect(animById(out, "i1::a2").delayMs).toBe(800);
+  });
+
   it("binds a tint and a duration", () => {
     const def = makeDef({
       objects: [defObj("orb")],
@@ -693,6 +755,7 @@ describe("expandPlan — parameters", () => {
       bindings: {
         collideWith: {},
         durationMs: { a1: "speed" },
+        delayMs: {},
         tint: { orb: "colour" },
       },
     });
@@ -712,6 +775,7 @@ describe("expandPlan — parameters", () => {
       bindings: {
         collideWith: {},
         durationMs: { a1: "missing" },
+        delayMs: {},
         tint: { orb: "colour" },
       },
     });

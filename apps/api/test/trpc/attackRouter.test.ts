@@ -20,7 +20,7 @@ const content = {
   objects: [],
   animations: [],
   params: [],
-  bindings: { collideWith: {}, durationMs: {}, tint: {} },
+  bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
 };
 
 async function expectCode(promise: Promise<unknown>, code: string) {
@@ -38,7 +38,7 @@ const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   overrides: {},
   animations: [],
   params: [],
-  bindings: { collideWith: {}, durationMs: {}, tint: {} },
+  bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
   ...over,
 });
 

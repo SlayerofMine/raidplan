@@ -48,7 +48,7 @@ function blankDef(encounterId: string): AttackDef {
     overrides: {},
     animations: [],
     params: [],
-    bindings: { collideWith: {}, durationMs: {}, tint: {} },
+    bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
   };
 }
 
@@ -87,6 +87,7 @@ function AttackDesigner({
   const [bindings, setBindings] = useState<AttackBindings>({
     collideWith: {},
     durationMs: {},
+    delayMs: {},
     tint: {},
   });
   const [saving, setSaving] = useState(false);

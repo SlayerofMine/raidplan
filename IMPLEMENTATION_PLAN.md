@@ -664,7 +664,7 @@ Three things the first hands-on pass found, each a hole in §18.2–18.3 rather 
 
 *End of plan. Suggested next actions: (a) confirm the three key decisions in §2, then (b) scaffold Phase 0–1, or (c) turn this document into a checklist/issue tracker.*
 
-### 18.8 Parameters, made legible
+### 18.8 Parameters, made legible and reusable
 
 The mechanism worked; nothing explained it, so it read as a dead end. A parameter has **two**
 halves — declare it, then point it at something inside the attack — and only the first was
@@ -674,3 +674,12 @@ moves; an unbound parameter, a type nothing can read (`text`/`boolean`), and "no
 drive yet" each say so where the control would be. The e2e authors a parameter, binds it, saves,
 reopens to prove the binding survived, and then ticks a plan object for it in a plan — the whole
 loop in one test. [DONE]
+
+**One parameter, many places.** The storage was always keyed by *target*
+(`Record<targetId, paramKey>`), so many-to-one was already expressible; only the UI
+insisted on a single choice. Each place is now a tick-box, so one "Tanks" answer feeds every
+animation that needs to know who the tanks are. The reverse stays single — a place reads from
+exactly one parameter — and a place another parameter has already claimed shows as taken, with
+whose it is, rather than as a box that won't tick. A number gained a second slot (`delayMs`
+beside `durationMs`), because "a number can only ever mean a duration" was arbitrary; bound
+delays settle before the chain lays out, exactly like bound durations. [DONE]

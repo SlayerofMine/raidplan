@@ -20,8 +20,14 @@ const NO_ANIMATIONS: never[] = [];
  * the attack**, and every plan that places the attack is asked to fill it in.
  *
  * Two halves, and the second is the one that's easy to miss: a parameter that
- * isn't pointed at anything does nothing at all. Hence the "supplies …" row on
+ * isn't pointed at anything does nothing at all. Hence the "supplies …" list on
  * every parameter, and the running summary of what a plan will be asked.
+ *
+ * A parameter can drive **as many places as it likes** — one "the tanks" answer
+ * feeding three animations' collision targets is the whole point of naming it —
+ * so each place is a tick-box rather than a choice. The reverse stays single:
+ * a place reads from exactly one parameter, and one already spoken for says
+ * which parameter has it.
  *
  * Binding is driven from the parameter rather than from the animation editor on
  * purpose: the animation panel is shared with the plan editor, and attacks have
@@ -30,19 +36,27 @@ const NO_ANIMATIONS: never[] = [];
 const FIELD =
   "rounded border border-panelborder bg-neutral-900 px-1 py-0.5 text-xs";
 
-/** Which slot a parameter of each type can drive. */
-const SLOT_FOR: Record<AttackParamType, keyof AttackBindings | null> = {
-  objectRefs: "collideWith",
-  number: "durationMs",
-  color: "tint",
-  text: null,
-  boolean: null,
+/** Which slots a parameter of each type can drive. */
+const SLOTS_FOR: Record<AttackParamType, (keyof AttackBindings)[]> = {
+  objectRefs: ["collideWith"],
+  number: ["durationMs", "delayMs"],
+  color: ["tint"],
+  text: [],
+  boolean: [],
 };
+
+const ALL_SLOTS = [
+  "collideWith",
+  "durationMs",
+  "delayMs",
+  "tint",
+] as const satisfies readonly (keyof AttackBindings)[];
 
 /** Read as "supplies the …" — the thing inside the attack a parameter drives. */
 const SLOT_LABEL: Record<keyof AttackBindings, string> = {
   collideWith: "collision targets of",
   durationMs: "duration of",
+  delayMs: "delay of",
   tint: "colour of",
 };
 
@@ -92,9 +106,10 @@ export function AttackParamsPanel({
     const next: AttackBindings = {
       collideWith: {},
       durationMs: {},
+      delayMs: {},
       tint: {},
     };
-    for (const slot of ["collideWith", "durationMs", "tint"] as const) {
+    for (const slot of ALL_SLOTS) {
       for (const [target, k] of Object.entries(bindings[slot])) {
         if (k !== paramKey) next[slot][target] = k;
       }
@@ -102,33 +117,42 @@ export function AttackParamsPanel({
     onBindingsChange(next);
   };
 
+  /** Tick a place on or off for this parameter. Places are independent. */
   const bind = (
     slot: keyof AttackBindings,
     target: string,
     paramKey: string,
+    on: boolean,
   ) => {
     const slotMap = { ...bindings[slot] };
-    if (target) slotMap[target] = paramKey;
-    else {
-      for (const [t, k] of Object.entries(slotMap)) {
-        if (k === paramKey) delete slotMap[t];
-      }
-    }
+    if (on) slotMap[target] = paramKey;
+    else delete slotMap[target];
     onBindingsChange({ ...bindings, [slot]: slotMap });
   };
 
-  /** The target currently bound to this parameter in a slot, if any. */
-  const boundTarget = (slot: keyof AttackBindings, paramKey: string) =>
-    Object.entries(bindings[slot]).find(([, k]) => k === paramKey)?.[0] ?? "";
+  /** How many places this parameter drives — zero means it does nothing. */
+  const boundCount = (paramKey: string) =>
+    ALL_SLOTS.reduce(
+      (n, slot) =>
+        n + Object.values(bindings[slot]).filter((k) => k === paramKey).length,
+      0,
+    );
 
   const nameOf = (id: string) => {
     const object = objects[id];
     return object?.base.name ?? object?.base.label ?? id;
   };
 
-  /** "move · Cone" — an effect alone is unreadable once there are three moves. */
-  const animLabel = (a: { effect: string; objectId: string }) =>
-    `${a.effect} · ${nameOf(a.objectId)}`;
+  const labelOfParam = (paramKey: string) =>
+    params.find((p) => p.key === paramKey)?.label ?? paramKey;
+
+  /**
+   * "2. move · Cone" — an effect alone is unreadable once an attack has three
+   * moves, and two moves on one object need the position to tell them apart.
+   * The number is the animation's place in the step, as the timeline shows it.
+   */
+  const animLabel = (a: { effect: string; objectId: string }, index: number) =>
+    `${index + 1}. ${a.effect} · ${nameOf(a.objectId)}`;
 
   return (
     <section
@@ -152,12 +176,8 @@ export function AttackParamsPanel({
           </li>
         )}
         {params.map((param) => {
-          const slot = SLOT_FOR[param.type];
-          const targets =
-            slot === "tint"
-              ? objectIds.map((id) => ({ id, label: nameOf(id) }))
-              : animations.map((a) => ({ id: a.id, label: animLabel(a) }));
-          const bound = slot ? boundTarget(slot, param.key) : "";
+          const slots = SLOTS_FOR[param.type];
+          const places = boundCount(param.key);
           return (
             <li
               key={param.key}
@@ -177,52 +197,45 @@ export function AttackParamsPanel({
                   Remove
                 </button>
               </div>
-              {slot ? (
-                <>
-                  <label className="flex flex-wrap items-center gap-1 text-xs text-neutral-400">
-                    supplies the {SLOT_LABEL[slot]}
-                    <select
-                      aria-label={`${param.label} supplies`}
-                      value={bound}
-                      onChange={(e) => bind(slot, e.target.value, param.key)}
-                      className={FIELD}
-                    >
-                      <option value="">nothing yet</option>
-                      {targets.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {targets.length === 0 && (
-                    <p
-                      data-testid={`no-targets-${param.key}`}
-                      className="text-xs text-amber-400/80"
-                    >
-                      {slot === "tint"
-                        ? "Add an object for it to colour."
-                        : "Add an animation for it to drive."}
-                    </p>
-                  )}
-                  {!bound && targets.length > 0 && (
-                    <p className="text-xs text-amber-400/80">
-                      Not pointed at anything yet, so nothing in the attack
-                      would use the answer.
-                    </p>
-                  )}
-                  {bound && (
-                    <p className="text-xs text-neutral-500">
-                      Plans are asked for {ASKED_FOR[param.type]}.
-                    </p>
-                  )}
-                </>
-              ) : (
+
+              {slots.length === 0 ? (
                 <p className="text-xs text-neutral-500">
                   Nothing inside an attack reads a {param.type} value yet — this
                   parameter is inert.
                 </p>
+              ) : (
+                slots.map((slot) => (
+                  <SlotChecklist
+                    key={slot}
+                    param={param}
+                    slot={slot}
+                    targets={
+                      slot === "tint"
+                        ? objectIds.map((id) => ({ id, label: nameOf(id) }))
+                        : animations.map((a, index) => ({
+                            id: a.id,
+                            label: animLabel(a, index),
+                          }))
+                    }
+                    bindings={bindings}
+                    labelOfParam={labelOfParam}
+                    onToggle={(target, on) => bind(slot, target, param.key, on)}
+                  />
+                ))
               )}
+
+              {slots.length > 0 &&
+                (places === 0 ? (
+                  <p className="text-xs text-amber-400/80">
+                    Not pointed at anything yet, so nothing in the attack would
+                    use the answer.
+                  </p>
+                ) : (
+                  <p className="text-xs text-neutral-500">
+                    Plans are asked for {ASKED_FOR[param.type]}; it drives{" "}
+                    {places} {places === 1 ? "place" : "places"}.
+                  </p>
+                ))}
             </li>
           );
         })}
@@ -266,5 +279,74 @@ export function AttackParamsPanel({
         </button>
       </div>
     </section>
+  );
+}
+
+/**
+ * Every place in the attack a parameter of this type could drive, as tick-boxes.
+ *
+ * A place already spoken for by another parameter is shown taken rather than
+ * hidden: two parameters feeding one animation's collision targets is a
+ * contradiction, and saying whose it is beats a box that silently won't tick.
+ */
+function SlotChecklist({
+  param,
+  slot,
+  targets,
+  bindings,
+  labelOfParam,
+  onToggle,
+}: {
+  param: AttackParam;
+  slot: keyof AttackBindings;
+  targets: { id: string; label: string }[];
+  bindings: AttackBindings;
+  labelOfParam: (paramKey: string) => string;
+  onToggle: (target: string, on: boolean) => void;
+}) {
+  if (targets.length === 0) {
+    return (
+      <p
+        data-testid={`no-targets-${param.key}-${slot}`}
+        className="text-xs text-amber-400/80"
+      >
+        {slot === "tint"
+          ? "Add an object for it to colour."
+          : "Add an animation for it to drive."}
+      </p>
+    );
+  }
+
+  return (
+    <fieldset className="flex flex-col gap-0.5 text-xs text-neutral-400">
+      <legend className="text-xs text-neutral-400">
+        supplies the {SLOT_LABEL[slot]}
+      </legend>
+      {targets.map((target) => {
+        const owner = bindings[slot][target.id];
+        const mine = owner === param.key;
+        const taken = owner !== undefined && !mine;
+        return (
+          <label
+            key={target.id}
+            className={`flex items-center gap-1 ${taken ? "opacity-50" : ""}`}
+          >
+            <input
+              type="checkbox"
+              aria-label={`${param.label} ${SLOT_LABEL[slot]}: ${target.label}`}
+              checked={mine}
+              disabled={taken}
+              onChange={(e) => onToggle(target.id, e.target.checked)}
+            />
+            <span className="truncate">{target.label}</span>
+            {taken && (
+              <span className="shrink-0 text-neutral-500">
+                — {labelOfParam(owner)}
+              </span>
+            )}
+          </label>
+        );
+      })}
+    </fieldset>
   );
 }

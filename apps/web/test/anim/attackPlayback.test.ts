@@ -59,7 +59,7 @@ const def: AttackDef = {
     },
   ],
   params: [],
-  bindings: { collideWith: {}, durationMs: {}, tint: {} },
+  bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
 };
 
 const plan: Plan = {

@@ -85,6 +85,10 @@ export type AttackParam = z.infer<typeof AttackParamSchema>;
  * Deliberately a small set of **typed slots** keyed by target id, rather than a
  * template language over arbitrary fields: binding stays type-checked and
  * testable, and the general `Plan` schemas don't grow attack-authoring fields.
+ *
+ * Keying by *target* is what lets one parameter drive several places at once —
+ * "the tanks" can be the collision targets of three separate animations — while
+ * keeping the reverse unambiguous: a target reads from exactly one parameter.
  */
 export const AttackBindingsSchema = z
   .object({
@@ -92,10 +96,12 @@ export const AttackBindingsSchema = z
     collideWith: z.record(z.string().min(1), z.string().min(1)).default({}),
     /** animation id → parameter supplying its duration, in ms. */
     durationMs: z.record(z.string().min(1), z.string().min(1)).default({}),
+    /** animation id → parameter supplying its delay, in ms. */
+    delayMs: z.record(z.string().min(1), z.string().min(1)).default({}),
     /** object id → parameter supplying its tint. */
     tint: z.record(z.string().min(1), z.string().min(1)).default({}),
   })
-  .default({ collideWith: {}, durationMs: {}, tint: {} });
+  .default({ collideWith: {}, durationMs: {}, delayMs: {}, tint: {} });
 export type AttackBindings = z.infer<typeof AttackBindingsSchema>;
 
 export const AttackDefSchema = z.object({
@@ -413,11 +419,16 @@ function expandInstance(
     };
   });
 
-  // A parameter can change how long a part runs, so bound durations are settled
-  // first — everything below measures against the result.
+  // A parameter can change when a part runs and for how long, so bound timings
+  // are settled first — the chain below lays out against the result.
   const effective: Anim[] = def.animations.map((a) => {
-    const bound = argOf(def.bindings.durationMs[a.id] ?? "");
-    return typeof bound === "number" ? { ...a, durationMs: bound } : a;
+    const duration = argOf(def.bindings.durationMs[a.id] ?? "");
+    const delay = argOf(def.bindings.delayMs[a.id] ?? "");
+    return {
+      ...a,
+      ...(typeof duration === "number" ? { durationMs: duration } : {}),
+      ...(typeof delay === "number" ? { delayMs: delay } : {}),
+    };
   });
 
   // Resolve the def's own trigger chain *before* it joins the host step, using
@@ -679,6 +690,11 @@ export function planToAttackContent(
     // Parameters and their bindings aren't spatial, so they pass straight
     // through from the designer rather than round-tripping via the canvas.
     params: meta.params ?? [],
-    bindings: meta.bindings ?? { collideWith: {}, durationMs: {}, tint: {} },
+    bindings: meta.bindings ?? {
+      collideWith: {},
+      durationMs: {},
+      delayMs: {},
+      tint: {},
+    },
   };
 }
