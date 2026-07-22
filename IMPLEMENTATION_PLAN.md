@@ -693,7 +693,14 @@ many it isn't showing ("3 more on this step — see the timeline") so nothing go
 and asks for a selection rather than falling back to everything. Clicking a bar in the timeline
 selects its object, so the overview and the inspector navigate to each other. `+ Animate
 selection` takes a whole selection — one store action rather than a loop, so animating a group of
-six is a single undo, and the animations land in document order. [DONE]
+six is a single undo, and the animations land in document order.
+
+Objects doing the **same thing** share one row, because animating six together and then editing
+them one at a time gives back with one hand what the button took with the other. A row edits all
+of its animations at once (one action, one undo) and splits the moment one differs — which is
+what happens when you select a single object and change only its animation. Two animations on
+*one* object never merge, however alike: they're separate things, and merging would make either
+impossible to edit alone. [DONE]
 
 ### 18.10 Triggered animations were second-class
 

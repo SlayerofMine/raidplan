@@ -137,7 +137,18 @@ export interface EditorState extends PlanDoc {
     animId: string,
     patch: Partial<Omit<Anim, "id">>,
   ) => void;
+  /**
+   * Apply one patch to several animations at once. Editing a row that stands
+   * for a whole selection has to be a single action, or a group of six takes
+   * six undos to take back one edit.
+   */
+  updateAnimations: (
+    stepIndex: number,
+    animIds: string[],
+    patch: Partial<Omit<Anim, "id">>,
+  ) => void;
   deleteAnimation: (stepIndex: number, animId: string) => void;
+  deleteAnimations: (stepIndex: number, animIds: string[]) => void;
 
   /**
    * Definitions for the attacks this plan can use, keyed by id (plan §17).
@@ -769,18 +780,25 @@ export const useEditorStore = create<EditorState>()(
       },
 
       updateAnimation: (stepIndex, animId, patch) =>
+        get().updateAnimations(stepIndex, [animId], patch),
+
+      updateAnimations: (stepIndex, animIds, patch) =>
         set((s) => {
-          const anim = s.steps[stepIndex]?.animations.find(
-            (a) => a.id === animId,
-          );
-          if (anim) Object.assign(anim, patch);
+          const wanted = new Set(animIds);
+          for (const anim of s.steps[stepIndex]?.animations ?? []) {
+            if (wanted.has(anim.id)) Object.assign(anim, patch);
+          }
         }),
 
       deleteAnimation: (stepIndex, animId) =>
+        get().deleteAnimations(stepIndex, [animId]),
+
+      deleteAnimations: (stepIndex, animIds) =>
         set((s) => {
           const step = s.steps[stepIndex];
           if (!step) return;
-          step.animations = step.animations.filter((a) => a.id !== animId);
+          const doomed = new Set(animIds);
+          step.animations = step.animations.filter((a) => !doomed.has(a.id));
         }),
 
       setAttackDefs: (defs) =>

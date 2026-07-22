@@ -98,11 +98,29 @@ test.describe("steps", () => {
       "+ Animate 2 objects",
     );
     await page.getByTestId("add-animation").click();
-    await expect(page.getByTestId("anim-row")).toHaveCount(2);
+    // Two animations, one row: they're identical, so they're edited as one.
+    await expect(page.getByTestId("step-0")).toContainText("(2)");
+    await expect(page.getByTestId("anim-row")).toHaveCount(1);
+    await expect(page.getByTestId("anim-row")).toHaveAttribute(
+      "data-objects",
+      "2",
+    );
 
     // One action, so one undo — not two presses to take back one click.
     await page.keyboard.press("Control+z");
     await expect(page.getByTestId("anim-row")).toHaveCount(0);
+    await page.keyboard.press("Control+y");
+    await expect(page.getByTestId("anim-row")).toHaveCount(1);
+
+    // Editing the row edits both. If only one had changed they would no longer
+    // agree, and the row would split in two.
+    await page.getByTestId("anim-effect").selectOption("fade");
+    await expect(page.getByTestId("anim-row")).toHaveCount(1);
+    await expect(page.getByTestId("anim-row")).toHaveAttribute(
+      "data-objects",
+      "2",
+    );
+    await expect(page.getByTestId("step-0")).toContainText("(2)");
   });
 
   test("the panel inspects the selection; the timeline is the overview", async ({

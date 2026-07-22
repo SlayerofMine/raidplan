@@ -24,6 +24,12 @@ const EASINGS = [
  * trigger, then delay/duration/easing. Animations belong to a *step*, so the
  * panel is inert on the Base layout.
  *
+ * Objects doing **the same thing** share one row: animating a selection gives
+ * every member an identical animation, and having to make the same six edits
+ * six times would undo the point of animating them together. A row edits all of
+ * its animations at once, and splits the moment one of them differs — which
+ * happens naturally when you select a single object and change just that one.
+ *
  * It shows only what the selected objects do, because the Timeline below already
  * shows the step as a whole. That split is the same one the rest of the editor
  * makes: the properties column inspects what you picked, the timeline is the
@@ -51,6 +57,7 @@ export function AnimationPanel() {
   const count = selectedIds.length;
   const mine = step.animations.filter((a) => selectedIds.includes(a.objectId));
   const elsewhere = step.animations.length - mine.length;
+  const rows = groupAnimations(mine);
 
   return (
     <Section>
@@ -80,10 +87,10 @@ export function AnimationPanel() {
         </p>
       ) : (
         <ul className="flex flex-col gap-3" data-testid="anim-list">
-          {mine.map((anim) => (
+          {rows.map((row) => (
             <AnimationRow
-              key={anim.id}
-              anim={anim}
+              key={row[0]!.id}
+              anims={row}
               stepIndex={currentStepIndex}
             />
           ))}
@@ -99,35 +106,100 @@ export function AnimationPanel() {
   );
 }
 
-function AnimationRow({ anim, stepIndex }: { anim: Anim; stepIndex: number }) {
-  const label = useEditorStore((s) =>
-    objectDisplayName(s.objects[anim.objectId]),
-  );
-  const updateAnimation = useEditorStore((s) => s.updateAnimation);
-  const deleteAnimation = useEditorStore((s) => s.deleteAnimation);
+/**
+ * What makes two animations "the same thing", ignoring which object they belong
+ * to and their identity. Everything a row can edit is in here, so a row can only
+ * exist while its animations agree about all of it.
+ */
+function signatureOf(anim: Anim): string {
+  return JSON.stringify([
+    anim.kind,
+    anim.effect,
+    anim.trigger,
+    anim.delayMs,
+    anim.durationMs,
+    anim.easing,
+    [...(anim.collideWith ?? [])].sort(),
+    anim.params ?? null,
+  ]);
+}
+
+/**
+ * Collapse identical animations into rows, in first-appearance order.
+ *
+ * Two animations on the *same* object never share a row: they're separate
+ * things that happen to look alike, and merging them would make one of them
+ * impossible to edit on its own.
+ */
+function groupAnimations(animations: readonly Anim[]): Anim[][] {
+  const rows: Anim[][] = [];
+  const byKey = new Map<string, Anim[]>();
+
+  for (const anim of animations) {
+    const signature = signatureOf(anim);
+    // Nth animation of this object with this signature → Nth row for it.
+    let occurrence = 0;
+    let key = `${signature}#0`;
+    while (byKey.get(key)?.some((a) => a.objectId === anim.objectId)) {
+      key = `${signature}#${++occurrence}`;
+    }
+    const row = byKey.get(key);
+    if (row) row.push(anim);
+    else {
+      const started = [anim];
+      byKey.set(key, started);
+      rows.push(started);
+    }
+  }
+  return rows;
+}
+
+function AnimationRow({
+  anims,
+  stepIndex,
+}: {
+  anims: Anim[];
+  stepIndex: number;
+}) {
+  const anim = anims[0]!;
+  const objects = useEditorStore((s) => s.objects);
+  const updateAnimations = useEditorStore((s) => s.updateAnimations);
+  const deleteAnimations = useEditorStore((s) => s.deleteAnimations);
   const select = useEditorStore((s) => s.select);
 
+  const ids = anims.map((a) => a.id);
+  const objectIdsHere = [...new Set(anims.map((a) => a.objectId))];
+  const label =
+    objectIdsHere.length === 1
+      ? objectDisplayName(objects[anim.objectId])
+      : `${objectIdsHere.length} objects`;
+
   const patch = (p: Partial<Omit<Anim, "id">>) =>
-    updateAnimation(stepIndex, anim.id, p);
+    updateAnimations(stepIndex, ids, p);
 
   return (
     <li
       className="flex flex-col gap-1 rounded border border-panelborder p-2"
       data-testid="anim-row"
+      data-objects={objectIdsHere.length}
     >
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
-          onClick={() => select([anim.objectId])}
+          onClick={() => select(objectIdsHere)}
           className="truncate text-sm text-neutral-300 hover:text-accent"
-          title="Select this object"
+          title={
+            objectIdsHere.length === 1
+              ? "Select this object"
+              : "Select these objects — edits here apply to all of them"
+          }
         >
           {label}
         </button>
         <button
           type="button"
           aria-label="Delete animation"
-          onClick={() => deleteAnimation(stepIndex, anim.id)}
+          onClick={() => deleteAnimations(stepIndex, ids)}
           className="text-xs text-neutral-500 hover:text-accent"
         >
           ×
@@ -156,7 +228,11 @@ function AnimationRow({ anim, stepIndex }: { anim: Anim; stepIndex: number }) {
         onChange={(v) => patch({ trigger: v as Anim["trigger"] })}
       />
       {anim.trigger === "onCollision" && (
-        <ColliderPicker anim={anim} onChange={patch} />
+        <ColliderPicker
+          anim={anim}
+          animatedObjectIds={objectIdsHere}
+          onChange={patch}
+        />
       )}
       <Picker
         label="Easing"
@@ -188,9 +264,12 @@ function AnimationRow({ anim, stepIndex }: { anim: Anim; stepIndex: number }) {
  */
 function ColliderPicker({
   anim,
+  animatedObjectIds,
   onChange,
 }: {
   anim: Anim;
+  /** Every object this row animates — none of them can be its own collider. */
+  animatedObjectIds: string[];
   onChange: (patch: Partial<Omit<Anim, "id">>) => void;
 }) {
   const objectIds = useEditorStore((s) => s.objectIds);
@@ -198,7 +277,7 @@ function ColliderPicker({
 
   const selected = anim.collideWith ?? [];
   // An object can't collide with itself — that would fire on frame one.
-  const candidates = objectIds.filter((id) => id !== anim.objectId);
+  const candidates = objectIds.filter((id) => !animatedObjectIds.includes(id));
 
   const toggle = (id: string, on: boolean) =>
     onChange({

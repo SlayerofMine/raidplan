@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ICONS } from "@raidplan/shared";
-import { useEditorStore } from "../../src/store/editorStore";
+import {
+  clearHistory,
+  temporalStore,
+  useEditorStore,
+} from "../../src/store/editorStore";
 import { AnimationPanel } from "../../src/editor/AnimationPanel";
 
 const state = () => useEditorStore.getState();
@@ -120,17 +124,116 @@ describe("AnimationPanel — scoped to the selection", () => {
     expect(button).toHaveTextContent("+ Animate 2 objects");
     fireEvent.click(button);
 
+    // Two animations, but one row: they're the same thing, so they're edited
+    // as one thing.
     expect(state().steps[0]!.animations).toHaveLength(2);
-    expect(screen.getAllByTestId("anim-row")).toHaveLength(2);
+    const rows = screen.getAllByTestId("anim-row");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAttribute("data-objects", "2");
+    expect(rows[0]).toHaveTextContent("2 objects");
   });
 
   it("shows both objects' animations for a multi-object selection", () => {
-    const { orb, tank } = seed();
-    state().addAnimation(0, tank);
+    const { orb, tank, animId } = seed();
+    const other = state().addAnimation(0, tank)!;
+    state().updateAnimation(0, other, { effect: "fade" });
     state().select([orb, tank]);
     render(<AnimationPanel />);
 
+    // Different effects, so they don't share a row.
     expect(screen.getAllByTestId("anim-row")).toHaveLength(2);
+    expect(animId).not.toBe(other);
     expect(screen.queryByTestId("anim-elsewhere")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The point of animating a selection together: keep editing it together. Doing
+ * the same six edits six times would give the button back with one hand what it
+ * took with the other.
+ */
+describe("AnimationPanel — one row, many objects", () => {
+  const two = () => {
+    const orb = state().addPrimitive("shape", "pickup");
+    state().updateObject(orb, { name: "Orb" });
+    const tank = state().addIcon(iconId);
+    state().updateObject(tank, { name: "Tank" });
+    state().addStep();
+    state().select([orb, tank]);
+    state().animateSelection(0);
+    return { orb, tank };
+  };
+
+  it("applies an edit to every animation in the row", () => {
+    two();
+    render(<AnimationPanel />);
+
+    fireEvent.change(screen.getByTestId("anim-effect"), {
+      target: { value: "fade" },
+    });
+
+    expect(state().steps[0]!.animations.map((a) => a.effect)).toEqual([
+      "fade",
+      "fade",
+    ]);
+    // Still one row: they still agree.
+    expect(screen.getAllByTestId("anim-row")).toHaveLength(1);
+  });
+
+  it("edits the row in one undo, not one per object", () => {
+    two();
+    clearHistory();
+    render(<AnimationPanel />);
+
+    fireEvent.change(screen.getByTestId("anim-duration"), {
+      target: { value: "900" },
+    });
+    expect(state().steps[0]!.animations.map((a) => a.durationMs)).toEqual([
+      900, 900,
+    ]);
+
+    temporalStore.getState().undo();
+    expect(state().steps[0]!.animations.map((a) => a.durationMs)).toEqual([
+      500, 500,
+    ]);
+  });
+
+  it("splits as soon as one of them differs", () => {
+    const { orb } = two();
+
+    // Single out one object and change only its animation — the way you'd give
+    // one member of a group its own delay.
+    state().select([orb]);
+    const mine = state().steps[0]!.animations.find((a) => a.objectId === orb)!;
+    state().updateAnimation(0, mine.id, { delayMs: 250 });
+
+    state().select(state().objectIds);
+    render(<AnimationPanel />);
+
+    const rows = screen.getAllByTestId("anim-row");
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.getAttribute("data-objects"))).toEqual(["1", "1"]);
+  });
+
+  it("deletes the whole row at once", () => {
+    two();
+    render(<AnimationPanel />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete animation" }));
+
+    expect(state().steps[0]!.animations).toHaveLength(0);
+  });
+
+  it("keeps two animations of one object apart, however alike", () => {
+    const orb = state().addPrimitive("shape", "pickup");
+    state().addStep();
+    state().addAnimation(0, orb);
+    state().addAnimation(0, orb);
+    state().select([orb]);
+    render(<AnimationPanel />);
+
+    // They look identical, but they're two separate things: merging them would
+    // make either one impossible to edit alone.
+    expect(screen.getAllByTestId("anim-row")).toHaveLength(2);
   });
 });
