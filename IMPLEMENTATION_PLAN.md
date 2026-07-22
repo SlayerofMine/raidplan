@@ -743,3 +743,19 @@ were offered under all four families, so "entrance · disappear" was buildable a
 `fade` under `exit` with nothing saying so. A family now offers its own effects, named for what
 they do there ("fade out", "fly in"), and changing family carries the effect with it. `appear` and
 `disappear` are instants, so their duration and easing boxes are gone rather than ignored. [DONE]
+
+### 18.12 A placed attack is a selection like any other
+
+Selecting one gave no properties panel at all, which made the canvas the only way to place it —
+fine for roughly, useless for exactly. It now gets the same panel objects get, with the fields a
+plan actually owns: the rectangle (x/y/w/h/rotation), a **name** for *this copy* ("north cone" —
+the definition's name says what it is, not which one), **locked**, **visible**, and order among
+the other attacks. What an attack looks like still belongs to its definition and stays
+un-editable here on purpose.
+
+`visible: false` means the attack doesn't happen: `expandPlan` skips it entirely, so trying a
+plan without one mechanic costs nothing but a tick-box, and the placement survives to be switched
+back on. On canvas it stays faintly drawn so it can still be grabbed.
+
+Fell out of writing the tests: creating an object left a selected attack selected too, so both
+kinds were selected at once — the one thing the two selection lists are meant to prevent. [DONE]

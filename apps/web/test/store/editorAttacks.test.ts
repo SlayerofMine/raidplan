@@ -41,6 +41,17 @@ describe("addAttack", () => {
     expect(state().selectedAttackIds).toEqual([id]);
   });
 
+  it("hands the selection over when an object is made next", () => {
+    state().addStep();
+    state().addAttack("atk1", { x: 0, y: 0 });
+    const object = state().addPrimitive("shape", "circle");
+
+    // A selection is objects *or* attacks, never both — the properties panel
+    // has to know which it is looking at.
+    expect(state().selectedIds).toEqual([object]);
+    expect(state().selectedAttackIds).toEqual([]);
+  });
+
   it("fires on the step being edited", () => {
     state().addStep();
     const second = state().addStep();
@@ -119,6 +130,40 @@ describe("removeAttack", () => {
     // step and its attacks back together.)
     expect(state().attacks.map((a) => a.id)).toEqual([survivor]);
     expect(state().steps.map((s) => s.id)).not.toContain(first);
+  });
+});
+
+describe("reorderAttack", () => {
+  const three = () => {
+    state().addStep();
+    return [
+      state().addAttack("a", { x: 0, y: 0 })!,
+      state().addAttack("b", { x: 0, y: 0 })!,
+      state().addAttack("c", { x: 0, y: 0 })!,
+    ];
+  };
+  const order = () => state().attacks.map((a) => a.attackId);
+
+  it("moves one step at a time", () => {
+    const [, b] = three();
+    state().reorderAttack(b!, 1);
+    expect(order()).toEqual(["a", "c", "b"]);
+    state().reorderAttack(b!, -1);
+    expect(order()).toEqual(["a", "b", "c"]);
+  });
+
+  it("clamps at the ends rather than wrapping", () => {
+    const [a] = three();
+    state().reorderAttack(a!, -5);
+    expect(order()).toEqual(["a", "b", "c"]);
+    state().reorderAttack(a!, 5);
+    expect(order()).toEqual(["b", "c", "a"]);
+  });
+
+  it("ignores an attack that isn't there", () => {
+    three();
+    expect(() => state().reorderAttack("ghost", 1)).not.toThrow();
+    expect(order()).toEqual(["a", "b", "c"]);
   });
 });
 

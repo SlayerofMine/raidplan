@@ -272,6 +272,17 @@ describe("expandPlan — stamping", () => {
     expect(out.attacks).toEqual([]);
   });
 
+  it("skips an attack that was switched off", () => {
+    const out = expandPlan(
+      makePlan([step({ id: "s1" })], [], [inst({ visible: false })]),
+      { atk: makeDef() },
+    );
+    // Still in the document, just not happening — the placement survives to be
+    // switched back on.
+    expect(out.objects).toEqual([]);
+    expect(out.steps[0]!.animations).toEqual([]);
+  });
+
   it("skips an instance whose step has been deleted", () => {
     const out = expandPlan(
       makePlan([step({ id: "s1" })], [], [inst({ stepId: "gone" })]),

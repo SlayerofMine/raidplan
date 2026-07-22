@@ -122,6 +122,16 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
     "true",
   );
 
+  // Selecting it gives the properties panel, same as any other selection: the
+  // canvas places it roughly, this says exactly.
+  await page.getByTestId("attack-prop-x").fill("120");
+  await page.getByTestId("attack-prop-name").fill("north cone");
+  await expect(
+    page.getByRole("button", { name: "Select north cone" }),
+  ).toBeVisible();
+  // Out of the text field, or Delete below would edit the name instead.
+  await page.getByTestId("attack-prop-name").blur();
+
   // Removing it is the only edit this plan gets, so the save that carries an
   // empty attack list proves an attack-only change is a document change. (It
   // wasn't: the autosaves compared a hand-written list of slices that had never

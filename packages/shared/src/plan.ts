@@ -139,6 +139,20 @@ export const AttackInstanceSchema = z.object({
   h: z.number().finite().positive(),
   /** Degrees clockwise, about the rectangle's centre. */
   rotation: z.number().finite().default(0),
+  /**
+   * What this copy is called, for the author's benefit. The definition's name is
+   * what it *is*; this is which one it is — "north cone" against "south cone" —
+   * so three copies of one attack can be told apart in a list.
+   */
+  name: z.string().optional(),
+  /** Locked instances can't be dragged or resized, exactly like a locked object. */
+  locked: z.boolean().optional(),
+  /**
+   * Absent or `true` means it happens. `false` switches the whole attack off
+   * without deleting it — trying a plan without one mechanic is a normal thing
+   * to want, and losing its placement to do so isn't.
+   */
+  visible: z.boolean().optional(),
   /** Delay from the step's start before the attack begins. */
   startMs: z.number().finite().nonnegative().default(0),
   /**

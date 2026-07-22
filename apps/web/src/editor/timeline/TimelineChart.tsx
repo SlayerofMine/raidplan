@@ -80,7 +80,7 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
           const naturalMs = def ? attackNaturalMs(def) : 0;
           return {
             instance,
-            name: def?.name ?? "Attack",
+            name: instance.name?.trim() || def?.name || "Attack",
             naturalMs,
             spanMs: instance.durationMs ?? naturalMs,
           };

@@ -18,6 +18,7 @@ export function SelectionTransformer() {
   const ref = useRef<TransformerNode>(null);
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const selectedAttackIds = useEditorStore((s) => s.selectedAttackIds);
+  const attacks = useEditorStore((s) => s.attacks);
   const objectIds = useEditorStore((s) => s.objectIds);
 
   useEffect(() => {
@@ -35,7 +36,12 @@ export function SelectionTransformer() {
       })
       // A placed attack is transformed through its frame, which carries the
       // instance id (plan §18.3) — resizing it *is* resizing the rectangle.
-      .concat(selectedAttackIds)
+      // Locked ones are skipped for the same reason locked objects are.
+      .concat(
+        selectedAttackIds.filter(
+          (id) => !attacks.find((a) => a.id === id)?.locked,
+        ),
+      )
       .map((id) => stage.findOne(`#${id}`))
       // Hidden objects keep their nodes so playback can reveal them, but they
       // can't be clicked or dragged — handles floating over nothing would be a
@@ -48,7 +54,7 @@ export function SelectionTransformer() {
     transformer.getLayer()?.batchDraw();
     // `objectIds` participates so the transformer re-attaches when nodes are
     // added/removed underneath a stable selection.
-  }, [selectedIds, selectedAttackIds, objectIds]);
+  }, [selectedIds, selectedAttackIds, attacks, objectIds]);
 
   return (
     <Transformer

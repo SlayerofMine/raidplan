@@ -35,6 +35,8 @@ import { ObjectVisual } from "./ObjectVisual";
  * moment reads clearly without hiding what else the encounter does.
  */
 const OTHER_STEP_OPACITY = 0.3;
+/** A switched-off attack: still placeable, visibly not happening. */
+const MUTED_OPACITY = 0.12;
 
 export function AttackPreviewLayer() {
   const attacks = useEditorStore((s) => s.attacks);
@@ -75,6 +77,7 @@ function PlacedAttack({
   /** It fires on another step: still placeable, just not this moment. */
   dimmed: boolean;
 }) {
+  const muted = instance.visible === false;
   const selected = useEditorStore((s) =>
     s.selectedAttackIds.includes(instance.id),
   );
@@ -142,7 +145,7 @@ function PlacedAttack({
       <Group
         ref={partsRef}
         listening={false}
-        opacity={dimmed ? OTHER_STEP_OPACITY : 1}
+        opacity={muted ? MUTED_OPACITY : dimmed ? OTHER_STEP_OPACITY : 1}
       >
         {parts.map(({ object, state }) => (
           <ObjectVisual key={object.id} object={object} state={state} />
@@ -157,7 +160,7 @@ function PlacedAttack({
         width={instance.w}
         height={instance.h}
         rotation={instance.rotation}
-        draggable
+        draggable={!instance.locked}
         // Transparent but hit-testable, so the whole attack is one grab target.
         fill="rgba(0,0,0,0.001)"
         stroke={selected ? "#f2c744" : undefined}

@@ -41,7 +41,12 @@ export function AttacksPanel() {
 
       <ul className="flex flex-col gap-1" data-testid="placed-attacks">
         {attacks.map((instance) => {
-          const name = defsById[instance.attackId]?.name ?? "Attack";
+          // The instance's own name wins: with three copies of one attack, its
+          // definition's name is the least useful thing to call it.
+          const name =
+            instance.name?.trim() ||
+            defsById[instance.attackId]?.name ||
+            "Attack";
           const isSelected = selectedAttackIds.includes(instance.id);
           const firesHere = instance.stepId === currentStepId;
           return (

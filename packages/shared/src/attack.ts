@@ -525,8 +525,8 @@ function expandInstance(
  * The def's animations are flattened onto absolute delays on the way in, so an
  * attack keeps its own timing no matter what else shares the step.
  *
- * Pure and non-mutating. An instance whose `attackId` isn't in `defsById`, or
- * whose step has been deleted, is skipped — either leaves the rest of the plan
+ * Pure and non-mutating. An instance that is switched off, or whose `attackId`
+ * isn't in `defsById`, or whose step has been deleted, is skipped — either leaves the rest of the plan
  * renderable, like a missing background. A plan with no attacks is returned
  * untouched, so the common case costs nothing.
  */
@@ -548,8 +548,9 @@ export function expandPlan(
     const def = defsById[instance.attackId];
     const stepIndex = indexOfStep.get(instance.stepId);
     // A missing def or a step that's been deleted leaves the rest of the plan
-    // renderable, like a missing background.
-    if (!def || stepIndex === undefined) continue;
+    // renderable, like a missing background. A switched-off attack simply
+    // doesn't happen: it stays in the document, and out of the expansion.
+    if (!def || stepIndex === undefined || instance.visible === false) continue;
 
     const expanded = expandInstance(def, instance);
     objects.push(...expanded.objects);

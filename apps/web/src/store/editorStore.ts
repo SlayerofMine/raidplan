@@ -179,6 +179,12 @@ export interface EditorState extends PlanDoc {
     patch: Partial<Omit<AttackInstance, "id" | "attackId">>,
   ) => void;
   removeAttack: (instanceId: string) => void;
+  /**
+   * Move a placed attack within the drawing order, like `bringForward` and
+   * friends do for objects. Attacks draw above the plan's own objects, so this
+   * orders them among themselves — `delta` is clamped to the ends.
+   */
+  reorderAttack: (instanceId: string, delta: number) => void;
 
   // --- document ---
   setTitle: (title: string) => void;
@@ -374,6 +380,7 @@ export const useEditorStore = create<EditorState>()(
           s.objects[object.id] = object;
           s.objectIds.push(object.id);
           s.selectedIds = [object.id];
+          s.selectedAttackIds = [];
         });
         return object.id;
       },
@@ -392,6 +399,7 @@ export const useEditorStore = create<EditorState>()(
           s.objects[object.id] = object;
           s.objectIds.push(object.id);
           s.selectedIds = [object.id];
+          s.selectedAttackIds = [];
         });
         return object.id;
       },
@@ -412,6 +420,7 @@ export const useEditorStore = create<EditorState>()(
           s.objects[object.id] = object;
           s.objectIds.push(object.id);
           s.selectedIds = [object.id];
+          s.selectedAttackIds = [];
         });
         return object.id;
       },
@@ -566,6 +575,7 @@ export const useEditorStore = create<EditorState>()(
             s.objectIds.push(clone.id);
           }
           s.selectedIds = clones.map((c) => c.id);
+          s.selectedAttackIds = [];
           reindexZ(s);
         });
         return clones.map((c) => c.id);
@@ -850,6 +860,16 @@ export const useEditorStore = create<EditorState>()(
       removeAttack: (instanceId) =>
         set((s) => {
           s.attacks = s.attacks.filter((a) => a.id !== instanceId);
+        }),
+
+      reorderAttack: (instanceId, delta) =>
+        set((s) => {
+          const from = s.attacks.findIndex((a) => a.id === instanceId);
+          if (from === -1) return;
+          const to = Math.min(s.attacks.length - 1, Math.max(0, from + delta));
+          if (to === from) return;
+          const [moved] = s.attacks.splice(from, 1);
+          if (moved) s.attacks.splice(to, 0, moved);
         }),
 
       setTitle: (title) =>

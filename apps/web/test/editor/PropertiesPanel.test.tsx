@@ -63,3 +63,102 @@ describe("PropertiesPanel — style controls", () => {
     expect(screen.queryByTestId("style-line")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * A placed attack is a selection like any other, so it gets the properties
+ * panel: the canvas places it roughly, this says exactly. It has fewer fields
+ * because there is less of it — how an attack *looks* belongs to its
+ * definition, not to the plan.
+ */
+describe("PropertiesPanel — a placed attack", () => {
+  const placed = () => {
+    state().addStep();
+    return state().addAttack("atk1", { x: 400, y: 300 })!;
+  };
+
+  it("edits the rectangle it is drawn into", () => {
+    const id = placed();
+    render(<PropertiesPanel />);
+
+    fireEvent.change(screen.getByTestId("attack-prop-x"), {
+      target: { value: "120" },
+    });
+    fireEvent.change(screen.getByTestId("attack-prop-w"), {
+      target: { value: "500" },
+    });
+    fireEvent.change(screen.getByTestId("attack-prop-rotation"), {
+      target: { value: "45" },
+    });
+
+    expect(state().attacks.find((a) => a.id === id)).toMatchObject({
+      x: 120,
+      w: 500,
+      rotation: 45,
+    });
+  });
+
+  it("refuses a rectangle with no width", () => {
+    const id = placed();
+    render(<PropertiesPanel />);
+
+    fireEvent.change(screen.getByTestId("attack-prop-w"), {
+      target: { value: "0" },
+    });
+    // Unit space is mapped onto this rectangle; a zero one has nowhere to put.
+    expect(state().attacks.find((a) => a.id === id)!.w).toBe(1);
+  });
+
+  it("names this copy, which is then what it's called", () => {
+    const id = placed();
+    render(<PropertiesPanel />);
+
+    fireEvent.change(screen.getByTestId("attack-prop-name"), {
+      target: { value: "north cone" },
+    });
+    expect(state().attacks.find((a) => a.id === id)!.name).toBe("north cone");
+  });
+
+  it("switches one off without losing where it was", () => {
+    const id = placed();
+    render(<PropertiesPanel />);
+
+    fireEvent.click(screen.getByTestId("attack-prop-visible"));
+
+    const instance = state().attacks.find((a) => a.id === id)!;
+    expect(instance.visible).toBe(false);
+    expect(instance.x).toBe(200); // still placed, just not happening
+  });
+
+  it("locks one against being dragged", () => {
+    const id = placed();
+    render(<PropertiesPanel />);
+
+    fireEvent.click(screen.getByTestId("attack-prop-locked"));
+    expect(state().attacks.find((a) => a.id === id)!.locked).toBe(true);
+  });
+
+  it("reorders it among the other attacks", () => {
+    state().addStep();
+    const first = state().addAttack("atk1", { x: 0, y: 0 })!;
+    state().addAttack("atk2", { x: 0, y: 0 });
+    state().selectAttack([first]);
+    render(<PropertiesPanel />);
+
+    fireEvent.click(screen.getByTitle("Bring to front"));
+    expect(
+      state()
+        .attacks.map((a) => a.id)
+        .at(-1),
+    ).toBe(first);
+  });
+
+  it("gives way to an object selection", () => {
+    placed();
+    const object = state().addPrimitive("shape", "circle"); // clears the attack
+    render(<PropertiesPanel />);
+
+    expect(screen.queryByTestId("attack-properties")).not.toBeInTheDocument();
+    expect(screen.getByTestId("properties")).toBeInTheDocument();
+    expect(object).toBeTruthy();
+  });
+});
