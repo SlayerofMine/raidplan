@@ -726,3 +726,20 @@ timeline alone replayed the tweens while every pickup stayed spent and whatever 
 done stayed done, so the second watch of a step didn't match the first unless you thought to
 press rewind. Firing stays once per playthrough — a pickup is consumed on contact, not re-fired
 every frame it overlaps — but a playthrough now begins whenever you press play. [DONE]
+
+### 18.11 Two things the demo caught
+
+**`scale` did nothing while playing.** `applyObjectState` never wrote `w`/`h` — a Konva `Group`
+is sized through its children, so an animator can't set a width on it, and the frame loop was
+left with no way to resize anything. It only ever *looked* right on the editor's canvas, where
+React re-renders at the settled state when you change step. The renderers now stamp the size they
+drew (`baseW`/`baseH`) and a size animation becomes a scale against it; `readObjectState` reads it
+back through the scale, so a triggered animation can start mid-resize. `pulse` got its swell back
+in the same change.
+
+**Fading out existed but was unfindable, and instant effects offered controls that did nothing.**
+`kind` and `effect` are separate enums — right for storage, wrong for a picker: all eight effects
+were offered under all four families, so "entrance · disappear" was buildable and *fade out* was
+`fade` under `exit` with nothing saying so. A family now offers its own effects, named for what
+they do there ("fade out", "fly in"), and changing family carries the effect with it. `appear` and
+`disappear` are instants, so their duration and easing boxes are gone rather than ignored. [DONE]

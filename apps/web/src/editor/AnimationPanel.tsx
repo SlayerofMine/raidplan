@@ -1,9 +1,10 @@
+import { ANIM_KINDS, ANIM_TRIGGERS, type Anim } from "@raidplan/shared";
 import {
-  ANIM_EFFECTS,
-  ANIM_KINDS,
-  ANIM_TRIGGERS,
-  type Anim,
-} from "@raidplan/shared";
+  defaultEffectFor,
+  effectLabel,
+  effectsForKind,
+  isInstantEffect,
+} from "../anim/effectChoices";
 import { BASE_STEP_INDEX, useEditorStore } from "../store/editorStore";
 import { objectDisplayName } from "./objectName";
 
@@ -211,13 +212,21 @@ function AnimationRow({
         testId="anim-kind"
         value={anim.kind}
         options={ANIM_KINDS}
-        onChange={(v) => patch({ kind: v as Anim["kind"] })}
+        onChange={(v) => {
+          const kind = v as Anim["kind"];
+          // An effect that doesn't belong to the new family goes with it —
+          // "entrance · disappear" isn't a thing, and leaving it selected would
+          // only look like it was.
+          const keeps = effectsForKind(kind).includes(anim.effect);
+          patch({ kind, ...(keeps ? {} : { effect: defaultEffectFor(kind) }) });
+        }}
       />
       <Picker
         label="Effect"
         testId="anim-effect"
         value={anim.effect}
-        options={ANIM_EFFECTS}
+        options={effectsForKind(anim.kind, anim.effect)}
+        labelFor={(effect) => effectLabel(anim.kind, effect as Anim["effect"])}
         onChange={(v) => patch({ effect: v as Anim["effect"] })}
       />
       <Picker
@@ -234,25 +243,34 @@ function AnimationRow({
           onChange={patch}
         />
       )}
-      <Picker
-        label="Easing"
-        testId="anim-easing"
-        value={anim.easing}
-        options={EASINGS}
-        onChange={(v) => patch({ easing: v })}
-      />
+      {/* An instant effect ignores both, so it isn't offered either. */}
+      {!isInstantEffect(anim.effect) && (
+        <Picker
+          label="Easing"
+          testId="anim-easing"
+          value={anim.easing}
+          options={EASINGS}
+          onChange={(v) => patch({ easing: v })}
+        />
+      )}
       <NumberRow
         label="Delay (ms)"
         testId="anim-delay"
         value={anim.delayMs}
         onChange={(v) => patch({ delayMs: Math.max(0, v) })}
       />
-      <NumberRow
-        label="Duration (ms)"
-        testId="anim-duration"
-        value={anim.durationMs}
-        onChange={(v) => patch({ durationMs: Math.max(0, v) })}
-      />
+      {isInstantEffect(anim.effect) ? (
+        <p data-testid="anim-instant" className="text-xs text-neutral-500">
+          Happens at an instant — use fade for a timed one.
+        </p>
+      ) : (
+        <NumberRow
+          label="Duration (ms)"
+          testId="anim-duration"
+          value={anim.durationMs}
+          onChange={(v) => patch({ durationMs: Math.max(0, v) })}
+        />
+      )}
     </li>
   );
 }
@@ -343,12 +361,15 @@ function Picker({
   label,
   value,
   options,
+  labelFor,
   onChange,
   testId,
 }: {
   label: string;
   value: string;
   options: readonly string[];
+  /** What to call an option, where the stored value isn't the right word. */
+  labelFor?: (option: string) => string;
   onChange: (value: string) => void;
   testId: string;
 }) {
@@ -363,7 +384,7 @@ function Picker({
       >
         {options.map((o) => (
           <option key={o} value={o}>
-            {o}
+            {labelFor ? labelFor(o) : o}
           </option>
         ))}
       </select>

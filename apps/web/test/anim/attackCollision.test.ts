@@ -31,7 +31,10 @@ interface FakeNode {
   };
   /** Every visibility change written, in order — how a re-arm is observed. */
   visibilityWrites: boolean[];
-  setAttrs: (a: Partial<FakeNode["attrs"]>) => void;
+  setAttrs: (a: Record<string, unknown>) => void;
+  getAttr: (key: string) => unknown;
+  scaleX: () => number;
+  scaleY: () => number;
   visible: () => boolean;
   x: () => number;
   y: () => number;
@@ -47,11 +50,15 @@ function fakeNode(): FakeNode {
     attrs: { x: 0, y: 0, rotation: 0, opacity: 1, visible: true },
     visibilityWrites: [],
     setAttrs: (a) => {
-      if (a.visible !== undefined && a.visible !== node.attrs.visible) {
-        node.visibilityWrites.push(a.visible);
+      const visible = a["visible"];
+      if (typeof visible === "boolean" && visible !== node.attrs.visible) {
+        node.visibilityWrites.push(visible);
       }
       Object.assign(node.attrs, a);
     },
+    getAttr: (key) => (node.attrs as Record<string, unknown>)[key],
+    scaleX: () => 1,
+    scaleY: () => 1,
     visible: () => node.attrs.visible,
     x: () => node.attrs.x,
     y: () => node.attrs.y,

@@ -117,6 +117,12 @@ export const ObjectNode = memo(function ObjectNode({
       y={y}
       rotation={rotation}
       opacity={opacity}
+      // What size this node is drawn at, so a size animation can scale it —
+      // React isn't in the frame loop, so nothing else can resize it (§8.1).
+      baseW={w}
+      baseH={h}
+      scaleX={1}
+      scaleY={1}
       // Hidden objects keep their node rather than unmounting: playback drives
       // Konva by id, so an object that starts a step invisible — every attack
       // part does (plan §17) — must already be there for an entrance effect to

@@ -169,12 +169,12 @@ describe("AnimationPanel — one row, many objects", () => {
     render(<AnimationPanel />);
 
     fireEvent.change(screen.getByTestId("anim-effect"), {
-      target: { value: "fade" },
+      target: { value: "scale" },
     });
 
     expect(state().steps[0]!.animations.map((a) => a.effect)).toEqual([
-      "fade",
-      "fade",
+      "scale",
+      "scale",
     ]);
     // Still one row: they still agree.
     expect(screen.getAllByTestId("anim-row")).toHaveLength(1);
@@ -235,5 +235,90 @@ describe("AnimationPanel — one row, many objects", () => {
     // They look identical, but they're two separate things: merging them would
     // make either one impossible to edit alone.
     expect(screen.getAllByTestId("anim-row")).toHaveLength(2);
+  });
+});
+
+/**
+ * `kind` and `effect` are separate enums in the document, which is right for
+ * storage and wrong for a picker: every effect used to be offered under every
+ * family, so "entrance · disappear" was buildable and *fading out* — `fade`
+ * under `exit` — was invisible.
+ */
+describe("AnimationPanel — effects belong to a family", () => {
+  const oneAnim = () => {
+    const orb = state().addPrimitive("shape", "pickup");
+    state().addStep();
+    const animId = state().addAnimation(0, orb)!;
+    state().select([orb]);
+    return animId;
+  };
+
+  it("calls a fade what it does: out for an exit, in for an entrance", () => {
+    const animId = oneAnim();
+    state().updateAnimation(0, animId, { kind: "exit" });
+    const { rerender } = render(<AnimationPanel />);
+    expect(
+      screen.getByRole("option", { name: "fade out" }),
+    ).toBeInTheDocument();
+
+    state().updateAnimation(0, animId, { kind: "entrance" });
+    rerender(<AnimationPanel />);
+    expect(screen.getByRole("option", { name: "fade in" })).toBeInTheDocument();
+  });
+
+  it("only offers a family's own effects", () => {
+    const animId = oneAnim();
+    state().updateAnimation(0, animId, { kind: "emphasis", effect: "pulse" });
+    render(<AnimationPanel />);
+
+    const names = screen
+      .getAllByRole("option")
+      .map((o) => o.textContent)
+      .filter((n) => n === "pulse" || n === "blink" || n === "move");
+    expect(names).toEqual(["pulse", "blink"]);
+  });
+
+  it("moves the effect along when the family changes under it", () => {
+    const animId = oneAnim(); // motion · move
+    render(<AnimationPanel />);
+
+    fireEvent.change(screen.getByTestId("anim-kind"), {
+      target: { value: "exit" },
+    });
+
+    // "exit · move" would be a thing the engine has no meaning for.
+    const anim = state().steps[0]!.animations.find((a) => a.id === animId)!;
+    expect(anim).toMatchObject({ kind: "exit", effect: "fade" });
+  });
+
+  it("keeps an effect the family doesn't list rather than rewriting it", () => {
+    const animId = oneAnim();
+    // A combination from before the families existed.
+    state().updateAnimation(0, animId, { kind: "exit", effect: "fly" });
+    render(<AnimationPanel />);
+
+    expect(screen.getByTestId("anim-effect")).toHaveValue("fly");
+  });
+
+  it("hides duration and easing for an effect that ignores them", () => {
+    const animId = oneAnim();
+    state().updateAnimation(0, animId, { kind: "exit", effect: "disappear" });
+    render(<AnimationPanel />);
+
+    // A control that does nothing is worse than no control.
+    expect(screen.queryByTestId("anim-duration")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("anim-easing")).not.toBeInTheDocument();
+    expect(screen.getByTestId("anim-instant")).toBeInTheDocument();
+    // Delay still means something: *when* it happens.
+    expect(screen.getByTestId("anim-delay")).toBeInTheDocument();
+  });
+
+  it("offers them again for a timed effect", () => {
+    const animId = oneAnim();
+    state().updateAnimation(0, animId, { kind: "exit", effect: "fade" });
+    render(<AnimationPanel />);
+
+    expect(screen.getByTestId("anim-duration")).toBeInTheDocument();
+    expect(screen.getByTestId("anim-easing")).toBeInTheDocument();
   });
 });

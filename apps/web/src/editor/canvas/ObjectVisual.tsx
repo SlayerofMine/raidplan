@@ -51,6 +51,11 @@ export function ObjectVisual({
       y={y}
       rotation={rotation}
       opacity={opacity}
+      // See `ObjectNode`: the drawn size, so animation can scale against it.
+      baseW={w}
+      baseH={h}
+      scaleX={1}
+      scaleY={1}
       // Mounted even while hidden, so the exporter's GSAP pass can reveal it —
       // the same rule `ObjectNode` follows.
       visible={state.visible}

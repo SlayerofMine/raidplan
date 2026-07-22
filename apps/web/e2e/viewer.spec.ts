@@ -25,6 +25,31 @@ async function buildPlan(page: Page, objectCount: number, stepCount: number) {
 }
 
 test.describe("viewer", () => {
+  test("a scale animation actually resizes while playing", async ({ page }) => {
+    await page.goto("/plan/local/edit");
+    await page.getByRole("button", { name: "Add Marker 1" }).click();
+    await page.getByTestId("add-step").click();
+    await page.getByTestId("add-animation").click();
+    await page.getByTestId("anim-effect").selectOption("scale");
+    await page.getByTestId("anim-duration").fill("1200");
+    // The end state the scale grows into.
+    await page.getByTestId("prop-w").fill("400");
+    await page.getByTestId("prop-h").fill("400");
+    await page.waitForTimeout(1400); // let autosave flush
+
+    await page.getByTestId("open-viewer").click();
+    const board = page.getByTestId("viewer-canvas");
+    await expect(board).toBeVisible();
+    const before = await board.screenshot();
+
+    // React isn't in the frame loop, so nothing but the animator can resize the
+    // node: `scale` used to be a no-op everywhere but the editor's own canvas.
+    await page.getByTestId("play-toggle").click();
+    await expect
+      .poll(async () => (await board.screenshot()).equals(before))
+      .toBe(false);
+  });
+
   test("plays a plan, navigates steps and scrubs", async ({ page }) => {
     await buildPlan(page, 3, 3);
 

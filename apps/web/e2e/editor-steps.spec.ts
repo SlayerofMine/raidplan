@@ -74,8 +74,10 @@ test.describe("steps", () => {
     await page.getByTestId("add-animation").click();
     await expect(page.getByTestId("anim-row")).toHaveCount(1);
 
-    await page.getByTestId("anim-effect").selectOption("fade");
+    // The family first, then its own effects — an entrance's "fade" is a fade in.
     await page.getByTestId("anim-kind").selectOption("entrance");
+    await page.getByTestId("anim-effect").selectOption("fade");
+    await expect(page.getByTestId("anim-effect")).toHaveValue("fade");
     await page.getByTestId("anim-duration").fill("800");
     await expect(page.getByTestId("anim-effect")).toHaveValue("fade");
     await expect(page.getByTestId("anim-duration")).toHaveValue("800");
@@ -114,7 +116,7 @@ test.describe("steps", () => {
 
     // Editing the row edits both. If only one had changed they would no longer
     // agree, and the row would split in two.
-    await page.getByTestId("anim-effect").selectOption("fade");
+    await page.getByTestId("anim-effect").selectOption("scale");
     await expect(page.getByTestId("anim-row")).toHaveCount(1);
     await expect(page.getByTestId("anim-row")).toHaveAttribute(
       "data-objects",
