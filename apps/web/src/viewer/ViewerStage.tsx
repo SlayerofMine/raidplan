@@ -1,8 +1,8 @@
 import { useEffect, useMemo, type RefObject } from "react";
-import { Layer, Image as KonvaImage, Stage } from "react-konva";
+import { Group, Layer, Image as KonvaImage, Stage } from "react-konva";
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
 import type { Stage as StageNode } from "konva/lib/Stage";
-import { getBackgroundSrc } from "@raidplan/shared";
+import { attackGroupId, getBackgroundSrc } from "@raidplan/shared";
 import { fitView } from "../editor/canvas/coords";
 import { ObjectNode } from "../editor/canvas/ObjectNode";
 import { SyncedIconResolver } from "../editor/SyncedIconResolver";
@@ -35,6 +35,7 @@ export function ViewerStage({
   const [containerRef, size] = useContainerSize<HTMLDivElement>();
   const background = useEditorStore((s) => s.background);
   const objectIds = useEditorStore((s) => s.objectIds);
+  const objects = useEditorStore((s) => s.objects);
   const bgImage = useImageElement(getBackgroundSrc(background.assetId));
 
   // Hit-testing costs real work, so only switch it on when this step actually
@@ -55,6 +56,22 @@ export function ViewerStage({
       node = node.getParent();
     }
   };
+
+  /**
+   * Objects in draw order, with each attack's parts collected into one run.
+   * They arrive contiguous — `expandPlan` sorts by z and an attack's parts share
+   * its place in the stack — so this is a single pass.
+   */
+  const runs = useMemo(() => {
+    const out: { attackId: string | undefined; ids: string[] }[] = [];
+    for (const id of objectIds) {
+      const groupId = objects[id]?.groupId;
+      const last = out.at(-1);
+      if (last && last.attackId === groupId) last.ids.push(id);
+      else out.push({ attackId: groupId, ids: [id] });
+    }
+    return out;
+  }, [objectIds, objects]);
 
   // The viewer has no camera of its own: always fit the plan to the container.
   const view = useMemo(() => fitView(background, size, 0), [background, size]);
@@ -96,9 +113,21 @@ export function ViewerStage({
           onClick={handleClick}
           onTap={handleClick}
         >
-          {objectIds.map((id) => (
-            <ObjectNode key={id} objectId={id} draggable={false} />
-          ))}
+          {/* An attack's parts are drawn inside one node, so an anchored
+              attack can be carried about by moving that node (§18.15). */}
+          {runs.map((run) =>
+            run.attackId === undefined ? (
+              run.ids.map((id) => (
+                <ObjectNode key={id} objectId={id} draggable={false} />
+              ))
+            ) : (
+              <Group key={run.attackId} id={attackGroupId(run.attackId)}>
+                {run.ids.map((id) => (
+                  <ObjectNode key={id} objectId={id} draggable={false} />
+                ))}
+              </Group>
+            ),
+          )}
         </Layer>
       </Stage>
     </div>

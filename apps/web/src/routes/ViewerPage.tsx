@@ -4,6 +4,7 @@ import type { Stage as StageNode } from "konva/lib/Stage";
 import { api } from "../api/client";
 import { useFps } from "../anim/useFps";
 import { usePlayback } from "../anim/usePlayback";
+import { useAttackAnchors } from "../anim/useAttackAnchors";
 import { isEditableTarget } from "../editor/isEditableTarget";
 import { isLocalPlan, LOCAL_PLAN_ID } from "../editor/planScope";
 import { clearHistory, useEditorStore } from "../store/editorStore";
@@ -34,6 +35,9 @@ export function ViewerPage() {
   const title = useEditorStore((s) => s.title);
   const steps = useEditorStore((s) => s.steps);
   const playback = usePlayback(stageRef);
+  // Attacks that follow the board are re-placed every frame, alongside the
+  // tweens rather than after them (§18.15).
+  useAttackAnchors(stageRef);
   const fps = useFps(playback.isPlaying);
 
   // Load once, before playback builds its first timeline. Attacks are stamped

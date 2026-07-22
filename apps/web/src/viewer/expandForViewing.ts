@@ -5,6 +5,7 @@ import {
   type Plan,
 } from "@raidplan/shared";
 import { api } from "../api/client";
+import { useEditorStore } from "../store/editorStore";
 
 /**
  * Prepare a plan for read-only playback (plan §17, stage 3).
@@ -25,5 +26,11 @@ export async function expandForViewing(doc: Plan): Promise<Plan> {
   const defs = await api.attack.byIds.query({ ids });
   const byId: Record<string, AttackDef> = {};
   for (const def of defs) byId[def.id] = def;
-  return expandPlan(doc, byId);
+  // The anchor runtime resolves an instance against its definition per frame.
+  useEditorStore.getState().setAttackDefs(byId);
+  // The instances are kept alongside the expansion rather than cleared: an
+  // anchored attack is placed per frame from where its anchors are *now*
+  // (§18.15), and the runtime needs to know which parts follow what. Nothing in
+  // the viewer draws instances, so they cost nothing but a reference.
+  return { ...expandPlan(doc, byId), attacks: doc.attacks };
 }

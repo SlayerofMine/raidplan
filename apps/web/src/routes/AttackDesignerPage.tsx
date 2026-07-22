@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   defToPlan,
@@ -10,7 +10,10 @@ import {
 import { api } from "../api/client";
 import { TetherButton } from "../editor/TetherButton";
 import { AnimationPanel } from "../editor/AnimationPanel";
-import { AttackParamsPanel } from "../editor/AttackParamsPanel";
+import {
+  AttackAnchorPanel,
+  AttackParamsPanel,
+} from "../editor/AttackParamsPanel";
 import { AttackBoundsOverlay } from "../editor/canvas/AttackBoundsOverlay";
 import { CanvasStage } from "../editor/canvas/CanvasStage";
 import { IconPalette } from "../editor/IconPalette";
@@ -78,12 +81,24 @@ function AttackDesigner({
   const navigate = useNavigate();
   const selectStep = useEditorStore((s) => s.selectStep);
   const onBase = useEditorStore((s) => s.currentStepIndex === BASE_STEP_INDEX);
+  // The holes this definition leaves, as the anchor panel needs to name them.
+  const objects = useEditorStore((s) => s.objects);
+  const objectIds = useEditorStore((s) => s.objectIds);
+  const slots = useMemo(
+    () =>
+      objectIds
+        .map((id) => objects[id])
+        .filter((o) => o?.type === "placeholder")
+        .map((o) => ({ id: o!.id, label: o!.base.name ?? "Slot" })),
+    [objectIds, objects],
+  );
 
   const [def, setDef] = useState<AttackDef | null>(null);
   const [name, setName] = useState("");
   // Declared parameters and their bindings aren't spatial, so they live beside
   // the canvas rather than in it — and must survive a save untouched.
   const [params, setParams] = useState<AttackParam[]>([]);
+  const [anchor, setAnchor] = useState<AttackDef["anchor"]>(undefined);
   const [bindings, setBindings] = useState<AttackBindings>({
     collideWith: {},
     durationMs: {},
@@ -102,6 +117,7 @@ function AttackDesigner({
       setName(d.name);
       setParams(d.params);
       setBindings(d.bindings);
+      setAnchor(d.anchor);
       useEditorStore.getState().loadPlan(defToPlan(d));
       clearHistory();
       useEditorStore.getState().selectStep(BASE_STEP_INDEX);
@@ -129,6 +145,7 @@ function AttackDesigner({
         name: name.trim() || "Attack",
         params,
         bindings,
+        anchor,
       });
       if (attackId)
         await api.attack.update.mutate({ id: attackId, ...content });
@@ -237,6 +254,7 @@ function AttackDesigner({
           onParamsChange={setParams}
           onBindingsChange={setBindings}
         />
+        <AttackAnchorPanel slots={slots} anchor={anchor} onChange={setAnchor} />
       </div>
       <div style={{ gridArea: "timeline" }} className="flex min-h-0 flex-col">
         <TimelineDock />

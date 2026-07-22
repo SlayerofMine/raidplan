@@ -1,8 +1,11 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import gsap from "gsap";
 import { Group, Rect } from "react-konva";
+import type { Rect as RectNode } from "konva/lib/shapes/Rect";
 import type { KonvaEventObject } from "konva/lib/Node";
 import type { Group as GroupNode } from "konva/lib/Group";
 import {
+  attackGroupId,
   expandPlan,
   resolveObjectState,
   SCHEMA_VERSION,
@@ -79,6 +82,9 @@ function PlacedAttack({
   dimmed: boolean;
 }) {
   const muted = instance.visible === false;
+  // An anchored attack is placed by what it follows; dragging it would be
+  // arguing with the boss about where he is standing.
+  const anchored = Boolean(def.anchor);
   const selected = useEditorStore((s) =>
     s.selectedAttackIds.includes(instance.id),
   );
@@ -123,6 +129,25 @@ function PlacedAttack({
   // mapped (§18.2) — so its position is the centre, offset by half its size.
   const half = { x: instance.w / 2, y: instance.h / 2 };
 
+  const frameRef = useRef<RectNode>(null);
+  // Keep the grab frame on the art: the parts group is moved by the anchor
+  // runtime, and a frame left behind would be a click target over nothing.
+  useEffect(() => {
+    if (!anchored) return;
+    const follow = () => {
+      const parts = partsRef.current;
+      const frame = frameRef.current;
+      if (!parts || !frame) return;
+      frame.setAttrs({
+        x: parts.x() + (instance.x + half.x - parts.offsetX()),
+        y: parts.y() + (instance.y + half.y - parts.offsetY()),
+        rotation: instance.rotation + parts.rotation(),
+      });
+    };
+    gsap.ticker.add(follow);
+    return () => gsap.ticker.remove(follow);
+  });
+
   const handleDragMove = (e: KonvaEventObject<DragEvent>) => {
     // Carry the parts along without a React render per frame.
     partsRef.current?.position({
@@ -159,6 +184,9 @@ function PlacedAttack({
     <>
       <Group
         ref={partsRef}
+        // The node an anchor moves bodily (§18.15) — the parts inside stay
+        // exactly where expansion and the animations put them.
+        id={attackGroupId(instance.id)}
         listening={false}
         opacity={muted ? MUTED_OPACITY : dimmed ? OTHER_STEP_OPACITY : 1}
       >
@@ -167,6 +195,7 @@ function PlacedAttack({
         ))}
       </Group>
       <Rect
+        ref={frameRef}
         id={instance.id}
         x={instance.x + half.x}
         y={instance.y + half.y}
@@ -175,7 +204,11 @@ function PlacedAttack({
         width={instance.w}
         height={instance.h}
         rotation={instance.rotation}
-        draggable={!instance.locked}
+        draggable={!instance.locked && !anchored}
+        // An anchored attack has no placement of its own to grab, and a frame
+        // that swallowed clicks would put it between you and the very tokens
+        // it follows. Select it from the attacks panel instead.
+        listening={!anchored}
         // Transparent but hit-testable, so the whole attack is one grab target.
         fill="rgba(0,0,0,0.001)"
         stroke={selected ? "#f2c744" : undefined}

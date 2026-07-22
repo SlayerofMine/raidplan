@@ -796,5 +796,23 @@ drawing, since an attack's tether is not in the document), and placeholders take
 `attackContentBox` — whatever fills one could be anywhere, so letting it stretch the rectangle
 would make the rectangle meaningless. [DONE]
 
-**Next:** attaching an attack to an object — a frontal originating at the boss and rotating to
-face its target — which is §18.15 and not yet built.
+### 18.15 Anchored attacks: following the board per frame
+
+A definition can now **hang off** one of its placeholders and **face** another: a frontal from the
+boss aimed at a player. Both are things only the plan knows, so both are placeholders, and the
+definition just says which is which.
+
+The placement is derived **every frame**, not per step. `anchorPlacement` is pure — two points in,
+a rectangle out — and `useAttackAnchors` runs it on GSAP's ticker in both the editor and the
+viewer, after the tween engine has written the frame, so it reads where the boss is *now*. Drag the
+target and the cone swings round as you drag; animate the boss and it sweeps with him.
+
+What it writes is a **correction on the group holding the attack's parts**, never on the parts
+themselves. The parts stay exactly where expansion and the animations put them, and the group
+carries them bodily — so there is still one truth about a part's position and this never fights the
+animation engine for it. `expandPlan` marks the parts with the instance's id so both renderers can
+put them in one node.
+
+An anchored attack is neither draggable nor clickable on the canvas: it has no placement of its own
+to grab, and a frame that swallowed clicks would sit between you and the very tokens it follows.
+Select it from the attacks panel. [DONE]

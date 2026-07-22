@@ -9,8 +9,10 @@ import {
 } from "react";
 import { Layer, Line, Image as KonvaImage, Rect, Stage } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
+import type { Stage as StageNode } from "konva/lib/Stage";
 import type { PlanObject, ShapeKind } from "@raidplan/shared";
 import { getBackgroundSrc } from "@raidplan/shared";
+import { useAttackAnchors } from "../../anim/useAttackAnchors";
 import { boardStack, useEditorStore } from "../../store/editorStore";
 import { isEditableTarget } from "../isEditableTarget";
 import {
@@ -48,6 +50,7 @@ const ZOOM_STEP = 1.1;
  */
 export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
   const [containerRef, size] = useContainerSize<HTMLDivElement>();
+  const stageOf = useRef<StageNode | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const didFit = useRef(false);
 
@@ -89,6 +92,8 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
   }, []);
 
   const bgImage = useImageElement(getBackgroundSrc(background.assetId));
+  // Attacks that follow the board keep following it while you drag a token.
+  useAttackAnchors(stageOf);
 
   // Keep the store's stage size current; fit the plan once, on first measure.
   useEffect(() => {
@@ -235,7 +240,10 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
     >
       <Stage
         // Register the node for PNG export (plan §5.1).
-        ref={setStageNode}
+        ref={(node) => {
+          stageOf.current = node;
+          setStageNode(node);
+        }}
         width={size.width}
         height={size.height}
         scaleX={view.scale}

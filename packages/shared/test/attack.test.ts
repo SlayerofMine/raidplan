@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ATTACK_AUTHORING_SIZE,
   ATTACK_BOX_ASSET,
+  anchorPlacement,
   attackNaturalMs,
   attackSlots,
   attackSpanMs,
@@ -664,6 +665,117 @@ describe("expandPlan — placeholders", () => {
     // with a missing end simply doesn't draw.
     expect(leash.toId).toBe("i1::victim");
     expect(out.objects.map((o) => o.id)).not.toContain("i1::victim");
+  });
+});
+
+describe("anchorPlacement — an attack pinned to the board", () => {
+  /** A frontal: it hangs off "boss" and looks towards "target". */
+  const frontal = makeDef({
+    defaultSize: { w: 200, h: 200 },
+    objects: [
+      // The art fills unit space; the two holes sit on the left and right edge.
+      defObj("cone"),
+      {
+        id: "boss",
+        type: "placeholder",
+        base: base({ x: -1.1, y: -0.1, w: 0.2, h: 0.2 }),
+      },
+      {
+        id: "target",
+        type: "placeholder",
+        base: base({ x: 0.9, y: -0.1, w: 0.2, h: 0.2 }),
+      },
+    ],
+    anchor: { originId: "boss", facingId: "target" },
+  });
+
+  const at =
+    (points: Record<string, { x: number; y: number }>) => (id: string) =>
+      points[id] ?? null;
+
+  it("leaves an unanchored attack where the plan put it", () => {
+    expect(anchorPlacement(makeDef(), inst(), () => ({ x: 0, y: 0 }))).toBe(
+      null,
+    );
+  });
+
+  it("says nothing when the anchor isn't on the board", () => {
+    // Nothing to follow: the stored rectangle stands rather than snapping to
+    // the origin.
+    expect(anchorPlacement(frontal, inst(), () => null)).toBe(null);
+    expect(
+      anchorPlacement(frontal, inst({ slots: { boss: "b" } }), () => null),
+    ).toBe(null);
+  });
+
+  it("hangs the attack off its origin object", () => {
+    const placed = anchorPlacement(
+      frontal,
+      inst({ slots: { boss: "b" }, w: 200, h: 200 }),
+      at({ b: { x: 500, y: 500 } }),
+    )!;
+    // The origin placeholder sits on the rectangle's left edge, so the
+    // rectangle starts where the boss is.
+    expect(placed.x).toBeCloseTo(500);
+    expect(placed.y).toBeCloseTo(400);
+  });
+
+  it("turns to face its target", () => {
+    const placed = anchorPlacement(
+      frontal,
+      inst({ slots: { boss: "b", target: "t" }, w: 200, h: 200 }),
+      // The target is straight down from the boss: a quarter turn.
+      at({ b: { x: 500, y: 500 }, t: { x: 500, y: 900 } }),
+    )!;
+    expect(placed.rotation).toBeCloseTo(90);
+  });
+
+  it("re-aims when the target moves — that's the whole point", () => {
+    const instance = inst({
+      slots: { boss: "b", target: "t" },
+      w: 200,
+      h: 200,
+    });
+    const east = anchorPlacement(
+      frontal,
+      instance,
+      at({ b: { x: 500, y: 500 }, t: { x: 900, y: 500 } }),
+    )!;
+    const west = anchorPlacement(
+      frontal,
+      instance,
+      at({ b: { x: 500, y: 500 }, t: { x: 100, y: 500 } }),
+    )!;
+    expect(east.rotation).toBeCloseTo(0);
+    expect(Math.abs(west.rotation)).toBeCloseTo(180);
+  });
+
+  it("keeps its own size — reach belongs to the ability, not the distance", () => {
+    const near = anchorPlacement(
+      frontal,
+      inst({ slots: { boss: "b", target: "t" }, w: 200, h: 200 }),
+      at({ b: { x: 500, y: 500 }, t: { x: 600, y: 500 } }),
+    )!;
+    const far = anchorPlacement(
+      frontal,
+      inst({ slots: { boss: "b", target: "t" }, w: 200, h: 200 }),
+      at({ b: { x: 500, y: 500 }, t: { x: 5000, y: 500 } }),
+    )!;
+    // Same rectangle, just aimed: only x/y/rotation are the anchor's business.
+    expect(near.x).toBeCloseTo(far.x);
+    expect(near.y).toBeCloseTo(far.y);
+  });
+
+  it("stays hung off the origin however it is turned", () => {
+    const placed = anchorPlacement(
+      frontal,
+      inst({ slots: { boss: "b", target: "t" }, w: 200, h: 200 }),
+      at({ b: { x: 500, y: 500 }, t: { x: 500, y: 900 } }),
+    )!;
+    // A quarter turn about the boss: the rectangle's centre swings round to
+    // sit below him, and the apex stays put.
+    expect(placed.x + 100).toBeCloseTo(500);
+    expect(placed.y + 100).toBeCloseTo(600);
   });
 });
 

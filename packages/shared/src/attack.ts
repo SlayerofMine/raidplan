@@ -127,6 +127,24 @@ export const AttackDefSchema = z.object({
   /** Settled end state, in unit space (the def's single step). */
   overrides: z.record(z.string().min(1), StepOverrideSchema).default({}),
   animations: z.array(AnimSchema),
+  /**
+   * Pin the attack to the plan's own objects (plan §18.15).
+   *
+   * Both ids are the definition's own **placeholders**. `origin` is the point
+   * the attack hangs from — wherever the placeholder sits in unit space lands on
+   * whatever object fills it. `facing` turns the attack so its second
+   * placeholder points at that object: a frontal aimed from the boss at a
+   * player, re-aimed whenever either of them moves.
+   *
+   * Only the placement is taken over. The attack keeps its own size, because a
+   * frontal's reach is the ability's, not the distance to whoever it's aimed at.
+   */
+  anchor: z
+    .object({
+      originId: z.string().min(1),
+      facingId: z.string().min(1).optional(),
+    })
+    .optional(),
   /** What a plan must (or may) tell this attack (plan §18.4). */
   params: z.array(AttackParamSchema).default([]),
   /** Which internals read which parameter. */
@@ -162,6 +180,79 @@ export function attackNaturalMs(def: AttackDef): number {
 /** How long a *placed* attack runs: its own duration if stretched, else the def's. */
 export function attackSpanMs(def: AttackDef, instance: AttackInstance): number {
   return instance.durationMs ?? attackNaturalMs(def);
+}
+
+/**
+ * Where an anchored attack's rectangle goes, given where its anchor objects are
+ * *right now* (plan §18.15).
+ *
+ * Pure, and deliberately so: the same maths runs in the editor's canvas, the
+ * viewer's frame loop and the tests, from nothing but two points. Returns
+ * `null` when the attack isn't anchored or its anchors aren't on the board,
+ * which means "leave the placement alone" — the stored rectangle stands.
+ *
+ * The rectangle keeps its size. `origin` decides where it hangs and `facing`
+ * which way it looks: the offset from the origin placeholder to the facing one,
+ * in unit space, is turned to line up with the offset between their objects.
+ */
+export function anchorPlacement(
+  def: AttackDef,
+  instance: AttackInstance,
+  centreOf: (objectId: string) => Point | null,
+): { x: number; y: number; rotation: number } | null {
+  const anchor = def.anchor;
+  if (!anchor) return null;
+
+  const originObject = instance.slots[anchor.originId];
+  const origin = originObject ? centreOf(originObject) : null;
+  if (!origin) return null;
+
+  const box = defBox(def);
+  const unitCentreOf = (localId: string): Point | null => {
+    const slot = def.objects.find((o) => o.id === localId);
+    // A placeholder's *centre* is what lands on the object's centre.
+    return slot
+      ? { x: slot.base.x + slot.base.w / 2, y: slot.base.y + slot.base.h / 2 }
+      : null;
+  };
+
+  const originUnit = unitCentreOf(anchor.originId);
+  if (!originUnit) return null;
+
+  // How far the origin placeholder sits from the middle of the rectangle, in
+  // the rectangle's own pixels.
+  const half = { x: instance.w / 2, y: instance.h / 2 };
+  const offset = {
+    x: ((originUnit.x - box.cx) / box.hx) * half.x,
+    y: ((originUnit.y - box.cy) / box.hy) * half.y,
+  };
+
+  let rotation = instance.rotation;
+  const facingUnit = anchor.facingId ? unitCentreOf(anchor.facingId) : null;
+  const facingObject = anchor.facingId
+    ? instance.slots[anchor.facingId]
+    : undefined;
+  const facing = facingObject ? centreOf(facingObject) : null;
+  if (facingUnit && facing) {
+    // The direction the definition points, and the direction it must point.
+    const authored = Math.atan2(
+      facingUnit.y - originUnit.y,
+      facingUnit.x - originUnit.x,
+    );
+    const wanted = Math.atan2(facing.y - origin.y, facing.x - origin.x);
+    rotation = ((wanted - authored) * 180) / Math.PI;
+  }
+
+  // Put the origin placeholder on its object: rotate its offset from the centre
+  // and step back along it.
+  const rad = (rotation * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const centre = {
+    x: origin.x - (offset.x * cos - offset.y * sin),
+    y: origin.y - (offset.x * sin + offset.y * cos),
+  };
+  return { x: centre.x - half.x, y: centre.y - half.y, rotation };
 }
 
 /** An axis-aligned box: a centre and half-extents. Never zero-sized. */
@@ -463,6 +554,9 @@ function expandInstance(
       return {
         ...o,
         id: scopedId(instance.id, o.id),
+        // Every part of one attack belongs together — which is what lets a
+        // renderer put them in a single node and move that node (§18.15).
+        groupId: instance.id,
         ...(o.fromId ? { fromId: resolveId(o.fromId) } : {}),
         ...(o.toId ? { toId: resolveId(o.toId) } : {}),
         base: typeof tint === "string" ? { ...placed, tint } : placed,
@@ -710,6 +804,7 @@ export function planToAttackContent(
     name: string;
     params?: AttackParam[];
     bindings?: AttackBindings;
+    anchor?: AttackDef["anchor"];
   },
 ): AttackContent {
   const step = plan.steps[0];
@@ -744,8 +839,9 @@ export function planToAttackContent(
     animations: content.animations.map((a) =>
       mapAnim(a, from ?? UNIT_BOX, UNIT_BOX),
     ),
-    // Parameters and their bindings aren't spatial, so they pass straight
+    // Parameters, bindings and the anchor aren't spatial, so they pass straight
     // through from the designer rather than round-tripping via the canvas.
+    ...(meta.anchor ? { anchor: meta.anchor } : {}),
     params: meta.params ?? [],
     bindings: meta.bindings ?? {
       collideWith: {},
@@ -755,3 +851,11 @@ export function planToAttackContent(
     },
   };
 }
+
+/**
+ * The node id a renderer gives the group holding one attack's parts.
+ *
+ * Distinct from the instance id, which the editor's grab frame already uses —
+ * two nodes answering to one id would make `findOne` a coin toss.
+ */
+export const attackGroupId = (instanceId: string) => `attack:${instanceId}`;

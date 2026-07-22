@@ -350,3 +350,94 @@ function SlotChecklist({
     </fieldset>
   );
 }
+
+/**
+ * Pinning the attack to the board (plan §18.15).
+ *
+ * A definition can hang off one of its placeholders and turn to face another —
+ * a frontal from the boss at a player. Both are placeholders, because both are
+ * objects only the plan knows; this just says which is which.
+ */
+export function AttackAnchorPanel({
+  slots,
+  anchor,
+  onChange,
+}: {
+  slots: { id: string; label: string }[];
+  anchor: { originId: string; facingId?: string } | undefined;
+  onChange: (next: { originId: string; facingId?: string } | undefined) => void;
+}) {
+  return (
+    <section
+      className="border-t border-panelborder p-3"
+      data-testid="attack-anchor-panel"
+    >
+      <h2 className="mb-2 text-sm font-semibold text-neutral-300">Anchor</h2>
+      {slots.length === 0 ? (
+        <p data-testid="anchor-needs-slot" className="text-xs text-neutral-500">
+          Add a slot first — an attack follows one of the plan&apos;s objects,
+          and a slot is how it asks for one.
+        </p>
+      ) : (
+        <>
+          <p className="mb-2 text-xs text-neutral-500">
+            Placed copies follow these instead of sitting where they were
+            dropped, and re-aim whenever either one moves.
+          </p>
+          <label className="flex items-center gap-1 text-xs text-neutral-400">
+            hangs off
+            <select
+              aria-label="Anchor origin"
+              value={anchor?.originId ?? ""}
+              onChange={(e) =>
+                onChange(
+                  e.target.value
+                    ? {
+                        originId: e.target.value,
+                        ...(anchor?.facingId
+                          ? { facingId: anchor.facingId }
+                          : {}),
+                      }
+                    : undefined,
+                )
+              }
+              className={FIELD}
+            >
+              <option value="">nothing — stays where it&apos;s put</option>
+              {slots.map((slot) => (
+                <option key={slot.id} value={slot.id}>
+                  {slot.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {anchor && (
+            <label className="mt-1 flex items-center gap-1 text-xs text-neutral-400">
+              and faces
+              <select
+                aria-label="Anchor facing"
+                value={anchor.facingId ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    originId: anchor.originId,
+                    ...(e.target.value ? { facingId: e.target.value } : {}),
+                  })
+                }
+                className={FIELD}
+              >
+                <option value="">nothing — keeps its own rotation</option>
+                {slots
+                  .filter((slot) => slot.id !== anchor.originId)
+                  .map((slot) => (
+                    <option key={slot.id} value={slot.id}>
+                      {slot.label}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
+        </>
+      )}
+    </section>
+  );
+}

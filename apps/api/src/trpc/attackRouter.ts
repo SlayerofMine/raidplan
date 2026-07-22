@@ -34,6 +34,12 @@ const attackContent = {
   objects: z.array(PlanObjectSchema),
   overrides: z.record(z.string().min(1), StepOverrideSchema).default({}),
   animations: z.array(AnimSchema),
+  anchor: z
+    .object({
+      originId: z.string().min(1),
+      facingId: z.string().min(1).optional(),
+    })
+    .optional(),
   params: z.array(AttackParamSchema).default([]),
   bindings: AttackBindingsSchema,
 };
