@@ -3,6 +3,7 @@ import { temporal } from "zundo";
 import { shallow } from "zustand/shallow";
 import { immer } from "zustand/middleware/immer";
 import {
+  attackSlots,
   attackZ,
   resolveObjectState,
   type Anim,
@@ -168,6 +169,11 @@ export interface EditorState extends PlanDoc {
    * from a step. *When* it fires is a separate question: it's pinned to the step
    * being edited, or to the first one when you're laying out the board — and a
    * plan with no steps gets one, because an attack that never fires is furniture.
+   *
+   * A definition with **placeholders** (§18.14) takes them from the current
+   * selection, in document order — select the boss and the tank, then place the
+   * frontal. Too small a selection and nothing is placed: a definition with
+   * holes in it isn't a thing you can put on a board.
    */
   addAttack: (
     attackId: string,
@@ -848,6 +854,20 @@ export const useEditorStore = create<EditorState>()(
 
       addAttack: (attackId, at, stepId) => {
         const state = get();
+        const def = state.attackDefs[attackId];
+
+        // Fill the definition's holes from the selection, in document order.
+        const slots: Record<string, string> = {};
+        const holes = def ? attackSlots(def) : [];
+        if (holes.length > 0) {
+          const chosen = state.objectIds.filter((id) =>
+            state.selectedIds.includes(id),
+          );
+          if (chosen.length < holes.length) return undefined;
+          holes.forEach((hole, index) => {
+            slots[hole.id] = chosen[index]!;
+          });
+        }
         // Laying out the board is a fine time to place an attack; it fires on
         // the step you're editing, else the first one, creating it if need be.
         const firesOn =
@@ -857,10 +877,7 @@ export const useEditorStore = create<EditorState>()(
           get().addStep();
         // The def's default size is the size it was drawn at; centre it on the
         // drop point so the attack lands where you aimed (plan §18.2).
-        const size = state.attackDefs[attackId]?.defaultSize ?? {
-          w: 400,
-          h: 400,
-        };
+        const size = def?.defaultSize ?? { w: 400, h: 400 };
         const instance: AttackInstance = {
           id: nextAttackId(),
           attackId,
@@ -873,6 +890,7 @@ export const useEditorStore = create<EditorState>()(
           h: size.h,
           rotation: 0,
           startMs: 0,
+          slots,
           args: {},
         };
         set((s) => {

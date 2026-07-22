@@ -176,6 +176,12 @@ export const AttackInstanceSchema = z.object({
    */
   durationMs: z.number().finite().positive().optional(),
   /**
+   * Which of *this plan's* objects fill the definition's placeholders (plan
+   * §18.14), keyed by the placeholder's id. A definition with placeholders can't
+   * be placed until they're all filled — it has holes in it.
+   */
+  slots: z.record(z.string().min(1), z.string().min(1)).default({}),
+  /**
    * Arguments for the definition's declared parameters (plan §18.4), keyed by
    * parameter. This is how a plan tells an attack things only it knows — such as
    * which of *its* objects can set a collision off.

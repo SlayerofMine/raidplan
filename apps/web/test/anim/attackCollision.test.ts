@@ -180,6 +180,7 @@ const plan: Plan = {
       h: 100,
       rotation: 0,
       startMs: 0,
+      slots: {},
       args: { victims: ["tank"] },
     },
   ],

@@ -7,9 +7,11 @@ import {
   type PlanObject,
   type ShapeKind,
 } from "@raidplan/shared";
+import { TETHER_DEFAULT_TINT } from "../../store/objectFactory";
 import { useIconSrc } from "../iconSrc";
 import { labelLayout, LABEL_COLOUR, LABEL_FONT_SIZE } from "./objectLabel";
 import { MechArtwork } from "./MechArtwork";
+import { TetherShape } from "./TetherNode";
 import { useImageElement } from "./useImageElement";
 
 /**
@@ -37,9 +39,22 @@ export function ObjectVisual({
 }) {
   const icon = useImageElement(useIconSrc(object.iconId));
 
-  // A tether derives its geometry from two *store* objects, so it has no
-  // standalone visual to preview. Attack tethers show in the viewer/preview.
-  if (object.type === "tether") return null;
+  // A tether is drawn from wherever its endpoints are right now — which, inside
+  // an attack, can be one of the *plan's* objects (§18.14). It needs no
+  // transform of its own, so it doesn't go in the group below.
+  if (object.type === "tether") {
+    return object.fromId && object.toId ? (
+      <TetherShape
+        id={object.id}
+        fromId={object.fromId}
+        toId={object.toId}
+        tint={object.base.tint ?? TETHER_DEFAULT_TINT}
+        style={object.style}
+        opacity={state.opacity}
+        visible={state.visible}
+      />
+    ) : null;
+  }
 
   const { x, y, w, h, rotation, opacity } = state;
   const { tint, label } = object.base;
@@ -185,6 +200,22 @@ function ObjectArtwork({
   icon: HTMLImageElement | undefined;
 }) {
   switch (type) {
+    // A hole in a definition: dashed, so it reads as "something goes here".
+    case "placeholder":
+      return (
+        <>
+          <Circle
+            x={w / 2}
+            y={h / 2}
+            radius={Math.min(w, h) / 2}
+            stroke={colour}
+            strokeWidth={2}
+            dash={[6, 5]}
+            fill={`${colour}14`}
+          />
+        </>
+      );
+
     case "arrow":
       return (
         <Arrow

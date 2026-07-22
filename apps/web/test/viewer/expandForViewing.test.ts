@@ -73,6 +73,7 @@ describe("expandForViewing", () => {
         h: 200,
         rotation: 0,
         startMs: 0,
+        slots: {},
         args: {},
       },
     ]);

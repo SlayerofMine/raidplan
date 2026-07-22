@@ -10,6 +10,7 @@ import {
   type AttackInstance,
   type Background,
   type Plan,
+  type PlanObject,
 } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { ObjectVisual } from "./ObjectVisual";
@@ -81,6 +82,15 @@ function PlacedAttack({
   const selected = useEditorStore((s) =>
     s.selectedAttackIds.includes(instance.id),
   );
+  const objects = useEditorStore((s) => s.objects);
+  const objectIds = useEditorStore((s) => s.objectIds);
+  const planObjects = useMemo(
+    () =>
+      objectIds
+        .map((id) => objects[id])
+        .filter((o): o is PlanObject => o !== undefined),
+    [objectIds, objects],
+  );
   const selectAttack = useEditorStore((s) => s.selectAttack);
   const updateAttack = useEditorStore((s) => s.updateAttack);
   const partsRef = useRef<GroupNode>(null);
@@ -92,17 +102,22 @@ function PlacedAttack({
       title: "",
       raid: "",
       background,
-      objects: [],
+      // The plan's own objects come along so a tether into one of them expands
+      // to a real id; they aren't drawn from here (their own nodes do that).
+      objects: planObjects,
       attacks: [{ ...instance, stepId: "s" }],
       steps: [{ id: "s", overrides: {}, animations: [] }],
       schemaVersion: SCHEMA_VERSION,
     };
     const expanded = expandPlan(shell, { [instance.attackId]: def });
-    return expanded.objects.map((object) => ({
-      object,
-      state: resolveObjectState(object, expanded.steps, 0),
-    }));
-  }, [instance, def, background]);
+    const own = new Set(planObjects.map((o) => o.id));
+    return expanded.objects
+      .filter((object) => !own.has(object.id))
+      .map((object) => ({
+        object,
+        state: resolveObjectState(object, expanded.steps, 0),
+      }));
+  }, [instance, def, background, planObjects]);
 
   // The frame rotates about its centre, matching how a def's unit space is
   // mapped (§18.2) — so its position is the centre, offset by half its size.

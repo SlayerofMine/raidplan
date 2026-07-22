@@ -772,3 +772,29 @@ draws in array order.
 An attack's `z` is deliberately fractional: objects renumber themselves 0..n-1 as they come and
 go, and an attack parked at 2.5 stays between them without being renumbered too. Absent means on
 top, which is where an attack with no opinion belongs — and where they all were before. [DONE]
+
+### 18.14 Placeholders: a hole the plan fills
+
+A definition could not refer to anything outside itself — every internal id is namespaced to the
+instance, so a tether had to have both ends inside the attack. "Leash the boss to a player" was
+unsayable.
+
+A **placeholder** is an object of type `"placeholder"` in the definition: a hole standing for one
+of the using plan's objects. It draws as a dashed ring in the designer, so it can be tethered to,
+aimed at and collided with while authoring, and it is *not* materialised at expansion — the plan's
+object is already on the board. The mechanism is one line at the id choke point: a filled
+placeholder resolves to the plan's own id instead of a namespaced one, so every reference follows
+at once — tether ends, collision targets, animation targets.
+
+Placement is gated: a definition with holes can't be dropped until the selection has enough
+objects to fill them, and they're taken in document order. Pick the boss and the tank, then place
+the frontal. The panel then shows what went where, because "which token is this aimed at" is a
+decision you revisit.
+
+Two things fell out: attack tethers now draw in the editor at all (`TetherShape` is the store-free
+drawing, since an attack's tether is not in the document), and placeholders take no part in
+`attackContentBox` — whatever fills one could be anywhere, so letting it stretch the rectangle
+would make the rectangle meaningless. [DONE]
+
+**Next:** attaching an attack to an object — a frontal originating at the boss and rotating to
+face its target — which is §18.15 and not yet built.

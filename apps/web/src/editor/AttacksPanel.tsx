@@ -1,5 +1,11 @@
+import {
+  attackSlots,
+  type AttackDef,
+  type AttackInstance,
+} from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
 import { AttackArgs } from "./AttackArgs";
+import { objectDisplayName } from "./objectName";
 
 /**
  * The attacks placed on this plan (plan §18.3).
@@ -118,6 +124,11 @@ export function AttacksPanel() {
                 to stretch it.
               </p>
 
+              <AttackSlots
+                def={defsById[instance.attackId]}
+                instance={instance}
+              />
+
               <AttackArgs
                 params={defsById[instance.attackId]?.params ?? []}
                 instance={instance}
@@ -132,5 +143,56 @@ export function AttacksPanel() {
         })}
       </ul>
     </section>
+  );
+}
+
+/**
+ * Which of the plan's objects fill this attack's holes (§18.14).
+ *
+ * Shown even though placement filled them from the selection: which token the
+ * frontal is aimed at is a decision you revisit, and hunting for it by
+ * re-placing the attack would be absurd.
+ */
+function AttackSlots({
+  def,
+  instance,
+}: {
+  def: AttackDef | undefined;
+  instance: AttackInstance;
+}) {
+  const objectIds = useEditorStore((s) => s.objectIds);
+  const objects = useEditorStore((s) => s.objects);
+  const updateAttack = useEditorStore((s) => s.updateAttack);
+
+  const slots = def ? attackSlots(def) : [];
+  if (slots.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-1" data-testid="attack-slots">
+      {slots.map((slot) => (
+        <label
+          key={slot.id}
+          className="flex items-center gap-1 text-xs text-neutral-500"
+        >
+          {slot.base.name ?? "Slot"}
+          <select
+            aria-label={`${slot.base.name ?? "Slot"} is`}
+            value={instance.slots[slot.id] ?? ""}
+            onChange={(e) =>
+              updateAttack(instance.id, {
+                slots: { ...instance.slots, [slot.id]: e.target.value },
+              })
+            }
+            className="flex-1 rounded border border-panelborder bg-neutral-900 px-1 py-0.5 text-xs"
+          >
+            {objectIds.map((id) => (
+              <option key={id} value={id}>
+                {objectDisplayName(objects[id])}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+    </div>
   );
 }

@@ -248,7 +248,9 @@ export function attackContentBox(content: {
   };
 
   for (const o of content.objects) {
-    if (o.type === "tether") continue;
+    // A tether is drawn from its endpoints, and a placeholder stands for an
+    // object that could be anywhere — neither has an extent of its own.
+    if (o.type === "tether" || o.type === "placeholder") continue;
     const base = o.base;
     const end = { ...base, ...content.overrides[o.id] };
     for (const corner of cornersOf(base)) add(corner);
@@ -312,6 +314,28 @@ export const attackZ = (instance: AttackInstance): number =>
 /** Namespaced id so two instances of the same def never collide. */
 const scopedId = (instanceId: string, localId: string) =>
   `${instanceId}::${localId}`;
+
+/**
+ * The **placeholders** a definition leaves for the using plan to fill (plan
+ * §18.14) — holes it can't fill itself, because they stand for objects only the
+ * plan knows: the boss, the tank a frontal is aimed at.
+ *
+ * Distinct from a parameter, which supplies a *value*. A placeholder stands in
+ * the definition's own object list, so it can be tethered to, aimed at and
+ * collided with while authoring, and every one of those references follows the
+ * plan's object once it's filled.
+ */
+export function attackSlots(def: AttackDef): PlanObject[] {
+  return def.objects.filter((o) => o.type === "placeholder");
+}
+
+/** Every placeholder filled? A definition with holes in it can't be placed. */
+export function slotsFilled(
+  def: AttackDef,
+  slots: Record<string, string>,
+): boolean {
+  return attackSlots(def).every((slot) => Boolean(slots[slot.id]));
+}
 
 /**
  * Objects an entrance effect brings on screen during the attack. They're
@@ -412,25 +436,38 @@ function expandInstance(
   const argOf = (key: string): AttackParamValue | undefined =>
     instance.args[key] ?? def.params.find((p) => p.key === key)?.default;
 
+  /**
+   * A definition's own id, resolved. A placeholder resolves to whichever of the
+   * plan's objects was put in it — un-namespaced, because it *is* that object —
+   * so every reference to the placeholder follows suit: tether ends, collision
+   * targets, animation targets. Everything else is namespaced as usual.
+   */
+  const resolveId = (localId: string): string =>
+    instance.slots[localId] ?? scopedId(instance.id, localId);
+
   // The attack occupies one place in the board's stack; its parts share it,
   // separated by a hair so the definition's own order survives the sort.
   const baseZ = attackZ(instance);
-  const objects = def.objects.map((o, index) => {
-    const tint = argOf(def.bindings.tint[o.id] ?? "");
-    const placed = {
-      ...mapBase(o.base, from, to, spin),
-      z: baseZ + index * Number.EPSILON,
-      // Materialised hidden; the attack's step is what reveals it.
-      visible: false,
-    };
-    return {
-      ...o,
-      id: scopedId(instance.id, o.id),
-      ...(o.fromId ? { fromId: scopedId(instance.id, o.fromId) } : {}),
-      ...(o.toId ? { toId: scopedId(instance.id, o.toId) } : {}),
-      base: typeof tint === "string" ? { ...placed, tint } : placed,
-    };
-  });
+  const objects = def.objects
+    // A placeholder is a hole, not a part: the plan's object is already on the
+    // board, and materialising a second copy of it would be a lie.
+    .filter((o) => o.type !== "placeholder")
+    .map((o, index) => {
+      const tint = argOf(def.bindings.tint[o.id] ?? "");
+      const placed = {
+        ...mapBase(o.base, from, to, spin),
+        z: baseZ + index * Number.EPSILON,
+        // Materialised hidden; the attack's step is what reveals it.
+        visible: false,
+      };
+      return {
+        ...o,
+        id: scopedId(instance.id, o.id),
+        ...(o.fromId ? { fromId: resolveId(o.fromId) } : {}),
+        ...(o.toId ? { toId: resolveId(o.toId) } : {}),
+        base: typeof tint === "string" ? { ...placed, tint } : placed,
+      };
+    });
 
   // A parameter can change when a part runs and for how long, so bound timings
   // are settled first — the chain below lays out against the result.
@@ -466,12 +503,12 @@ function expandInstance(
     const boundTargets = argOf(def.bindings.collideWith[a.id] ?? "");
     const collideWith = Array.isArray(boundTargets)
       ? boundTargets
-      : a.collideWith?.map((id) => scopedId(instance.id, id));
+      : a.collideWith?.map(resolveId);
 
     return {
       ...a,
       id: scopedId(instance.id, a.id),
-      objectId: scopedId(instance.id, a.objectId),
+      objectId: resolveId(a.objectId),
       ...(collideWith ? { collideWith } : {}),
       durationMs: a.durationMs * stretch,
       // A deferred animation is timed from the event that fires it (a click, a
@@ -495,6 +532,7 @@ function expandInstance(
   // attack fires — otherwise the attack plays out invisibly (the step's end
   // state alone can't reveal it, because nothing tweens `visible`).
   for (const o of def.objects) {
+    if (o.type === "placeholder") continue;
     if (!o.base.visible || entrances.has(o.id)) continue;
     animations.unshift({
       id: scopedId(instance.id, `${o.id}#enter`),
@@ -510,6 +548,7 @@ function expandInstance(
 
   const overrides: Record<string, StepOverride> = {};
   for (const o of def.objects) {
+    if (o.type === "placeholder") continue;
     const id = scopedId(instance.id, o.id);
     const end = def.overrides[o.id];
     // The settled state: the def's placed end state, present unless the def

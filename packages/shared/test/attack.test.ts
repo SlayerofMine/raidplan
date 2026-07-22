@@ -3,7 +3,9 @@ import {
   ATTACK_AUTHORING_SIZE,
   ATTACK_BOX_ASSET,
   attackNaturalMs,
+  attackSlots,
   attackSpanMs,
+  slotsFilled,
   AttackDefSchema,
   attackIdsInPlan,
   defToPlan,
@@ -92,6 +94,7 @@ const inst = (over: Partial<AttackInstance> = {}): AttackInstance => ({
   h: 200,
   rotation: 0,
   startMs: 0,
+  slots: {},
   args: {},
   ...over,
 });
@@ -571,6 +574,96 @@ describe("expandPlan — an attack owns its own timing", () => {
     const out = expandPlan(plan, { atk: chained });
     // i2's first animation still starts at 0 — it does not queue up behind i1.
     expect(animById(out, "i2::a1").delayMs).toBe(0);
+  });
+});
+
+describe("expandPlan — placeholders", () => {
+  /** A definition that tethers something of its own to a plan object. */
+  const tethered = makeDef({
+    objects: [
+      defObj("orb"),
+      { id: "victim", type: "placeholder", base: base() },
+      {
+        id: "leash",
+        type: "tether",
+        fromId: "orb",
+        toId: "victim",
+        base: base(),
+      },
+    ],
+  });
+
+  it("lists the holes a plan has to fill", () => {
+    expect(attackSlots(tethered).map((s) => s.id)).toEqual(["victim"]);
+    expect(attackSlots(makeDef())).toEqual([]);
+  });
+
+  it("knows when it can be placed", () => {
+    expect(slotsFilled(tethered, {})).toBe(false);
+    expect(slotsFilled(tethered, { victim: "tank" })).toBe(true);
+    expect(slotsFilled(makeDef(), {})).toBe(true);
+  });
+
+  it("points the tether at the plan's own object", () => {
+    const out = expandOne(tethered, inst({ slots: { victim: "tank" } }));
+    // The far end is the *plan's* id, un-namespaced: it is that object, not a
+    // copy of it — which is the whole point, and was impossible before.
+    expect(out.objects.find((o) => o.id === "i1::leash")).toMatchObject({
+      fromId: "i1::orb",
+      toId: "tank",
+    });
+  });
+
+  it("never materialises the placeholder itself", () => {
+    const out = expandOne(tethered, inst({ slots: { victim: "tank" } }));
+    // The plan's object is already on the board; a second copy would be a lie.
+    expect(out.objects.map((o) => o.id)).not.toContain("i1::victim");
+  });
+
+  it("follows the placeholder through a collision target", () => {
+    const def = makeDef({
+      objects: [
+        defObj("orb"),
+        { id: "who", type: "placeholder", base: base() },
+      ],
+      animations: [
+        defAnim({
+          id: "hit",
+          objectId: "orb",
+          trigger: "onCollision",
+          collideWith: ["who"],
+        }),
+      ],
+    });
+    const out = expandOne(def, inst({ slots: { who: "healer" } }));
+    expect(animById(out, "i1::hit").collideWith).toEqual(["healer"]);
+  });
+
+  it("takes no part in the attack's extent", () => {
+    // Whatever fills it could be anywhere on the board, so letting it stretch
+    // the rectangle would make the rectangle meaningless.
+    const spread = makeDef({
+      objects: [
+        defObj("orb"),
+        { id: "far", type: "placeholder", base: base({ x: 8, y: 8 }) },
+      ],
+    });
+    const out = expandOne(spread, inst());
+    expect(out.objects.find((o) => o.id === "i1::orb")!.base).toMatchObject({
+      x: 0,
+      y: 0,
+      w: 200,
+      h: 200,
+    });
+  });
+
+  it("leaves an unfilled hole inert rather than dangling into nothing", () => {
+    const out = expandOne(tethered, inst());
+    const leash = out.objects.find((o) => o.id === "i1::leash")!;
+    // Namespaced, so it points at an object that doesn't exist — and a tether
+    // with a missing end simply doesn't draw.
+    expect(leash.toId).toBe("i1::victim");
+    expect(out.objects.map((o) => o.id)).not.toContain("i1::victim");
   });
 });
 

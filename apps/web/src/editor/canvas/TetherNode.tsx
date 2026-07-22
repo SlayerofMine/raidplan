@@ -69,41 +69,50 @@ function tracePolyline(ctx: Context, points: number[]): void {
   }
 }
 
-export function TetherNode({ objectId }: { objectId: string }) {
-  const object = useEditorStore((s) => s.objects[objectId]);
-  const self = useEditorStore(
-    useShallow((s) => selectObjectState(s, objectId)),
-  );
-  const isSelected = useEditorStore((s) => s.selectedIds.includes(objectId));
-  const select = useEditorStore((s) => s.select);
-  const toggleSelect = useEditorStore((s) => s.toggleSelect);
-
-  if (!object || !self) return null;
-  const { fromId, toId } = object;
-  if (!fromId || !toId) return null;
-
-  const tint = object.base.tint ?? TETHER_DEFAULT_TINT;
-  const style = object.style;
-
-  const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
-    const additive = e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey;
-    if (additive) toggleSelect(objectId);
-    else select([objectId]);
-  };
-
+/**
+ * The line itself: two endpoint ids, read live from the layer on every draw.
+ *
+ * Store-free on purpose. A tether inside an **attack** is not in the document
+ * (its parts are materialised at render time), and since §18.14 one of its ends
+ * can be one of the *plan's* objects — so the drawing has to work from ids
+ * alone, wherever those ids happen to come from.
+ */
+export function TetherShape({
+  id,
+  fromId,
+  toId,
+  tint,
+  style,
+  opacity = 1,
+  visible = true,
+  selected = false,
+  onMouseDown,
+  onTap,
+}: {
+  id: string;
+  fromId: string;
+  toId: string;
+  tint: string;
+  style: ObjectStyle | undefined;
+  opacity?: number;
+  visible?: boolean;
+  selected?: boolean;
+  onMouseDown?: (e: KonvaEventObject<MouseEvent>) => void;
+  onTap?: () => void;
+}) {
   return (
     <Shape
-      id={objectId}
-      opacity={self.opacity}
-      // Kept mounted while hidden, like every other object — see `ObjectNode`.
-      visible={self.visible}
+      id={id}
+      opacity={opacity}
+      visible={visible}
+      listening={Boolean(onMouseDown || onTap)}
       // Re-read the endpoints every draw — this is the per-frame follow.
       sceneFunc={(ctx: Context, shape: ShapeNode) => {
         const geometry = geometryFor(shape, fromId, toId, style);
         if (!geometry) return; // an endpoint was deleted mid-flight
         const { points, anchors, strokeWidth } = geometry;
 
-        if (isSelected) {
+        if (selected) {
           tracePolyline(ctx, points);
           ctx.strokeStyle = GLOW_COLOUR;
           ctx.lineWidth = strokeWidth + GLOW_EXTRA;
@@ -138,6 +147,44 @@ export function TetherNode({ objectId }: { objectId: string }) {
         ctx.strokeShape(shape);
       }}
       hitStrokeWidth={HIT_WIDTH}
+      {...(onMouseDown ? { onMouseDown } : {})}
+      {...(onTap ? { onTap } : {})}
+    />
+  );
+}
+
+export function TetherNode({ objectId }: { objectId: string }) {
+  const object = useEditorStore((s) => s.objects[objectId]);
+  const self = useEditorStore(
+    useShallow((s) => selectObjectState(s, objectId)),
+  );
+  const isSelected = useEditorStore((s) => s.selectedIds.includes(objectId));
+  const select = useEditorStore((s) => s.select);
+  const toggleSelect = useEditorStore((s) => s.toggleSelect);
+
+  if (!object || !self) return null;
+  const { fromId, toId } = object;
+  if (!fromId || !toId) return null;
+
+  const tint = object.base.tint ?? TETHER_DEFAULT_TINT;
+  const style = object.style;
+
+  const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
+    const additive = e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey;
+    if (additive) toggleSelect(objectId);
+    else select([objectId]);
+  };
+
+  return (
+    <TetherShape
+      id={objectId}
+      fromId={fromId}
+      toId={toId}
+      tint={tint}
+      style={style}
+      opacity={self.opacity}
+      visible={self.visible}
+      selected={isSelected}
       onMouseDown={handleMouseDown}
       onTap={() => select([objectId])}
     />

@@ -20,7 +20,9 @@ const ROW_HEIGHT = 56;
  * Click a token to drop it in the centre of the view, or drag it onto the
  * canvas to place it at the cursor.
  */
-export function IconPalette() {
+export function IconPalette({
+  authoring = false,
+}: { authoring?: boolean } = {}) {
   const addIcon = useEditorStore((s) => s.addIcon);
   const [tab, setTab] = useState<"tokens" | "wow" | "shapes" | "attacks">(
     "tokens",
@@ -78,7 +80,7 @@ export function IconPalette() {
       {tab === "wow" ? (
         <WowIconGrid />
       ) : tab === "shapes" ? (
-        <ShapesTab />
+        <ShapesTab authoring={authoring} />
       ) : tab === "attacks" ? (
         <AttacksTab />
       ) : (

@@ -67,6 +67,7 @@ const planWith = (attackId: string): Plan => ({
       h: 200,
       rotation: 0,
       startMs: 0,
+      slots: {},
       args: {},
     },
   ],

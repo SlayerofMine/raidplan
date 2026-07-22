@@ -262,6 +262,7 @@ describe("AttackArgs — answering with this plan's objects", () => {
     h: 100,
     rotation: 0,
     startMs: 0,
+    slots: {},
     args: {},
   };
 

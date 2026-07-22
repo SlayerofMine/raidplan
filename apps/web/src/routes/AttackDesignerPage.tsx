@@ -217,7 +217,7 @@ function AttackDesigner({
       </div>
 
       <div style={{ gridArea: "palette" }} className="min-h-0">
-        <IconPalette />
+        <IconPalette authoring />
       </div>
       <div style={{ gridArea: "canvas" }} className="min-h-0">
         {/* The dashed box is the attack: what a planner grabs, and the size

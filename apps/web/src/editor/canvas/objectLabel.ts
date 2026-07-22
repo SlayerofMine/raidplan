@@ -30,7 +30,10 @@ export function labelLayout(type: ObjectType, h: number): LabelLayout | null {
   switch (type) {
     case "text":
       return null;
+    // A placeholder is a ring with its name in the middle, like a shape: the
+    // name *is* what the plan will be asked for, so it must read at a glance.
     case "shape":
+    case "placeholder":
       return { y: 0, height: h, verticalAlign: "middle" };
     case "arrow":
       return {

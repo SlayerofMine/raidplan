@@ -81,6 +81,80 @@ describe("addAttack", () => {
   });
 });
 
+describe("addAttack — placeholders", () => {
+  /** A definition with one hole in it, for the plan to fill. */
+  const withSlot = (id = "atkSlot") => {
+    state().setAttackDefs({
+      [id]: {
+        id,
+        encounterId: "enc",
+        name: "Frontal",
+        version: 1,
+        defaultSize: { w: 100, h: 100 },
+        objects: [
+          {
+            id: "victim",
+            type: "placeholder",
+            base: {
+              x: -1,
+              y: -1,
+              w: 2,
+              h: 2,
+              rotation: 0,
+              opacity: 1,
+              z: 0,
+              visible: true,
+            },
+          },
+        ],
+        overrides: {},
+        animations: [],
+        params: [],
+        bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
+      },
+    });
+    return id;
+  };
+
+  it("fills the hole from the selection", () => {
+    const attackId = withSlot();
+    const tank = state().addPrimitive("shape", "circle");
+    state().addStep();
+    state().select([tank]);
+
+    const id = state().addAttack(attackId, { x: 0, y: 0 })!;
+
+    expect(state().attacks.find((a) => a.id === id)!.slots).toEqual({
+      victim: tank,
+    });
+  });
+
+  it("refuses to place one with a hole it can't fill", () => {
+    const attackId = withSlot();
+    state().addStep();
+    state().clearSelection();
+
+    // A definition with holes in it isn't a thing you can put on a board.
+    expect(state().addAttack(attackId, { x: 0, y: 0 })).toBeUndefined();
+    expect(state().attacks).toHaveLength(0);
+  });
+
+  it("takes the objects in document order, not click order", () => {
+    state().setAttackDefs({});
+    const attackId = withSlot();
+    const first = state().addPrimitive("shape", "circle");
+    state().addStep();
+    state().select([first]);
+    state().toggleSelect(first);
+    state().select([first]);
+
+    const id = state().addAttack(attackId, { x: 0, y: 0 })!;
+    expect(state().attacks.find((a) => a.id === id)!.slots["victim"]).toBe(
+      first,
+    );
+  });
+});
+
 describe("updateAttack", () => {
   it("retunes position, rotation, scale and timing", () => {
     state().addStep();

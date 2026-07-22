@@ -6,6 +6,8 @@ import { nextObjectId } from "./ids";
 export const DEFAULT_ICON_SIZE = 64;
 const DEFAULT_SIZES: Record<string, { w: number; h: number }> = {
   token: { w: DEFAULT_ICON_SIZE, h: DEFAULT_ICON_SIZE },
+  // A slot stands for a token, so it's token-sized.
+  placeholder: { w: DEFAULT_ICON_SIZE, h: DEFAULT_ICON_SIZE },
   text: { w: 200, h: 40 },
   shape: { w: 160, h: 160 },
   // The arrow draws along the middle of its box; the box must have real height
