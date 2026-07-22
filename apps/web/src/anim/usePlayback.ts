@@ -56,6 +56,13 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
 
   const [stepIndex, setStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  /**
+   * The step is *in play*: the transport was started and hasn't been stopped or
+   * moved. Distinct from `isPlaying`, which the step's own timeline clears when
+   * it completes — a triggered animation can still be running (or about to be
+   * triggered) long after that, so the collision watch keys off this instead.
+   */
+  const [armed, setArmed] = useState(false);
   const [progress, setProgress] = useState(0);
   const timeline = useRef<gsap.core.Timeline | null>(null);
   /**
@@ -67,9 +74,9 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
   /** Timelines started by a trigger, so transport controls can govern them too. */
   const oneShots = useRef<gsap.core.Timeline[]>([]);
 
-  /** Write a resolved state straight onto its Konva node. */
+  /** Write state — whole or partial — straight onto its Konva node. */
   const applyToNode = useCallback(
-    (objectId: string, props: ObjectState) =>
+    (objectId: string, props: Partial<ObjectState>) =>
       applyObjectState(stageRef.current, objectId, props),
     [stageRef],
   );
@@ -186,6 +193,7 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
       const clamped = Math.max(0, Math.min(index, steps.length - 1));
       setStepIndex(clamped);
       setIsPlaying(false);
+      setArmed(false);
       setProgress(0);
       buildStep(clamped);
     },
@@ -202,15 +210,19 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
   }, [buildStep, stepIndex]);
 
   /**
-   * Collision watch — **only while playing** (plan §7).
+   * Collision watch — while the step is **in play** (plan §7).
    *
-   * Rides GSAP's global ticker rather than the step timeline's `onUpdate`, so a
-   * collision caused *by* a triggered animation is still caught after the step's
-   * own timeline has finished. Boxes are read from the live Konva nodes, which
-   * is what makes this work mid-tween. No React state is touched per frame.
+   * Rides GSAP's global ticker rather than the step timeline's `onUpdate`, and
+   * keys off `armed` rather than `isPlaying`, so a collision caused *by* a
+   * triggered animation is still caught after the step's own timeline has
+   * finished. Keying off `isPlaying` quietly broke that: the timeline clears it
+   * on completion, so contact was only ever possible during the step's own
+   * animations. Boxes are read from the live Konva nodes, which is what makes
+   * this work mid-tween. No React state is touched per frame, and a step with
+   * no armed rules — nearly all of them — adds no ticker at all.
    */
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!armed) return;
     const animations = steps[stepIndex]?.animations ?? [];
     const rules = collisionRules(animations);
     if (rules.length === 0) return;
@@ -230,7 +242,7 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
 
     gsap.ticker.add(tick);
     return () => gsap.ticker.remove(tick);
-  }, [isPlaying, steps, stepIndex, stageRef, fireAnim]);
+  }, [armed, steps, stepIndex, stageRef, fireAnim]);
 
   const play = useCallback(() => {
     const tl = timeline.current;
@@ -241,18 +253,21 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
     // Anything a trigger started resumes with the transport.
     for (const shot of oneShots.current) shot.play();
     setIsPlaying(true);
+    setArmed(true);
   }, []);
 
   const pause = useCallback(() => {
     timeline.current?.pause();
     for (const shot of oneShots.current) shot.pause();
     setIsPlaying(false);
+    setArmed(false);
   }, []);
 
   const restart = useCallback(() => {
     const tl = buildStep(stepIndex);
     tl?.play();
     setIsPlaying(Boolean(tl));
+    setArmed(Boolean(tl));
   }, [buildStep, stepIndex]);
 
   const seek = useCallback((next: number) => {
@@ -261,6 +276,7 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
     tl.pause();
     tl.progress(Math.max(0, Math.min(1, next)));
     setIsPlaying(false);
+    setArmed(false);
     setProgress(tl.progress());
   }, []);
 

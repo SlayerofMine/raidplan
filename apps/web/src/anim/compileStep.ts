@@ -33,8 +33,11 @@ export interface CompileStepParams {
   start: ResolvedStates;
   /** Object states when the step has finished (this step's settled state). */
   end: ResolvedStates;
-  /** Push tweened values at a target. Called on every tick. */
-  apply: (objectId: string, props: ObjectState) => void;
+  /**
+   * Push tweened values at a target. Called on every tick, with **only the
+   * properties this animation drives** — see `addTween`.
+   */
+  apply: (objectId: string, props: Partial<ObjectState>) => void;
   /** Called once per tick after all values are applied (→ `layer.batchDraw()`). */
   onUpdate?: () => void;
 }
@@ -163,10 +166,30 @@ interface TweenParams {
   end: ObjectState;
   at: number;
   duration: number;
-  apply: (objectId: string, props: ObjectState) => void;
+  apply: (objectId: string, props: Partial<ObjectState>) => void;
 }
 
-/** Translate one (kind, effect) pair into tweens on the timeline. */
+/** Properties of the shared proxy, as GSAP tween vars name them. */
+const STATE_KEYS = [
+  "x",
+  "y",
+  "rotation",
+  "opacity",
+  "visible",
+  "w",
+  "h",
+] as const satisfies readonly (keyof ObjectState)[];
+
+/**
+ * Translate one (kind, effect) pair into tweens on the timeline.
+ *
+ * Every push carries **only the properties this animation drives**. Objects
+ * share one proxy, and a triggered animation — a collision's disappear, say —
+ * can be running on the same object as a step's move; if each pushed the whole
+ * state, whichever ticked last that frame would silently undo the other. That
+ * is not hypothetical: it made every `onCollision` on a moving object look dead,
+ * because the move re-asserted `visible: true` a frame after the disappear.
+ */
 function addTween({
   timeline,
   anim,
@@ -177,7 +200,11 @@ function addTween({
   duration,
   apply,
 }: TweenParams): void {
-  const push = () => apply(anim.objectId, { ...proxy });
+  const push = (keys: readonly (keyof ObjectState)[]) => {
+    const patch: Partial<ObjectState> = {};
+    for (const key of keys) patch[key] = proxy[key] as never;
+    apply(anim.objectId, patch);
+  };
 
   // `visible` is a boolean: GSAP can't tween it, so it's flipped by a callback
   // and carried out with the next push.
@@ -185,18 +212,20 @@ function addTween({
     timeline.call(
       () => {
         Object.assign(proxy, props);
-        push();
+        push(Object.keys(props) as (keyof ObjectState)[]);
       },
       undefined,
       position,
     );
 
-  const tweenTo = (vars: gsap.TweenVars, position = at, dur = duration) =>
-    timeline.to(
+  const tweenTo = (vars: gsap.TweenVars, position = at, dur = duration) => {
+    const keys = STATE_KEYS.filter((key) => key in vars);
+    return timeline.to(
       proxy,
-      { duration: dur, ease: anim.easing, ...vars, onUpdate: push },
+      { duration: dur, ease: anim.easing, ...vars, onUpdate: () => push(keys) },
       position,
     );
+  };
 
   switch (anim.effect) {
     case "appear":

@@ -99,13 +99,14 @@ function statesOn(doc: Plan, index: number): ResolvedStates {
 }
 
 function playStep(doc: Plan, index: number) {
-  const applied: Record<string, ObjectState> = {};
+  const applied: Record<string, Partial<ObjectState>> = {};
   const { timeline, initial } = compileStep({
     step: doc.steps[index]!,
     start: statesOn(doc, index - 1),
     end: statesOn(doc, index),
+    // A patch per push, merged the way a Konva node accumulates them.
     apply: (objectId, props) => {
-      applied[objectId] = props;
+      applied[objectId] = { ...applied[objectId], ...props };
     },
   });
   return { timeline, initial, applied };

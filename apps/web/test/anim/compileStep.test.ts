@@ -179,10 +179,11 @@ describe("compileStep — effects reach their end state", () => {
       { a: state({ opacity: 1 }) },
     );
     // The engine snaps to `initial` before playing — that's what stops a
-    // fade-in flashing at full opacity for a frame.
+    // fade-in flashing at full opacity for a frame, and it's what makes the
+    // object visible. The tween itself only ever writes what it animates.
     expect(initial.a).toMatchObject({ opacity: 0, visible: true });
     timeline.progress(1);
-    expect(applied.a).toMatchObject({ opacity: 1, visible: true });
+    expect(applied.a).toEqual({ opacity: 1 });
   });
 
   it("entrance fly starts at its origin and lands on the end state", () => {
@@ -298,5 +299,43 @@ describe("compileStep — redraw hook", () => {
     );
     timeline.progress(0.5);
     expect(updates()).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Two timelines can drive one object at once — a step's move and a collision's
+ * disappear, say. Each must write only what it animates, or whichever ticks
+ * last that frame silently undoes the other.
+ */
+describe("compileStep — an effect writes only what it drives", () => {
+  it("a move pushes position and nothing else", () => {
+    const { timeline, applied } = harness(
+      step([anim({ effect: "move" })]),
+      { a: state({ x: 0 }) },
+      { a: state({ x: 100 }) },
+    );
+    timeline.progress(1);
+    expect(Object.keys(applied.a!).sort()).toEqual(["x", "y"]);
+  });
+
+  it("a disappear pushes visibility and nothing else", () => {
+    const { timeline, applied } = harness(
+      step([anim({ kind: "exit", effect: "disappear" })]),
+      { a: state() },
+      { a: state() },
+    );
+    timeline.progress(1);
+    expect(applied.a).toEqual({ visible: false, opacity: 0 });
+  });
+
+  it("a pulse leaves opacity and visibility alone", () => {
+    const { timeline, applied } = harness(
+      step([anim({ kind: "emphasis", effect: "pulse" })]),
+      { a: state() },
+      { a: state() },
+    );
+    timeline.progress(1);
+    expect(applied.a).not.toHaveProperty("visible");
+    expect(applied.a).not.toHaveProperty("opacity");
   });
 });

@@ -1,30 +1,35 @@
 import type { Stage } from "konva/lib/Stage";
 import type { ObjectState } from "@raidplan/shared";
 
+/** The attributes animation drives. `w`/`h` are absent on purpose: Konva sizes
+ * a `Group`'s children, so resizing is React's job — the frame loop only moves,
+ * rotates, fades and hides. */
+const DRIVEN = ["x", "y", "rotation", "opacity", "visible"] as const;
+
 /**
- * Push a resolved object state straight onto its Konva node (plan §8.1).
+ * Push object state straight onto its Konva node (plan §8.1).
  *
  * The one place that decides *which* attributes animation drives. Both the
  * playback engine and the video exporter write frames this way, so a recorded
  * clip can't diverge from what playback shows.
  *
- * `w`/`h` are deliberately not written: Konva sizes a `Group`'s children, so
- * resizing is React's job — the frame loop only moves, rotates, fades and hides.
+ * **Only the properties present in `props` are written.** Two timelines can run
+ * on one object at once — a step's move and a collision's disappear — and each
+ * must write what it animates and nothing else, or the last writer per frame
+ * silently undoes the other.
  */
 export function applyObjectState(
   stage: Stage | null,
   objectId: string,
-  props: ObjectState,
+  props: Partial<ObjectState>,
 ): void {
   const node = stage?.findOne(`#${objectId}`);
   if (!node) return;
-  node.setAttrs({
-    x: props.x,
-    y: props.y,
-    rotation: props.rotation,
-    opacity: props.opacity,
-    visible: props.visible,
-  });
+  const attrs: Record<string, unknown> = {};
+  for (const key of DRIVEN) {
+    if (props[key] !== undefined) attrs[key] = props[key];
+  }
+  node.setAttrs(attrs);
 }
 
 /**

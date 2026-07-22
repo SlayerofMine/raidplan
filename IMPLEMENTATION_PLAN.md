@@ -694,3 +694,22 @@ and asks for a selection rather than falling back to everything. Clicking a bar 
 selects its object, so the overview and the inspector navigate to each other. `+ Animate
 selection` takes a whole selection — one store action rather than a loop, so animating a group of
 six is a single undo, and the animations land in document order. [DONE]
+
+### 18.10 Triggered animations were second-class
+
+`onCollision` fired and was immediately undone. Two faults, both in the player rather than in
+attacks:
+
+1. **Every push carried the whole object state.** A step's move and a collision's disappear can
+   run on the same object at once; whichever ticked last that frame won, so a moving object's
+   collision re-asserted `visible: true` about 16ms after the disappear set it false. Each effect
+   now writes only the properties it drives (`applyObjectState` takes a patch), which is how GSAP
+   itself resolves concurrency.
+2. **The watch died with the step's timeline.** It keyed off `isPlaying`, which the timeline
+   clears on completion, so contact was only possible during the step's own animations — despite
+   the comment claiming otherwise. It now keys off an `armed` flag that survives completion and
+   is cleared by pause/seek/step change.
+
+Pinned by a fake-stage test of the real `usePlayback` (the collision fires, sticks, and still
+watches after the timeline ends) and an e2e where the attack **slides across** its collider — a
+stationary one passes either way, which is why the first attempt at that test was worthless. [DONE]

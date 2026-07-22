@@ -84,7 +84,7 @@ export function createFrameRenderer(params: {
     }
   };
 
-  const apply = (objectId: string, props: ObjectState) =>
+  const apply = (objectId: string, props: Partial<ObjectState>) =>
     applyObjectState(stage, objectId, props);
   const rectOf: RectLookup = (objectId) => objectRect(stage, objectId);
 

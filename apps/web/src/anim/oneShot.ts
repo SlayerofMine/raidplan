@@ -24,7 +24,7 @@ export interface OneShotParams {
   start: ResolvedStates;
   /** The step's settled end state, the target for effects that resolve to it. */
   end: ResolvedStates;
-  apply: (objectId: string, props: ObjectState) => void;
+  apply: (objectId: string, props: Partial<ObjectState>) => void;
   onUpdate?: () => void;
 }
 
