@@ -87,6 +87,29 @@ test.describe("steps", () => {
     await expect(page.getByTestId("anim-row")).toHaveCount(0);
   });
 
+  test("the panel inspects the selection; the timeline is the overview", async ({
+    page,
+  }) => {
+    await page.goto("/plan/local/edit");
+    await page.getByRole("button", { name: "Add Marker 1" }).click();
+    await page.getByTestId("add-step").click();
+    await page.getByTestId("add-animation").click();
+    await expect(page.getByTestId("anim-row")).toHaveCount(1);
+
+    // A second object, selected: the first object's animation is no longer
+    // this panel's business — but it says how many it isn't showing.
+    await page.getByRole("button", { name: "Add Marker 2" }).click();
+    await expect(page.getByTestId("anim-row")).toHaveCount(0);
+    await expect(page.getByTestId("anim-elsewhere")).toContainText("1 more");
+
+    // Clicking its bar in the timeline selects its object, which brings the
+    // animation back into the panel — the two halves navigate to each other.
+    await page.getByTestId("timeline-toggle").click();
+    await page.locator('[data-testid^="timeline-bar-"]').first().click();
+    await expect(page.getByTestId("anim-row")).toHaveCount(1);
+    await expect(page.getByTestId("anim-elsewhere")).toHaveCount(0);
+  });
+
   test("deleting an object removes its animations", async ({ page }) => {
     await page.goto("/plan/local/edit");
     await page.getByRole("button", { name: "Add Marker 1" }).click();

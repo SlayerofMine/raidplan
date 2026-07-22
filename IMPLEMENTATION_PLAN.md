@@ -683,3 +683,12 @@ exactly one parameter — and a place another parameter has already claimed show
 whose it is, rather than as a box that won't tick. A number gained a second slot (`delayMs`
 beside `durationMs`), because "a number can only ever mean a duration" was arbitrary; bound
 delays settle before the chain lays out, exactly like bound durations. [DONE]
+
+### 18.9 The properties column inspects the selection
+
+With the Timeline showing a step whole, the Animation panel listing *every* animation on the step
+was a second, worse overview: a busy step became a wall of dropdowns, and the column stopped
+being about what you had picked. It now lists only the selected objects' animations, says how
+many it isn't showing ("3 more on this step — see the timeline") so nothing goes missing quietly,
+and asks for a selection rather than falling back to everything. Clicking a bar in the timeline
+selects its object, so the overview and the inspector navigate to each other. [DONE]

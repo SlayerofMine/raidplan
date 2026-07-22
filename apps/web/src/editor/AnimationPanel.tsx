@@ -20,9 +20,16 @@ const EASINGS = [
 ];
 
 /**
- * Animation authoring for the current step (plan §3.4): pick kind → effect →
+ * Animation authoring for the **selection** (plan §3.4): pick kind → effect →
  * trigger, then delay/duration/easing. Animations belong to a *step*, so the
  * panel is inert on the Base layout.
+ *
+ * It shows only what the selected objects do, because the Timeline below already
+ * shows the step as a whole. That split is the same one the rest of the editor
+ * makes: the properties column inspects what you picked, the timeline is the
+ * overview — and a step with thirty animations is unreadable as a list of
+ * dropdowns anyway. Clicking a bar in the timeline selects its object, so the
+ * two halves navigate to each other.
  */
 export function AnimationPanel() {
   const currentStepIndex = useEditorStore((s) => s.currentStepIndex);
@@ -42,6 +49,8 @@ export function AnimationPanel() {
   if (!step) return null;
 
   const selectedId = selectedIds.length === 1 ? selectedIds[0] : undefined;
+  const mine = step.animations.filter((a) => selectedIds.includes(a.objectId));
+  const elsewhere = step.animations.length - mine.length;
 
   return (
     <Section>
@@ -58,13 +67,18 @@ export function AnimationPanel() {
         + Animate selection
       </button>
 
-      {step.animations.length === 0 ? (
+      {selectedIds.length === 0 ? (
+        <p data-testid="anim-no-selection" className="text-sm text-neutral-500">
+          Select an object to see what it does on this step. The timeline shows
+          the whole step.
+        </p>
+      ) : mine.length === 0 ? (
         <p data-testid="anim-empty" className="text-sm text-neutral-500">
-          No animations on this step.
+          Nothing animates the selection on this step yet.
         </p>
       ) : (
         <ul className="flex flex-col gap-3" data-testid="anim-list">
-          {step.animations.map((anim) => (
+          {mine.map((anim) => (
             <AnimationRow
               key={anim.id}
               anim={anim}
@@ -72,6 +86,12 @@ export function AnimationPanel() {
             />
           ))}
         </ul>
+      )}
+
+      {elsewhere > 0 && (
+        <p data-testid="anim-elsewhere" className="text-xs text-neutral-600">
+          {elsewhere} more on this step, on other objects — see the timeline.
+        </p>
       )}
     </Section>
   );
