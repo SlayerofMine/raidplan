@@ -3,6 +3,7 @@ import { temporal } from "zundo";
 import { shallow } from "zustand/shallow";
 import { immer } from "zustand/middleware/immer";
 import {
+  attackZ,
   resolveObjectState,
   type Anim,
   type AttackDef,
@@ -180,9 +181,9 @@ export interface EditorState extends PlanDoc {
   ) => void;
   removeAttack: (instanceId: string) => void;
   /**
-   * Move a placed attack within the drawing order, like `bringForward` and
-   * friends do for objects. Attacks draw above the plan's own objects, so this
-   * orders them among themselves — `delta` is clamped to the ends.
+   * Move a placed attack through the board's stack — past objects as well as
+   * past other attacks, because they share one order. `delta` counts places and
+   * is clamped to the ends.
    */
   reorderAttack: (instanceId: string, delta: number) => void;
 
@@ -295,6 +296,35 @@ function withGroupMembers(
     }
   }
   return objectIds.filter((id) => wanted.has(id));
+}
+
+/** One item on the board — an object or an attack — and where it is drawn. */
+interface StackItem {
+  kind: "object" | "attack";
+  id: string;
+  z: number;
+}
+
+/**
+ * The board in draw order, objects and attacks together (plan §18.12).
+ *
+ * They share one stacking scale, which is what lets a token stand on top of a
+ * void zone — before this, attacks were simply drawn after every object and so
+ * took every click, whatever the order said.
+ */
+export function boardStack(s: {
+  objects: Record<string, PlanObject>;
+  objectIds: string[];
+  attacks: AttackInstance[];
+}): StackItem[] {
+  const items: StackItem[] = s.objectIds.flatMap((id) => {
+    const object = s.objects[id];
+    return object ? [{ kind: "object" as const, id, z: object.base.z }] : [];
+  });
+  for (const attack of s.attacks) {
+    items.push({ kind: "attack", id: attack.id, z: attackZ(attack) });
+  }
+  return items.sort((a, b) => a.z - b.z);
 }
 
 /** Offset (native px) applied to duplicated/pasted copies so they're visible. */
@@ -835,6 +865,8 @@ export const useEditorStore = create<EditorState>()(
           id: nextAttackId(),
           attackId,
           stepId: firesOn,
+          // On top of what's there, like every other newly added thing.
+          z: boardStack(state).length,
           x: at.x - size.w / 2,
           y: at.y - size.h / 2,
           w: size.w,
@@ -864,12 +896,26 @@ export const useEditorStore = create<EditorState>()(
 
       reorderAttack: (instanceId, delta) =>
         set((s) => {
-          const from = s.attacks.findIndex((a) => a.id === instanceId);
-          if (from === -1) return;
-          const to = Math.min(s.attacks.length - 1, Math.max(0, from + delta));
-          if (to === from) return;
-          const [moved] = s.attacks.splice(from, 1);
-          if (moved) s.attacks.splice(to, 0, moved);
+          const instance = s.attacks.find((a) => a.id === instanceId);
+          if (!instance) return;
+
+          // Everything on the board, in the order it is drawn. Objects hold
+          // integers 0..n-1 and renumber themselves as they come and go, so the
+          // attack takes a value *between* two of them and stays put.
+          const stack = boardStack(s).filter((item) => item.id !== instanceId);
+          const from = boardStack(s).findIndex(
+            (item) => item.id === instanceId,
+          );
+          const to = Math.max(0, Math.min(stack.length, from + delta));
+
+          const below = stack[to - 1]?.z;
+          const above = stack[to]?.z;
+          instance.z =
+            below === undefined
+              ? (above ?? 0) - 1
+              : above === undefined
+                ? below + 1
+                : (below + above) / 2;
         }),
 
       setTitle: (title) =>

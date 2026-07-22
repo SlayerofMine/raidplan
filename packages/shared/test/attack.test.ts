@@ -303,6 +303,29 @@ describe("expandPlan — stamping", () => {
     expect(ids).toContain("i2::o1");
   });
 
+  it("slots the attack into the board's stacking order", () => {
+    const under = defObj("floor");
+    under.base.z = 0;
+    const over = defObj("token");
+    over.base.z = 2;
+    const plan = makePlan(
+      [step()],
+      [under, over],
+      [inst({ z: 1 })], // between them
+    );
+    const out = expandPlan(plan, { atk: makeDef() });
+
+    // A renderer walks the array, so the array is the draw order: the attack's
+    // part sits under the token standing on it.
+    expect(out.objects.map((o) => o.id)).toEqual(["floor", "i1::o1", "token"]);
+  });
+
+  it("puts an attack with no place in the stack on top", () => {
+    const plan = makePlan([step()], [defObj("token")], [inst()]);
+    const out = expandPlan(plan, { atk: makeDef() });
+    expect(out.objects.map((o) => o.id).at(-1)).toBe("i1::o1");
+  });
+
   it("preserves the plan's own objects and step animations", () => {
     const own = defObj("boss");
     const ownAnim = defAnim({ id: "own", objectId: "boss" });

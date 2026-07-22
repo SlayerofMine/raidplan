@@ -300,6 +300,15 @@ function mapPoint(
   };
 }
 
+/**
+ * Where an attack sits in the board's stack. Absent means on top of everything.
+ *
+ * Its parts are drawn just above it, in the definition's own order, so an attack
+ * stays a single layer of the board however many pieces it has.
+ */
+export const attackZ = (instance: AttackInstance): number =>
+  instance.z ?? Number.MAX_SAFE_INTEGER;
+
 /** Namespaced id so two instances of the same def never collide. */
 const scopedId = (instanceId: string, localId: string) =>
   `${instanceId}::${localId}`;
@@ -403,10 +412,14 @@ function expandInstance(
   const argOf = (key: string): AttackParamValue | undefined =>
     instance.args[key] ?? def.params.find((p) => p.key === key)?.default;
 
-  const objects = def.objects.map((o) => {
+  // The attack occupies one place in the board's stack; its parts share it,
+  // separated by a hair so the definition's own order survives the sort.
+  const baseZ = attackZ(instance);
+  const objects = def.objects.map((o, index) => {
     const tint = argOf(def.bindings.tint[o.id] ?? "");
     const placed = {
       ...mapBase(o.base, from, to, spin),
+      z: baseZ + index * Number.EPSILON,
       // Materialised hidden; the attack's step is what reveals it.
       visible: false,
     };
@@ -566,6 +579,10 @@ export function expandPlan(
     here.animations.push(...expanded.animations);
   }
 
+  // Draw order is `base.z`, and a renderer walks the array — so the array has to
+  // be in z order for an attack to sit under the token standing on it. Stable,
+  // so objects and an attack's own parts keep the order they were given.
+  objects.sort((a, b) => a.base.z - b.base.z);
   return { ...plan, objects, steps, attacks: [] };
 }
 

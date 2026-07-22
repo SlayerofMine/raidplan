@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ICONS } from "@raidplan/shared";
-import { useEditorStore } from "../../src/store/editorStore";
+import { boardStack, useEditorStore } from "../../src/store/editorStore";
 import { PropertiesPanel } from "../../src/editor/PropertiesPanel";
 
 const state = () => useEditorStore.getState();
@@ -137,7 +137,8 @@ describe("PropertiesPanel — a placed attack", () => {
     expect(state().attacks.find((a) => a.id === id)!.locked).toBe(true);
   });
 
-  it("reorders it among the other attacks", () => {
+  it("reorders it through the board's stack, objects included", () => {
+    const object = state().addPrimitive("shape", "circle");
     state().addStep();
     const first = state().addAttack("atk1", { x: 0, y: 0 })!;
     state().addAttack("atk2", { x: 0, y: 0 });
@@ -145,11 +146,12 @@ describe("PropertiesPanel — a placed attack", () => {
     render(<PropertiesPanel />);
 
     fireEvent.click(screen.getByTitle("Bring to front"));
-    expect(
-      state()
-        .attacks.map((a) => a.id)
-        .at(-1),
-    ).toBe(first);
+    expect(boardStack(state()).at(-1)!.id).toBe(first);
+
+    fireEvent.click(screen.getByTitle("Send to back"));
+    const ids = boardStack(state()).map((i) => i.id);
+    expect(ids[0]).toBe(first);
+    expect(ids).toContain(object);
   });
 
   it("gives way to an object selection", () => {

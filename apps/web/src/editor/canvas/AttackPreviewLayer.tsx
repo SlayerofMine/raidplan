@@ -33,35 +33,35 @@ import { ObjectVisual } from "./ObjectVisual";
  * draws on every view — including the base layout, which is where you lay the
  * board out. The ones that fire on some *other* step are dimmed, so the current
  * moment reads clearly without hiding what else the encounter does.
+ *
+ * They are drawn *in the board's stacking order*, interleaved with the plan's
+ * objects — `CanvasStage` walks one merged list. Drawing them all afterwards
+ * put every attack's grab frame above every object, so an attack took every
+ * click that landed in its rectangle no matter what the order said.
  */
 const OTHER_STEP_OPACITY = 0.3;
 /** A switched-off attack: still placeable, visibly not happening. */
 const MUTED_OPACITY = 0.12;
 
-export function AttackPreviewLayer() {
-  const attacks = useEditorStore((s) => s.attacks);
-  const attackDefs = useEditorStore((s) => s.attackDefs);
+/** One placed attack, ready to be dropped into the canvas at its place. */
+export function PlacedAttackNode({ instanceId }: { instanceId: string }) {
+  const instance = useEditorStore((s) =>
+    s.attacks.find((a) => a.id === instanceId),
+  );
+  const def = useEditorStore((s) =>
+    instance ? s.attackDefs[instance.attackId] : undefined,
+  );
   const background = useEditorStore((s) => s.background);
   const currentStepId = useEditorStore((s) => s.steps[s.currentStepIndex]?.id);
 
-  if (attacks.length === 0) return null;
-
+  if (!instance || !def) return null;
   return (
-    <>
-      {attacks.map((instance) => {
-        const def = attackDefs[instance.attackId];
-        if (!def) return null;
-        return (
-          <PlacedAttack
-            key={instance.id}
-            instance={instance}
-            def={def}
-            background={background}
-            dimmed={instance.stepId !== currentStepId}
-          />
-        );
-      })}
-    </>
+    <PlacedAttack
+      instance={instance}
+      def={def}
+      background={background}
+      dimmed={instance.stepId !== currentStepId}
+    />
   );
 }
 

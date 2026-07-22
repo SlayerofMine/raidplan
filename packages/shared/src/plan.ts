@@ -148,6 +148,16 @@ export const AttackInstanceSchema = z.object({
   /** Locked instances can't be dragged or resized, exactly like a locked object. */
   locked: z.boolean().optional(),
   /**
+   * Where this attack sits in the board's stacking order — the same scale as an
+   * object's `base.z`, so the two interleave. Fractional on purpose: objects
+   * renumber themselves 0..n-1 as they come and go, and an attack parked at 2.5
+   * stays between them without having to be renumbered too.
+   *
+   * Absent means **on top of everything**, which is where an attack with no
+   * opinion belongs and is where they all sat before they had one.
+   */
+  z: z.number().finite().optional(),
+  /**
    * Absent or `true` means it happens. `false` switches the whole attack off
    * without deleting it — trying a plan without one mechanic is a normal thing
    * to want, and losing its placement to do so isn't.

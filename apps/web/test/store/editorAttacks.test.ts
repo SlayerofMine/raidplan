@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { attackIdsInPlan, SCHEMA_VERSION } from "@raidplan/shared";
-import { clearHistory, useEditorStore } from "../../src/store/editorStore";
+import {
+  boardStack,
+  clearHistory,
+  useEditorStore,
+} from "../../src/store/editorStore";
 import { pickPlanDoc, sameDocument } from "../../src/store/planSerialization";
 
 /**
@@ -142,7 +146,12 @@ describe("reorderAttack", () => {
       state().addAttack("c", { x: 0, y: 0 })!,
     ];
   };
-  const order = () => state().attacks.map((a) => a.attackId);
+  /** Draw order, which is what "order" means — not the array's. */
+  const order = () =>
+    boardStack(state()).map((item) => {
+      const attack = state().attacks.find((a) => a.id === item.id);
+      return attack?.attackId ?? "object";
+    });
 
   it("moves one step at a time", () => {
     const [, b] = three();
@@ -158,6 +167,20 @@ describe("reorderAttack", () => {
     expect(order()).toEqual(["a", "b", "c"]);
     state().reorderAttack(a!, 5);
     expect(order()).toEqual(["b", "c", "a"]);
+  });
+
+  it("moves past objects too — they share one stack", () => {
+    const under = state().addPrimitive("shape", "circle");
+    state().addStep();
+    const attack = state().addAttack("a", { x: 0, y: 0 })!;
+    // It arrives on top, which is where a new thing belongs...
+    expect(boardStack(state()).at(-1)!.id).toBe(attack);
+
+    state().reorderAttack(attack, -1);
+
+    // ...and can be put under the token standing on it, which is the whole
+    // point: whatever is on top is what a click finds.
+    expect(boardStack(state()).map((i) => i.id)).toEqual([attack, under]);
   });
 
   it("ignores an attack that isn't there", () => {

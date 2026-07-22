@@ -759,3 +759,16 @@ back on. On canvas it stays faintly drawn so it can still be grabbed.
 
 Fell out of writing the tests: creating an object left a selected attack selected too, so both
 kinds were selected at once — the one thing the two selection lists are meant to prevent. [DONE]
+
+### 18.13 One stack for the board
+
+Attacks were drawn after every object, so an attack's grab frame sat above everything and took any
+click landing in its rectangle whatever the order said. Objects and attacks now share **one
+stacking scale**: `AttackInstance.z` uses the same numbers as an object's `base.z`, `boardStack`
+merges the two, and the canvas walks that one list — so a token can stand on top of a void zone
+and keep its clicks. `expandPlan` sorts its output by `z` for the same reason, since a renderer
+draws in array order.
+
+An attack's `z` is deliberately fractional: objects renumber themselves 0..n-1 as they come and
+go, and an attack parked at 2.5 stays between them without being renumbered too. Absent means on
+top, which is where an attack with no opinion belongs — and where they all were before. [DONE]

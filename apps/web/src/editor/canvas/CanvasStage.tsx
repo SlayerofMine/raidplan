@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type DragEvent as ReactDragEvent,
@@ -10,7 +11,7 @@ import { Layer, Line, Image as KonvaImage, Rect, Stage } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import type { PlanObject, ShapeKind } from "@raidplan/shared";
 import { getBackgroundSrc } from "@raidplan/shared";
-import { useEditorStore } from "../../store/editorStore";
+import { boardStack, useEditorStore } from "../../store/editorStore";
 import { isEditableTarget } from "../isEditableTarget";
 import {
   ATTACK_DATA_TYPE,
@@ -23,7 +24,7 @@ import {
   normalizeRect,
   objectsInMarquee,
 } from "./marquee";
-import { AttackPreviewLayer } from "./AttackPreviewLayer";
+import { PlacedAttackNode } from "./AttackPreviewLayer";
 import { ObjectNode } from "./ObjectNode";
 import { SelectionTransformer } from "./SelectionTransformer";
 import { setStageNode } from "./stageHandle";
@@ -51,7 +52,18 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
   const didFit = useRef(false);
 
   const background = useEditorStore((s) => s.background);
+  // Built from the three document slices rather than selected: `boardStack`
+  // makes fresh objects every call, and a selector whose result is never
+  // reference-equal loops forever (`useSyncExternalStore` catches it, loudly).
+  // Immer keeps untouched slices stable, so the memo recomputes exactly when
+  // the stack can actually have changed.
+  const objects = useEditorStore((s) => s.objects);
   const objectIds = useEditorStore((s) => s.objectIds);
+  const attacks = useEditorStore((s) => s.attacks);
+  const stack = useMemo(
+    () => boardStack({ objects, objectIds, attacks }),
+    [objects, objectIds, attacks],
+  );
   const view = useEditorStore((s) => s.view);
   const snapEnabled = useEditorStore((s) => s.snapEnabled);
   const gridSize = useEditorStore((s) => s.gridSize);
@@ -254,11 +266,19 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
           )}
         </Layer>
         <Layer>
-          {objectIds.map((id) => (
-            <ObjectNode key={id} objectId={id} draggable={!isPanning} />
-          ))}
-          {/* Placed attacks, drawn read-only above the plan's own objects. */}
-          <AttackPreviewLayer />
+          {/* One stack: an attack can sit under the token standing on it, and
+              whatever is on top is what a click finds. */}
+          {stack.map((item) =>
+            item.kind === "object" ? (
+              <ObjectNode
+                key={item.id}
+                objectId={item.id}
+                draggable={!isPanning}
+              />
+            ) : (
+              <PlacedAttackNode key={item.id} instanceId={item.id} />
+            ),
+          )}
           {/* Chrome only one caller wants — the designer's bounding box. */}
           {overlay}
           {marquee && (
