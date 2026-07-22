@@ -43,7 +43,10 @@ export function Toolbar({
   /** Where "Play" goes, or null while a server plan's slug is still loading. */
   viewHref?: string | null;
 }) {
-  const objectCount = useEditorStore((s) => s.objectIds.length);
+  // A placed attack is a thing on the board like any other, so it counts.
+  const objectCount = useEditorStore(
+    (s) => s.objectIds.length + s.attacks.length,
+  );
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const hasSelection = selectedIds.length > 0;
   const title = useEditorStore((s) => s.title);

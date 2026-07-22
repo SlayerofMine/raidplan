@@ -644,7 +644,14 @@ Three things the first hands-on pass found, each a hole in §18.2–18.3 rather 
    expansion maps *that* onto the rect — so old definitions self-correct too. Saving from the
    designer shrink-wraps to match and measures `defaultSize`, which deletes the hand-typed size
    boxes; the designer draws the box instead. [DONE]
-3. **An attack couldn't be placed from the base layout.** Placement is a property of the board,
+3. **An attack alone on a plan didn't count as content.** Autosave (local and remote) and undo
+   each compared their own hand-written list of document slices, none of which had heard of
+   `attacks` — so a plan whose only content was an attack never saved, and everything downstream
+   (reload, viewer, share preview) saw an empty plan. The slices are now named once, as a *total*
+   record over `PlanDoc`, so the next field added to the document is a compile error rather than
+   a plan that silently stops saving. Counts include attacks, a duplicated step brings its
+   attacks, and deleting an object drops it from any attack argument naming it. [DONE]
+4. **An attack couldn't be placed from the base layout.** Placement is a property of the board,
    firing is a property of one step — so instances moved from `Step.attacks` to `Plan.attacks`,
    each carrying `stepId`. Placing from the base layout pins the attack to the first step,
    creating one if the plan has none. The canvas shows every attack, dimming the ones that fire

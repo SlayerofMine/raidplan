@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, isConflict } from "../api/client";
 import { clearHistory, useEditorStore } from "../store/editorStore";
-import { toPlan } from "../store/planSerialization";
+import { sameDocument, toPlan } from "../store/planSerialization";
 
 /** Idle delay before an autosave fires (plan §8.8: "1–2 s idle"). */
 export const AUTOSAVE_DELAY_MS = 1000;
@@ -83,15 +83,12 @@ export function useRemotePersistence(planId: string | null): RemoteStatus {
   useEffect(() => {
     if (!planId) return;
     const unsubscribe = useEditorStore.subscribe((next, prev) => {
-      const documentUnchanged =
-        next.objects === prev.objects &&
-        next.objectIds === prev.objectIds &&
-        next.background === prev.background &&
-        next.title === prev.title &&
-        next.raid === prev.raid &&
-        next.steps === prev.steps;
       // Ignore camera/selection churn, and don't fight a lost race.
-      if (documentUnchanged || stopped.current || version.current === null) {
+      if (
+        sameDocument(next, prev) ||
+        stopped.current ||
+        version.current === null
+      ) {
         return;
       }
 

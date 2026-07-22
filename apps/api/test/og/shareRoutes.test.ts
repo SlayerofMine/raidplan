@@ -353,6 +353,30 @@ describe("planDescription", () => {
       "Aberrus · 0 steps · 0 objects",
     );
   });
+
+  it("counts a placed attack — a plan made of one isn't empty", () => {
+    expect(
+      planDescription(
+        planDoc({
+          steps: [{ id: "s", overrides: {}, animations: [] }],
+          attacks: [
+            {
+              id: "i1",
+              attackId: "atk",
+              stepId: "s",
+              x: 0,
+              y: 0,
+              w: 100,
+              h: 100,
+              rotation: 0,
+              startMs: 0,
+              args: {},
+            },
+          ],
+        }),
+      ),
+    ).toBe("1 step · 1 object");
+  });
 });
 
 describe("sharePageHtml", () => {

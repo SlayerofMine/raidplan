@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { attackIdsInPlan, SCHEMA_VERSION } from "@raidplan/shared";
 import { clearHistory, useEditorStore } from "../../src/store/editorStore";
+import { pickPlanDoc, sameDocument } from "../../src/store/planSerialization";
 
 /**
  * Placed attacks (plan §17, remodelled in §18.3). A plan stores only instances;
@@ -118,6 +119,49 @@ describe("removeAttack", () => {
     // step and its attacks back together.)
     expect(state().attacks.map((a) => a.id)).toEqual([survivor]);
     expect(state().steps.map((s) => s.id)).not.toContain(first);
+  });
+});
+
+describe("an attack is document content in its own right", () => {
+  it("counts as something on the board, so a lone attack isn't an empty plan", () => {
+    state().addAttack("atk1", { x: 0, y: 0 });
+    // What the toolbar reads: objects plus attacks.
+    expect(state().objectIds.length + state().attacks.length).toBe(1);
+  });
+
+  it("marks the document as changed, so autosave fires for it", () => {
+    // The step already exists, so placing the attack is the *only* edit —
+    // exactly the case that never saved.
+    state().addStep();
+    const before = pickPlanDoc(state());
+    state().addAttack("atk1", { x: 0, y: 0 });
+    // Nothing else persists an attack: a plan whose only content is one has no
+    // other edit to piggyback on.
+    expect(sameDocument(before, pickPlanDoc(state()))).toBe(false);
+  });
+
+  it("comes along when its step is duplicated", () => {
+    state().addStep();
+    const original = state().addAttack("atk1", { x: 10, y: 20 })!;
+    state().duplicateStep(0);
+
+    expect(state().attacks).toHaveLength(2);
+    const copy = state().attacks.find((a) => a.id !== original)!;
+    // Same placement, its own identity, fired by the copied step.
+    expect(copy).toMatchObject({ attackId: "atk1", x: 10 - 200, y: 20 - 200 });
+    expect(copy.stepId).toBe(state().steps[1]!.id);
+  });
+
+  it("drops a deleted object from the arguments that named it", () => {
+    const tank = state().addPrimitive("shape", "circle");
+    const healer = state().addPrimitive("shape", "circle");
+    const id = state().addAttack("atk1", { x: 0, y: 0 })!;
+    state().updateAttack(id, { args: { victims: [tank, healer] } });
+
+    state().deleteObjects([tank]);
+
+    // A dangling reference would resurrect on undo and mean nothing at play.
+    expect(state().attacks[0]!.args["victims"]).toEqual([healer]);
   });
 });
 

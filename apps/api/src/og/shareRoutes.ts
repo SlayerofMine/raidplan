@@ -139,7 +139,9 @@ export async function inlineUploadedBackground(
 /** A one-line summary for the unfurl card. */
 export function planDescription(plan: Plan): string {
   const steps = plan.steps.length;
-  const objects = plan.objects.length;
+  // Attacks are objects as far as a reader is concerned — a plan made of one
+  // attack is not an empty plan.
+  const objects = plan.objects.length + plan.attacks.length;
   const parts = [
     `${steps} ${steps === 1 ? "step" : "steps"}`,
     `${objects} ${objects === 1 ? "object" : "objects"}`,

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { PlanSchema, SCHEMA_VERSION, type Plan } from "@raidplan/shared";
 import {
   fromPlan,
+  PLAN_DOC_KEYS,
+  sameDocument,
   toPlan,
   type PlanDoc,
 } from "../../src/store/planSerialization";
@@ -87,5 +89,45 @@ describe("plan serialization", () => {
     const withStep = plan();
     withStep.steps = [{ id: "s1", overrides: {}, animations: [] }];
     expect(toPlan(fromPlan(withStep)).steps).toEqual(withStep.steps);
+  });
+});
+
+/**
+ * Autosave, remote save and undo all ask "did the document change?". They used
+ * to each carry their own list of fields, and `attacks` was missed by all
+ * three — so a plan whose only content was an attack never saved at all.
+ */
+describe("sameDocument", () => {
+  const doc = (): PlanDoc => fromPlan(plan());
+
+  it("covers every slice of the document", () => {
+    // The compile-time guard is `DOC_SLICES`; this is the readable statement of
+    // the same thing, and it fails loudly if a field is dropped from the list.
+    expect([...PLAN_DOC_KEYS].sort()).toEqual(
+      Object.keys(doc() satisfies PlanDoc).sort(),
+    );
+  });
+
+  it("sees an edit to any slice, attacks included", () => {
+    // A fresh value for one slice at a time; reference inequality is the
+    // signal, exactly as immer produces it for a touched slice.
+    const edited = (value: unknown) =>
+      typeof value === "object" && value !== null
+        ? structuredClone(value)
+        : `${String(value)}-edited`;
+
+    const before = doc();
+    for (const key of PLAN_DOC_KEYS) {
+      const after = { ...before, [key]: edited(before[key]) };
+      expect(sameDocument(before, after), `missed a change to ${key}`).toBe(
+        false,
+      );
+    }
+  });
+
+  it("ignores everything that isn't the document", () => {
+    const before = doc();
+    // Camera and selection live beside these slices and must not trigger saves.
+    expect(sameDocument(before, { ...before })).toBe(true);
   });
 });

@@ -36,7 +36,12 @@ import {
   createTether,
   TETHER_DEFAULT_TINT,
 } from "./objectFactory";
-import { fromPlan, toPlan, type PlanDoc } from "./planSerialization";
+import {
+  fromPlan,
+  pickPlanDoc,
+  toPlan,
+  type PlanDoc,
+} from "./planSerialization";
 
 /**
  * The editor store (plan §2). `PlanDoc` fields are the **document** — persisted
@@ -479,6 +484,15 @@ export const useEditorStore = create<EditorState>()(
               (a) => !doomed.has(a.objectId),
             );
           }
+          // An attack argument can name plan objects (§18.4 `objectRefs`), so a
+          // deleted object must drop out of those too or it dangles.
+          for (const attack of s.attacks) {
+            for (const [key, value] of Object.entries(attack.args)) {
+              if (Array.isArray(value) && value.some((id) => doomed.has(id))) {
+                attack.args[key] = value.filter((id) => !doomed.has(id));
+              }
+            }
+          }
           reindexZ(s);
         }),
 
@@ -652,8 +666,18 @@ export const useEditorStore = create<EditorState>()(
             ? { autoAdvanceMs: source.autoAdvanceMs }
             : {}),
         };
+        // The attacks this step fires come along too — a duplicated step that
+        // dropped them would only look like a copy.
+        const copiedAttacks = get()
+          .attacks.filter((a) => a.stepId === source.id)
+          .map((a) => ({
+            ...structuredClone(a),
+            id: nextAttackId(),
+            stepId: copy.id,
+          }));
         set((s) => {
           s.steps.splice(index + 1, 0, copy);
+          s.attacks.push(...copiedAttacks);
           s.currentStepIndex = index + 1;
         });
       },
@@ -847,16 +871,8 @@ export const useEditorStore = create<EditorState>()(
     })),
     {
       // Only the document is undoable — never the camera or the selection.
-      partialize: (state): PlanDoc => ({
-        id: state.id,
-        title: state.title,
-        raid: state.raid,
-        background: state.background,
-        objects: state.objects,
-        objectIds: state.objectIds,
-        attacks: state.attacks,
-        steps: state.steps,
-      }),
+      // Which slices those are is defined once, beside the serializer.
+      partialize: pickPlanDoc,
       // Immer keeps untouched slices referentially stable, so a shallow compare
       // means selection/camera changes never create a history entry.
       equality: shallow,

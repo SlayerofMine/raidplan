@@ -35,6 +35,49 @@ export interface PlanDoc {
   steps: Step[];
 }
 
+/**
+ * Every slice of the document, named once.
+ *
+ * Three separate things need to answer *"did the document change?"* — local
+ * autosave, remote autosave and undo — and each used to carry its own
+ * hand-written list of fields. Adding `attacks` to the document quietly missed
+ * all three, so a plan whose only content was an attack never saved at all.
+ *
+ * Typing this as a **total** record over `PlanDoc` means the next field added to
+ * the document is a compile error here rather than a plan that silently stops
+ * saving.
+ */
+const DOC_SLICES: Record<keyof PlanDoc, true> = {
+  id: true,
+  title: true,
+  raid: true,
+  encounterId: true,
+  background: true,
+  objects: true,
+  objectIds: true,
+  attacks: true,
+  steps: true,
+};
+
+export const PLAN_DOC_KEYS = Object.keys(DOC_SLICES) as (keyof PlanDoc)[];
+
+/**
+ * Has the *document* changed? Immer keeps untouched slices referentially
+ * stable, so comparing each slice by reference ignores camera and selection
+ * churn without walking the plan.
+ */
+export function sameDocument(a: PlanDoc, b: PlanDoc): boolean {
+  return PLAN_DOC_KEYS.every((key) => a[key] === b[key]);
+}
+
+/** The document slice of the wider editor state — what undo snapshots. */
+export function pickPlanDoc(state: PlanDoc): PlanDoc {
+  // `Object.fromEntries` can't know the keys cover PlanDoc; `DOC_SLICES` does.
+  return Object.fromEntries(
+    PLAN_DOC_KEYS.map((key) => [key, state[key]]),
+  ) as unknown as PlanDoc;
+}
+
 /** Normalized editor document → the shared `Plan` document. */
 export function toPlan(doc: PlanDoc): Plan {
   return {

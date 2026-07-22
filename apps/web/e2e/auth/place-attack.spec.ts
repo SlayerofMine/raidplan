@@ -88,6 +88,9 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
     .toBe(false);
 
   // --- it's a canvas citizen: clickable there, and Delete removes it ---
+  // Loading a plan is itself a store change, so it schedules an autosave; wait
+  // that out, or its pending write would mask what the removal below saves.
+  const loadSaved = page.waitForResponse((r) => r.url().includes("saveDoc"));
   await page.goto(planUrl);
   // A reload lands on the base layout — which is a fine place to grab an
   // attack, because that's where the board is laid out.
@@ -107,6 +110,21 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
     "true",
   );
 
+  // Removing it is the only edit this plan gets, so the save that carries an
+  // empty attack list proves an attack-only change is a document change. (It
+  // wasn't: the autosaves compared a hand-written list of slices that had never
+  // heard of `attacks`, so a plan made of one attack never saved at all.)
+  await loadSaved;
+  const removalSaved = page.waitForResponse(
+    (r) =>
+      r.url().includes("saveDoc") &&
+      (r.request().postData() ?? "").includes('"attacks":[]'),
+  );
   await page.keyboard.press("Delete");
+  await expect(page.getByTestId("no-placed")).toBeVisible();
+  await removalSaved;
+
+  // ...and it stays gone.
+  await page.goto(planUrl);
   await expect(page.getByTestId("no-placed")).toBeVisible();
 });
