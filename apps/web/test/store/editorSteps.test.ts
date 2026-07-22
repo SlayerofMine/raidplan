@@ -249,3 +249,63 @@ describe("steps — history", () => {
     expect(temporalStore.getState().pastStates.length).toBe(depth);
   });
 });
+
+/**
+ * Animating a selection is one action, not a loop: a group of six objects has
+ * to undo in one press, and the animations have to land in document order
+ * rather than in click order.
+ */
+describe("animateSelection", () => {
+  const seed = () => {
+    const a = state().addPrimitive("shape", "circle");
+    const b = state().addPrimitive("shape", "circle");
+    state().addStep();
+    return { a, b };
+  };
+
+  it("gives every selected object the same animation", () => {
+    const { a, b } = seed();
+    state().select([a, b]);
+
+    const ids = state().animateSelection(0);
+
+    expect(ids).toHaveLength(2);
+    expect(state().steps[0]!.animations.map((x) => x.objectId)).toEqual([a, b]);
+    // Identical defaults: "the same animation to each" is the whole point.
+    expect(state().steps[0]!.animations.map((x) => x.effect)).toEqual([
+      "move",
+      "move",
+    ]);
+  });
+
+  it("lands them in document order, not the order they were clicked", () => {
+    const { a, b } = seed();
+    state().select([b]);
+    state().toggleSelect(a);
+
+    state().animateSelection(0);
+
+    expect(state().steps[0]!.animations.map((x) => x.objectId)).toEqual([a, b]);
+  });
+
+  it("undoes in one press", () => {
+    const { a, b } = seed();
+    state().select([a, b]);
+    clearHistory();
+
+    state().animateSelection(0);
+    expect(state().steps[0]!.animations).toHaveLength(2);
+
+    temporalStore.getState().undo();
+    expect(state().steps[0]!.animations).toHaveLength(0);
+  });
+
+  it("does nothing without a selection or a step", () => {
+    const { a } = seed();
+    state().clearSelection();
+    expect(state().animateSelection(0)).toEqual([]);
+    state().select([a]);
+    expect(state().animateSelection(9)).toEqual([]);
+    expect(state().steps[0]!.animations).toHaveLength(0);
+  });
+});

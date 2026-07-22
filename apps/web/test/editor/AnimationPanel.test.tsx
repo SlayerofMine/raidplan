@@ -110,6 +110,20 @@ describe("AnimationPanel — scoped to the selection", () => {
     expect(screen.getByTestId("anim-no-selection")).toBeInTheDocument();
   });
 
+  it("animates every selected object at once, and says how many", async () => {
+    const { orb, tank } = seed();
+    state().deleteAnimation(0, state().steps[0]!.animations[0]!.id);
+    state().select([orb, tank]);
+    render(<AnimationPanel />);
+
+    const button = screen.getByTestId("add-animation");
+    expect(button).toHaveTextContent("+ Animate 2 objects");
+    fireEvent.click(button);
+
+    expect(state().steps[0]!.animations).toHaveLength(2);
+    expect(screen.getAllByTestId("anim-row")).toHaveLength(2);
+  });
+
   it("shows both objects' animations for a multi-object selection", () => {
     const { orb, tank } = seed();
     state().addAnimation(0, tank);

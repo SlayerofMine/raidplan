@@ -126,6 +126,12 @@ export interface EditorState extends PlanDoc {
 
   // --- animations (plan §3.4) ---
   addAnimation: (stepIndex: number, objectId: string) => string | undefined;
+  /**
+   * Give every selected object the same animation, in one go (plan §18.9).
+   * Returns the new ids, in document order. One action rather than a loop over
+   * {@link addAnimation}, so animating a group of six is a single undo.
+   */
+  animateSelection: (stepIndex: number) => string[];
   updateAnimation: (
     stepIndex: number,
     animId: string,
@@ -734,6 +740,32 @@ export const useEditorStore = create<EditorState>()(
           s.steps[stepIndex]?.animations.push(anim);
         });
         return anim.id;
+      },
+
+      animateSelection: (stepIndex) => {
+        const { steps, objects, objectIds, selectedIds } = get();
+        if (!steps[stepIndex]) return [];
+        // Document order, so the animation list reads like the board's z-order
+        // rather than the order things happened to be clicked in.
+        const targets = objectIds.filter(
+          (id) => selectedIds.includes(id) && objects[id],
+        );
+        if (targets.length === 0) return [];
+
+        const anims: Anim[] = targets.map((objectId) => ({
+          id: nextAnimId(),
+          objectId,
+          kind: "motion",
+          effect: "move",
+          trigger: "onEnter",
+          delayMs: 0,
+          durationMs: 500,
+          easing: "power2.out",
+        }));
+        set((s) => {
+          s.steps[stepIndex]?.animations.push(...anims);
+        });
+        return anims.map((a) => a.id);
       },
 
       updateAnimation: (stepIndex, animId, patch) =>

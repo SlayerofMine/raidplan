@@ -691,4 +691,6 @@ was a second, worse overview: a busy step became a wall of dropdowns, and the co
 being about what you had picked. It now lists only the selected objects' animations, says how
 many it isn't showing ("3 more on this step — see the timeline") so nothing goes missing quietly,
 and asks for a selection rather than falling back to everything. Clicking a bar in the timeline
-selects its object, so the overview and the inspector navigate to each other. [DONE]
+selects its object, so the overview and the inspector navigate to each other. `+ Animate
+selection` takes a whole selection — one store action rather than a loop, so animating a group of
+six is a single undo, and the animations land in document order. [DONE]

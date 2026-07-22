@@ -35,7 +35,7 @@ export function AnimationPanel() {
   const currentStepIndex = useEditorStore((s) => s.currentStepIndex);
   const step = useEditorStore((s) => s.steps[s.currentStepIndex]);
   const selectedIds = useEditorStore((s) => s.selectedIds);
-  const addAnimation = useEditorStore((s) => s.addAnimation);
+  const animateSelection = useEditorStore((s) => s.animateSelection);
 
   if (currentStepIndex === BASE_STEP_INDEX) {
     return (
@@ -48,7 +48,7 @@ export function AnimationPanel() {
   }
   if (!step) return null;
 
-  const selectedId = selectedIds.length === 1 ? selectedIds[0] : undefined;
+  const count = selectedIds.length;
   const mine = step.animations.filter((a) => selectedIds.includes(a.objectId));
   const elsewhere = step.animations.length - mine.length;
 
@@ -57,14 +57,16 @@ export function AnimationPanel() {
       <button
         type="button"
         data-testid="add-animation"
-        disabled={!selectedId}
+        disabled={count === 0}
         title={
-          selectedId ? "Animate the selection" : "Select a single object first"
+          count === 0
+            ? "Select something to animate"
+            : "Give each selected object the same animation"
         }
-        onClick={() => selectedId && addAnimation(currentStepIndex, selectedId)}
+        onClick={() => animateSelection(currentStepIndex)}
         className="w-full rounded border border-panelborder py-1 text-sm hover:border-accent disabled:opacity-40"
       >
-        + Animate selection
+        {count > 1 ? `+ Animate ${count} objects` : "+ Animate selection"}
       </button>
 
       {selectedIds.length === 0 ? (

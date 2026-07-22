@@ -87,6 +87,24 @@ test.describe("steps", () => {
     await expect(page.getByTestId("anim-row")).toHaveCount(0);
   });
 
+  test("animates a whole selection in one go", async ({ page }) => {
+    await page.goto("/plan/local/edit");
+    await page.getByRole("button", { name: "Add Marker 1" }).click();
+    await page.getByRole("button", { name: "Add Marker 2" }).click();
+    await page.getByTestId("add-step").click();
+
+    await page.keyboard.press("Control+a");
+    await expect(page.getByTestId("add-animation")).toHaveText(
+      "+ Animate 2 objects",
+    );
+    await page.getByTestId("add-animation").click();
+    await expect(page.getByTestId("anim-row")).toHaveCount(2);
+
+    // One action, so one undo — not two presses to take back one click.
+    await page.keyboard.press("Control+z");
+    await expect(page.getByTestId("anim-row")).toHaveCount(0);
+  });
+
   test("the panel inspects the selection; the timeline is the overview", async ({
     page,
   }) => {
