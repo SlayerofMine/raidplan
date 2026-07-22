@@ -100,4 +100,22 @@ test("an attack's onCollision fires against an object the plan nominated", async
       timeout: 15_000,
     })
     .toBe(true);
+
+  // Watching it again looks the same: play on a finished step starts it over,
+  // so the pickup is re-armed without touching rewind. (The cone vanishes
+  // before the slide is over, so wait for the transport itself to finish —
+  // clicking mid-run would pause, not replay.)
+  await expect(page.getByTestId("play-toggle")).toHaveAttribute(
+    "aria-label",
+    "Play",
+  );
+  await page.getByTestId("play-toggle").click();
+  await expect
+    .poll(async () => (await board.screenshot()).equals(before))
+    .toBe(false);
+  await expect
+    .poll(async () => (await board.screenshot()).equals(before), {
+      timeout: 15_000,
+    })
+    .toBe(true);
 });

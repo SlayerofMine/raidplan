@@ -29,6 +29,8 @@ interface FakeNode {
     opacity: number;
     visible: boolean;
   };
+  /** Every visibility change written, in order — how a re-arm is observed. */
+  visibilityWrites: boolean[];
   setAttrs: (a: Partial<FakeNode["attrs"]>) => void;
   visible: () => boolean;
   x: () => number;
@@ -43,7 +45,13 @@ function fakeNode(): FakeNode {
   const layer = {};
   const node: FakeNode = {
     attrs: { x: 0, y: 0, rotation: 0, opacity: 1, visible: true },
-    setAttrs: (a) => Object.assign(node.attrs, a),
+    visibilityWrites: [],
+    setAttrs: (a) => {
+      if (a.visible !== undefined && a.visible !== node.attrs.visible) {
+        node.visibilityWrites.push(a.visible);
+      }
+      Object.assign(node.attrs, a);
+    },
     visible: () => node.attrs.visible,
     x: () => node.attrs.x,
     y: () => node.attrs.y,
@@ -221,6 +229,29 @@ describe("an attack colliding with a plan object", () => {
     await settle(200);
 
     expect(nodes.get(CONE)!.visible()).toBe(false);
+  });
+
+  it("re-arms when the step is played again", async () => {
+    const { ref, nodes } = fakeStage(useEditorStore.getState().objectIds);
+    const { result } = renderHook(() => usePlayback(ref));
+    const cone = nodes.get(CONE)!;
+
+    act(() => result.current.play());
+    await settle(400);
+    expect(cone.visible()).toBe(false);
+
+    // NB: no rewind press in between — just play again.
+    // Watching the step again has to look like watching it the first time:
+    // pressing play on a finished step starts it over rather than resuming a
+    // spent one, so the cone comes back and is caught again.
+    act(() => result.current.play());
+    await settle(400);
+
+    expect(cone.visible()).toBe(false);
+    // Hidden by the step's opening snap, shown by the attack's entrance, taken
+    // away by the collision — then all of it again. A spent playthrough would
+    // stop after the first `false`.
+    expect(cone.visibilityWrites).toEqual([false, true, false, true, false]);
   });
 
   it("stays on screen when the plan nominated nobody", async () => {

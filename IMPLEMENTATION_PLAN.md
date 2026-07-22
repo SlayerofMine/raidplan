@@ -713,3 +713,9 @@ attacks:
 Pinned by a fake-stage test of the real `usePlayback` (the collision fires, sticks, and still
 watches after the timeline ends) and an e2e where the attack **slides across** its collider — a
 stationary one passes either way, which is why the first attempt at that test was worthless. [DONE]
+
+Pressing play on a *finished* step now starts it over rather than resuming it. Rewinding the
+timeline alone replayed the tweens while every pickup stayed spent and whatever a trigger had
+done stayed done, so the second watch of a step didn't match the first unless you thought to
+press rewind. Firing stays once per playthrough — a pickup is consumed on contact, not re-fired
+every frame it overlaps — but a playthrough now begins whenever you press play. [DONE]

@@ -244,17 +244,30 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
     return () => gsap.ticker.remove(tick);
   }, [armed, steps, stepIndex, stageRef, fireAnim]);
 
+  const restart = useCallback(() => {
+    const tl = buildStep(stepIndex);
+    tl?.play();
+    setIsPlaying(Boolean(tl));
+    setArmed(Boolean(tl));
+  }, [buildStep, stepIndex]);
+
   const play = useCallback(() => {
     const tl = timeline.current;
     if (!tl) return;
-    // Replay from the top once it has run to the end.
-    if (tl.progress() >= 1) tl.progress(0);
+    // Playing a step that has run to the end starts it over *properly* —
+    // rebuilt, not rewound. Rewinding the timeline alone would replay the
+    // tweens while every pickup stayed spent and whatever a trigger did stayed
+    // done, so the second watch of a step wouldn't match the first.
+    if (tl.progress() >= 1) {
+      restart();
+      return;
+    }
     tl.play();
     // Anything a trigger started resumes with the transport.
     for (const shot of oneShots.current) shot.play();
     setIsPlaying(true);
     setArmed(true);
-  }, []);
+  }, [restart]);
 
   const pause = useCallback(() => {
     timeline.current?.pause();
@@ -262,13 +275,6 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
     setIsPlaying(false);
     setArmed(false);
   }, []);
-
-  const restart = useCallback(() => {
-    const tl = buildStep(stepIndex);
-    tl?.play();
-    setIsPlaying(Boolean(tl));
-    setArmed(Boolean(tl));
-  }, [buildStep, stepIndex]);
 
   const seek = useCallback((next: number) => {
     const tl = timeline.current;
