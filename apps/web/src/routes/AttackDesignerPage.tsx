@@ -12,6 +12,7 @@ import { TetherButton } from "../editor/TetherButton";
 import { AnimationPanel } from "../editor/AnimationPanel";
 import {
   AttackAnchorPanel,
+  AttackLookAtsPanel,
   AttackParamsPanel,
 } from "../editor/AttackParamsPanel";
 import { AttackBoundsOverlay } from "../editor/canvas/AttackBoundsOverlay";
@@ -50,6 +51,7 @@ function blankDef(encounterId: string): AttackDef {
     objects: [],
     overrides: {},
     animations: [],
+    lookAts: [],
     params: [],
     bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
   };
@@ -99,6 +101,20 @@ function AttackDesigner({
   // the canvas rather than in it — and must survive a save untouched.
   const [params, setParams] = useState<AttackParam[]>([]);
   const [anchor, setAnchor] = useState<AttackDef["anchor"]>(undefined);
+  const [lookAts, setLookAts] = useState<AttackDef["lookAts"]>([]);
+  // Every object the designer has drawn, for the look-at rows to choose between
+  // — placeholders included, since a part may track where a plan object lands.
+  const parts = useMemo(
+    () =>
+      objectIds
+        .map((id) => objects[id])
+        .filter((o) => o !== undefined)
+        .map((o) => ({
+          id: o!.id,
+          label: o!.base.name ?? o!.base.label ?? o!.type,
+        })),
+    [objectIds, objects],
+  );
   const [bindings, setBindings] = useState<AttackBindings>({
     collideWith: {},
     durationMs: {},
@@ -118,6 +134,7 @@ function AttackDesigner({
       setParams(d.params);
       setBindings(d.bindings);
       setAnchor(d.anchor);
+      setLookAts(d.lookAts);
       useEditorStore.getState().loadPlan(defToPlan(d));
       clearHistory();
       useEditorStore.getState().selectStep(BASE_STEP_INDEX);
@@ -146,6 +163,7 @@ function AttackDesigner({
         params,
         bindings,
         anchor,
+        lookAts,
       });
       if (attackId)
         await api.attack.update.mutate({ id: attackId, ...content });
@@ -255,6 +273,11 @@ function AttackDesigner({
           onBindingsChange={setBindings}
         />
         <AttackAnchorPanel slots={slots} anchor={anchor} onChange={setAnchor} />
+        <AttackLookAtsPanel
+          objects={parts}
+          lookAts={lookAts}
+          onChange={setLookAts}
+        />
       </div>
       <div style={{ gridArea: "timeline" }} className="flex min-h-0 flex-col">
         <TimelineDock />

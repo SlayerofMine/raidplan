@@ -441,3 +441,122 @@ export function AttackAnchorPanel({
     </section>
   );
 }
+
+/**
+ * Parts that keep facing other parts (plan §18.16).
+ *
+ * Purely internal — both ends are the attack's own objects — so it needs no
+ * slot and no plan. Each row turns one object to keep pointing at another as the
+ * attack animates.
+ */
+export function AttackLookAtsPanel({
+  objects,
+  lookAts,
+  onChange,
+}: {
+  objects: { id: string; label: string }[];
+  lookAts: { objectId: string; targetId: string }[];
+  onChange: (next: { objectId: string; targetId: string }[]) => void;
+}) {
+  const labelOf = (id: string) => objects.find((o) => o.id === id)?.label ?? id;
+
+  const add = () => {
+    const first = objects[0]?.id;
+    const second = objects.find((o) => o.id !== first)?.id;
+    if (!first || !second) return;
+    onChange([...lookAts, { objectId: first, targetId: second }]);
+  };
+
+  const setRow = (
+    index: number,
+    patch: Partial<{ objectId: string; targetId: string }>,
+  ) =>
+    onChange(
+      lookAts.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    );
+
+  return (
+    <section
+      className="border-t border-panelborder p-3"
+      data-testid="attack-lookats-panel"
+    >
+      <h2 className="mb-2 text-sm font-semibold text-neutral-300">Look-at</h2>
+      {objects.length < 2 ? (
+        <p
+          data-testid="lookat-needs-parts"
+          className="text-xs text-neutral-500"
+        >
+          Draw at least two objects — a look-at turns one to keep facing
+          another.
+        </p>
+      ) : (
+        <>
+          <p className="mb-2 text-xs text-neutral-500">
+            Keeps one part pointed at another as this attack&apos;s own
+            animation moves it. No plan involved.
+          </p>
+          <ul className="mb-2 flex flex-col gap-2" data-testid="lookat-list">
+            {lookAts.map((row, index) => (
+              <li
+                key={index}
+                className="flex flex-col gap-1 rounded border border-panelborder p-2"
+              >
+                <div className="flex items-center gap-1 text-xs text-neutral-400">
+                  <select
+                    aria-label={`Look-at ${index} aimer`}
+                    value={row.objectId}
+                    onChange={(e) =>
+                      setRow(index, { objectId: e.target.value })
+                    }
+                    className={FIELD}
+                  >
+                    {objects.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  faces
+                  <select
+                    aria-label={`Look-at ${index} target`}
+                    value={row.targetId}
+                    onChange={(e) =>
+                      setRow(index, { targetId: e.target.value })
+                    }
+                    className={FIELD}
+                  >
+                    {objects
+                      .filter((o) => o.id !== row.objectId)
+                      .map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.label}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    aria-label={`Remove look-at ${labelOf(row.objectId)}`}
+                    onClick={() =>
+                      onChange(lookAts.filter((_, i) => i !== index))
+                    }
+                    className="ml-auto rounded border border-panelborder px-1.5 py-0.5 text-amber-400 hover:border-amber-400"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            aria-label="Add look-at"
+            onClick={add}
+            className="rounded border border-panelborder px-2 py-0.5 text-xs hover:border-accent"
+          >
+            Add look-at
+          </button>
+        </>
+      )}
+    </section>
+  );
+}

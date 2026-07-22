@@ -4,6 +4,7 @@ import {
   ATTACK_BOX_ASSET,
   anchorPlacement,
   attackNaturalMs,
+  lookAtRotation,
   attackSlots,
   attackSpanMs,
   slotsFilled,
@@ -76,6 +77,7 @@ const makeDef = (over: Partial<AttackDef> = {}): AttackDef => ({
   objects: [defObj("o1")],
   overrides: {},
   animations: [],
+  lookAts: [],
   params: [],
   bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
   ...over,
@@ -665,6 +667,45 @@ describe("expandPlan — placeholders", () => {
     // with a missing end simply doesn't draw.
     expect(leash.toId).toBe("i1::victim");
     expect(out.objects.map((o) => o.id)).not.toContain("i1::victim");
+  });
+});
+
+describe("lookAtRotation — a part turned towards another", () => {
+  const P = (x: number, y: number) => ({ x, y });
+
+  it("holds still when the target hasn't moved", () => {
+    // Drawn pointing right at the orb; the orb is where it was, so no turn.
+    expect(lookAtRotation(0, P(0, 0), P(10, 0), P(0, 0), P(10, 0))).toBeCloseTo(
+      0,
+    );
+  });
+
+  it("turns by exactly how far the target swung around it", () => {
+    // Orb was to the right, now straight below: a quarter turn clockwise.
+    expect(lookAtRotation(0, P(0, 0), P(10, 0), P(0, 0), P(0, 10))).toBeCloseTo(
+      90,
+    );
+  });
+
+  it("keeps the angle it was drawn at, not just 'points at'", () => {
+    // Drawn 90° off the orb (orb right, aimer pointing down, rest rotation 0).
+    // The orb swings to straight-below; the aimer keeps its 90° offset.
+    const r = lookAtRotation(0, P(0, 0), P(10, 0), P(0, 0), P(-10, 0));
+    expect(r).toBeCloseTo(180);
+  });
+
+  it("adds onto the aimer's own drawn rotation", () => {
+    // Same geometry, but the aimer was drawn already turned 30°.
+    expect(
+      lookAtRotation(30, P(0, 0), P(10, 0), P(0, 0), P(0, 10)),
+    ).toBeCloseTo(120);
+  });
+
+  it("follows the aimer's origin when the aimer itself has moved", () => {
+    // The aimer slid to (5,5); the orb is straight right of it now.
+    expect(lookAtRotation(0, P(0, 0), P(10, 0), P(5, 5), P(20, 5))).toBeCloseTo(
+      0,
+    );
   });
 });
 

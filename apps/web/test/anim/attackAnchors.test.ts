@@ -89,6 +89,7 @@ const def: AttackDef = {
   overrides: {},
   animations: [],
   anchor: { originId: "from", facingId: "at" },
+  lookAts: [],
   params: [],
   bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
 };

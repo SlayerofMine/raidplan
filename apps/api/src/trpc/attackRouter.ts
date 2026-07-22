@@ -40,6 +40,14 @@ const attackContent = {
       facingId: z.string().min(1).optional(),
     })
     .optional(),
+  lookAts: z
+    .array(
+      z.object({
+        objectId: z.string().min(1),
+        targetId: z.string().min(1),
+      }),
+    )
+    .default([]),
   params: z.array(AttackParamSchema).default([]),
   bindings: AttackBindingsSchema,
 };

@@ -145,6 +145,26 @@ export const AttackDefSchema = z.object({
       facingId: z.string().min(1).optional(),
     })
     .optional(),
+  /**
+   * One of the attack's **own** parts kept turned towards another (plan §18.16).
+   *
+   * Both ids are the definition's own objects — no plan involvement. `objectId`
+   * is rotated every frame so it stays pointed at `targetId`, keeping whatever
+   * angle it was drawn at: an indicator that tracks the attack's own orb as the
+   * orb's animation flies it across.
+   *
+   * Distinct from `anchor`, which follows the *plan* and moves the whole attack.
+   * A look-at follows the attack itself and turns one piece of it, so the motion
+   * comes from the attack's own animation rather than from a token being dragged.
+   */
+  lookAts: z
+    .array(
+      z.object({
+        objectId: z.string().min(1),
+        targetId: z.string().min(1),
+      }),
+    )
+    .default([]),
   /** What a plan must (or may) tell this attack (plan §18.4). */
   params: z.array(AttackParamSchema).default([]),
   /** Which internals read which parameter. */
@@ -253,6 +273,33 @@ export function anchorPlacement(
     y: origin.y - (offset.x * sin + offset.y * cos),
   };
   return { x: centre.x - half.x, y: centre.y - half.y, rotation };
+}
+
+/** Direction from `a` to `b`, in degrees (Konva's y-down, clockwise). */
+const angleDeg = (a: Point, b: Point): number =>
+  (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+
+/**
+ * The rotation that keeps one part turned towards another (plan §18.16).
+ *
+ * Pure, and the whole of the look-at: the aimer keeps the angle it made with its
+ * target **at rest**, so however it was drawn pointing at the orb, it stays
+ * pointed at the orb as the orb moves. Rotating about the aimer's own origin —
+ * which is `from` on both sides — makes this exact rather than iterative: the
+ * origin doesn't move under its own rotation, so one pass settles it.
+ *
+ * `restFrom`/`restTo` are where the two sat when drawn; `liveFrom`/`liveTo`
+ * where they are now. The same points in both spaces, so a non-square or turned
+ * placement cancels out.
+ */
+export function lookAtRotation(
+  restRotation: number,
+  restFrom: Point,
+  restTo: Point,
+  liveFrom: Point,
+  liveTo: Point,
+): number {
+  return restRotation + angleDeg(liveFrom, liveTo) - angleDeg(restFrom, restTo);
 }
 
 /** An axis-aligned box: a centre and half-extents. Never zero-sized. */
@@ -805,6 +852,7 @@ export function planToAttackContent(
     params?: AttackParam[];
     bindings?: AttackBindings;
     anchor?: AttackDef["anchor"];
+    lookAts?: AttackDef["lookAts"];
   },
 ): AttackContent {
   const step = plan.steps[0];
@@ -842,6 +890,7 @@ export function planToAttackContent(
     // Parameters, bindings and the anchor aren't spatial, so they pass straight
     // through from the designer rather than round-tripping via the canvas.
     ...(meta.anchor ? { anchor: meta.anchor } : {}),
+    lookAts: meta.lookAts ?? [],
     params: meta.params ?? [],
     bindings: meta.bindings ?? {
       collideWith: {},

@@ -816,3 +816,23 @@ put them in one node.
 An anchored attack is neither draggable nor clickable on the canvas: it has no placement of its own
 to grab, and a frame that swallowed clicks would sit between you and the very tokens it follows.
 Select it from the attacks panel. [DONE]
+
+### 18.16 Look-at: one part keeps facing another
+
+Distinct from anchoring, and the difference is what moves. An **anchor** follows the *plan* — a
+token dragged, a boss animated — and moves the whole attack. A **look-at** follows the attack
+*itself*: one of its own parts is rotated every frame to keep facing another of its own parts, so
+the motion comes from the attack's own animation. An indicator that tracks the attack's orb as the
+orb flies across is a look-at; nothing outside the attack is involved.
+
+Both ids are the definition's own objects, so it needs no slot and no plan. `lookAtRotation` is
+pure — the aimer keeps the angle it was *drawn* at with its target, turning about its own origin so
+one pass is exact rather than iterative. `useAttackLookAts` runs it on GSAP's ticker, but only in
+the **viewer**: the effect is driven by animation, which is where animation plays. It writes only
+the aimer's rotation, so the animation keeps everything else about the part.
+
+Why it couldn't reuse the anchor path: an anchor transforms the *group* holding all the parts,
+which works because the followed object is outside it. A look-at's target is *inside* that group,
+so moving the group would drag the target too — it has to turn the one part instead. That's also
+why an attack that is both anchored and has a look-at is out of scope for now: the part would live
+in a transformed group, and the look-at reads plan-space. [DONE]

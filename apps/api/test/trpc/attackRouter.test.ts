@@ -19,6 +19,7 @@ const content = {
   defaultSize: { w: 100, h: 100 },
   objects: [],
   animations: [],
+  lookAts: [],
   params: [],
   bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
 };
@@ -37,6 +38,7 @@ const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   objects: [],
   overrides: {},
   animations: [],
+  lookAts: [],
   params: [],
   bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
   ...over,
