@@ -12,7 +12,7 @@ import type { KonvaEventObject } from "konva/lib/Node";
 import type { Stage as StageNode } from "konva/lib/Stage";
 import type { PlanObject, ShapeKind } from "@raidplan/shared";
 import { getBackgroundSrc } from "@raidplan/shared";
-import { useAttackAnchors } from "../../anim/useAttackAnchors";
+import { useFollowing } from "../../anim/useFollowing";
 import { boardStack, useEditorStore } from "../../store/editorStore";
 import { isEditableTarget } from "../isEditableTarget";
 import {
@@ -28,6 +28,7 @@ import {
 } from "./marquee";
 import { PlacedAttackNode } from "./AttackPreviewLayer";
 import { ObjectNode } from "./ObjectNode";
+import { OriginHandle } from "./OriginHandle";
 import { SelectionTransformer } from "./SelectionTransformer";
 import { setStageNode } from "./stageHandle";
 import { useContainerSize } from "./useContainerSize";
@@ -92,8 +93,9 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
   }, []);
 
   const bgImage = useImageElement(getBackgroundSrc(background.assetId));
-  // Attacks that follow the board keep following it while you drag a token.
-  useAttackAnchors(stageOf);
+  // Attacks and objects that follow the board keep following it while you
+  // drag a token — which is the whole point of saying they follow it.
+  useFollowing(stageOf);
 
   // Keep the store's stage size current; fit the plan once, on first measure.
   useEffect(() => {
@@ -301,6 +303,7 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
             />
           )}
           <SelectionTransformer />
+          <OriginHandle />
         </Layer>
       </Stage>
     </div>

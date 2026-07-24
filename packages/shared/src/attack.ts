@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { type Point } from "./transform.js";
+import { type Point, type Transform } from "./transform.js";
+import {
+  FollowSchema,
+  isFollowing,
+  resolveFollow,
+  solveFollow,
+  type Follow,
+} from "./follow.js";
 import { isDeferredTrigger, layoutStepTimeline } from "./timeline.js";
 import {
   AnimSchema,
@@ -128,43 +135,33 @@ export const AttackDefSchema = z.object({
   overrides: z.record(z.string().min(1), StepOverrideSchema).default({}),
   animations: z.array(AnimSchema),
   /**
-   * Pin the attack to the plan's own objects (plan §18.15).
+   * The whole bundle's **origin and direction**, in unit space (plan §18.17).
    *
-   * Both ids are the definition's own **placeholders**. `origin` is the point
-   * the attack hangs from — wherever the placeholder sits in unit space lands on
-   * whatever object fills it. `facing` turns the attack so its second
-   * placeholder points at that object: a frontal aimed from the boss at a
-   * player, re-aimed whenever either of them moves.
+   * `ox`/`oy` are fractions of the placed rectangle, so `0, 0.5` is the middle
+   * of its left edge — where a frontal is cast from. `dir` is the angle the
+   * attack was drawn pointing, in degrees clockwise from +x.
+   *
+   * These belong to the definition rather than to each placement because where a
+   * frontal comes out of the caster is a fact about the ability. A planner who
+   * disagrees can override all three on the instance.
+   */
+  ox: z.number().finite().optional(),
+  oy: z.number().finite().optional(),
+  dir: z.number().finite().optional(),
+  /**
+   * What the attack follows by default (plan §18.17), naming the definition's
+   * own **placeholders** — the holes the plan fills. A frontal ships as
+   * `{ pin: caster, aim: target }` so it arrives already knowing it is cast from
+   * someone at someone, and the planner only says who.
    *
    * Only the placement is taken over. The attack keeps its own size, because a
    * frontal's reach is the ability's, not the distance to whoever it's aimed at.
-   */
-  anchor: z
-    .object({
-      originId: z.string().min(1),
-      facingId: z.string().min(1).optional(),
-    })
-    .optional(),
-  /**
-   * One of the attack's **own** parts kept turned towards another (plan §18.16).
    *
-   * Both ids are the definition's own objects — no plan involvement. `objectId`
-   * is rotated every frame so it stays pointed at `targetId`, keeping whatever
-   * angle it was drawn at: an indicator that tracks the attack's own orb as the
-   * orb's animation flies it across.
-   *
-   * Distinct from `anchor`, which follows the *plan* and moves the whole attack.
-   * A look-at follows the attack itself and turns one piece of it, so the motion
-   * comes from the attack's own animation rather than from a token being dragged.
+   * Replaces §18.15's `anchor` and §18.16's `lookAts`: a definition's *part* now
+   * carries its own `follow` like any other object, so an indicator that tracks
+   * the attack's orb is the same mechanism as the attack tracking the boss.
    */
-  lookAts: z
-    .array(
-      z.object({
-        objectId: z.string().min(1),
-        targetId: z.string().min(1),
-      }),
-    )
-    .default([]),
+  follow: FollowSchema.optional(),
   /** What a plan must (or may) tell this attack (plan §18.4). */
   params: z.array(AttackParamSchema).default([]),
   /** Which internals read which parameter. */
@@ -203,103 +200,69 @@ export function attackSpanMs(def: AttackDef, instance: AttackInstance): number {
 }
 
 /**
- * Where an anchored attack's rectangle goes, given where its anchor objects are
- * *right now* (plan §18.15).
+ * The rectangle a placed attack occupies, with the origin and direction it
+ * actually uses — its own if it has been nudged, else its definition's.
  *
- * Pure, and deliberately so: the same maths runs in the editor's canvas, the
- * viewer's frame loop and the tests, from nothing but two points. Returns
- * `null` when the attack isn't anchored or its anchors aren't on the board,
- * which means "leave the placement alone" — the stored rectangle stands.
- *
- * The rectangle keeps its size. `origin` decides where it hangs and `facing`
- * which way it looks: the offset from the origin placeholder to the facing one,
- * in unit space, is turned to line up with the offset between their objects.
+ * The definition owns these because they describe the ability: a frontal comes
+ * out of the caster's feet whoever places it. The instance can still disagree,
+ * field by field, which is why this is a merge rather than a choice.
  */
-export function anchorPlacement(
+export function attackTransform(
+  def: AttackDef,
+  instance: AttackInstance,
+): Transform {
+  return {
+    x: instance.x,
+    y: instance.y,
+    w: instance.w,
+    h: instance.h,
+    rotation: instance.rotation,
+    ox: instance.ox ?? def.ox,
+    oy: instance.oy ?? def.oy,
+    dir: instance.dir ?? def.dir,
+  };
+}
+
+/**
+ * What a placed attack follows, in the plan's own ids.
+ *
+ * An instance's own `follow` names the plan's objects directly and wins
+ * outright — a planner who has said "pin this copy to the boss" has said
+ * something more specific than the definition could. Otherwise the definition's
+ * follow is read, and its ids are **placeholders**, so they go through `slots`
+ * to become plan objects. A definition that asks to hang off a hole nobody
+ * filled follows nothing, which leaves the attack where it was dropped.
+ */
+export function attackFollow(
+  def: AttackDef,
+  instance: AttackInstance,
+): Follow | undefined {
+  if (isFollowing(instance.follow)) return instance.follow;
+  if (!isFollowing(def.follow)) return undefined;
+  const pin = def.follow?.pin ? instance.slots[def.follow.pin] : undefined;
+  const aim = def.follow?.aim ? instance.slots[def.follow.aim] : undefined;
+  return { ...(pin ? { pin } : {}), ...(aim ? { aim } : {}) };
+}
+
+/**
+ * Where a following attack's rectangle goes, given where the objects it follows
+ * are *right now* (plan §18.17).
+ *
+ * A thin resolve-then-delegate: everything geometric lives in `solveFollow`, so
+ * a whole attack, one of its parts and an ordinary plan object are all placed by
+ * the same maths. Returns `null` for "leave the placement alone" — the stored
+ * rectangle stands.
+ */
+export function attackPlacement(
   def: AttackDef,
   instance: AttackInstance,
   centreOf: (objectId: string) => Point | null,
 ): { x: number; y: number; rotation: number } | null {
-  const anchor = def.anchor;
-  if (!anchor) return null;
-
-  const originObject = instance.slots[anchor.originId];
-  const origin = originObject ? centreOf(originObject) : null;
-  if (!origin) return null;
-
-  const box = defBox(def);
-  const unitCentreOf = (localId: string): Point | null => {
-    const slot = def.objects.find((o) => o.id === localId);
-    // A placeholder's *centre* is what lands on the object's centre.
-    return slot
-      ? { x: slot.base.x + slot.base.w / 2, y: slot.base.y + slot.base.h / 2 }
-      : null;
-  };
-
-  const originUnit = unitCentreOf(anchor.originId);
-  if (!originUnit) return null;
-
-  // How far the origin placeholder sits from the middle of the rectangle, in
-  // the rectangle's own pixels.
-  const half = { x: instance.w / 2, y: instance.h / 2 };
-  const offset = {
-    x: ((originUnit.x - box.cx) / box.hx) * half.x,
-    y: ((originUnit.y - box.cy) / box.hy) * half.y,
-  };
-
-  let rotation = instance.rotation;
-  const facingUnit = anchor.facingId ? unitCentreOf(anchor.facingId) : null;
-  const facingObject = anchor.facingId
-    ? instance.slots[anchor.facingId]
-    : undefined;
-  const facing = facingObject ? centreOf(facingObject) : null;
-  if (facingUnit && facing) {
-    // The direction the definition points, and the direction it must point.
-    const authored = Math.atan2(
-      facingUnit.y - originUnit.y,
-      facingUnit.x - originUnit.x,
-    );
-    const wanted = Math.atan2(facing.y - origin.y, facing.x - origin.x);
-    rotation = ((wanted - authored) * 180) / Math.PI;
-  }
-
-  // Put the origin placeholder on its object: rotate its offset from the centre
-  // and step back along it.
-  const rad = (rotation * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const centre = {
-    x: origin.x - (offset.x * cos - offset.y * sin),
-    y: origin.y - (offset.x * sin + offset.y * cos),
-  };
-  return { x: centre.x - half.x, y: centre.y - half.y, rotation };
-}
-
-/** Direction from `a` to `b`, in degrees (Konva's y-down, clockwise). */
-const angleDeg = (a: Point, b: Point): number =>
-  (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
-
-/**
- * The rotation that keeps one part turned towards another (plan §18.16).
- *
- * Pure, and the whole of the look-at: the aimer keeps the angle it made with its
- * target **at rest**, so however it was drawn pointing at the orb, it stays
- * pointed at the orb as the orb moves. Rotating about the aimer's own origin —
- * which is `from` on both sides — makes this exact rather than iterative: the
- * origin doesn't move under its own rotation, so one pass settles it.
- *
- * `restFrom`/`restTo` are where the two sat when drawn; `liveFrom`/`liveTo`
- * where they are now. The same points in both spaces, so a non-square or turned
- * placement cancels out.
- */
-export function lookAtRotation(
-  restRotation: number,
-  restFrom: Point,
-  restTo: Point,
-  liveFrom: Point,
-  liveTo: Point,
-): number {
-  return restRotation + angleDeg(liveFrom, liveTo) - angleDeg(restFrom, restTo);
+  return solveFollow(
+    attackTransform(def, instance),
+    attackFollow(def, instance),
+    centreOf,
+  );
 }
 
 /** An axis-aligned box: a centre and half-extents. Never zero-sized. */
@@ -606,6 +569,12 @@ function expandInstance(
         groupId: instance.id,
         ...(o.fromId ? { fromId: resolveId(o.fromId) } : {}),
         ...(o.toId ? { toId: resolveId(o.toId) } : {}),
+        // A part that follows something goes through the same choke point as a
+        // tether end, so it can name a sibling part *or* — through a filled
+        // placeholder — one of the plan's own objects (§18.17).
+        ...(isFollowing(o.follow)
+          ? { follow: resolveFollow(o.follow, resolveId) }
+          : {}),
         base: typeof tint === "string" ? { ...placed, tint } : placed,
       };
     });
@@ -851,8 +820,10 @@ export function planToAttackContent(
     name: string;
     params?: AttackParam[];
     bindings?: AttackBindings;
-    anchor?: AttackDef["anchor"];
-    lookAts?: AttackDef["lookAts"];
+    ox?: number;
+    oy?: number;
+    dir?: number;
+    follow?: Follow;
   },
 ): AttackContent {
   const step = plan.steps[0];
@@ -887,10 +858,14 @@ export function planToAttackContent(
     animations: content.animations.map((a) =>
       mapAnim(a, from ?? UNIT_BOX, UNIT_BOX),
     ),
-    // Parameters, bindings and the anchor aren't spatial, so they pass straight
-    // through from the designer rather than round-tripping via the canvas.
-    ...(meta.anchor ? { anchor: meta.anchor } : {}),
-    lookAts: meta.lookAts ?? [],
+    // Parameters and bindings aren't spatial, so they pass straight through from
+    // the designer rather than round-tripping via the canvas. The origin and
+    // direction *are* spatial but already box-relative — `ox`/`oy` are fractions
+    // of the very box being normalised here — so they come through untouched too.
+    ...(meta.ox !== undefined ? { ox: meta.ox } : {}),
+    ...(meta.oy !== undefined ? { oy: meta.oy } : {}),
+    ...(meta.dir !== undefined ? { dir: meta.dir } : {}),
+    ...(isFollowing(meta.follow) ? { follow: meta.follow } : {}),
     params: meta.params ?? [],
     bindings: meta.bindings ?? {
       collideWith: {},

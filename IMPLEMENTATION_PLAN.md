@@ -835,4 +835,51 @@ Why it couldn't reuse the anchor path: an anchor transforms the *group* holding 
 which works because the followed object is outside it. A look-at's target is *inside* that group,
 so moving the group would drag the target too — it has to turn the one part instead. That's also
 why an attack that is both anchored and has a look-at is out of scope for now: the part would live
-in a transformed group, and the look-at reads plan-space. [DONE]
+in a transformed group, and the look-at reads plan-space. [SUPERSEDED by §18.17]
+
+### 18.17 An origin, a direction, and things that follow
+
+§18.15 and §18.16 were the same idea said twice, and both said it through the wrong noun. To hang a
+frontal off the boss you authored a **placeholder** — a ghost object with a size — and the anchor
+read its centre. To aim it you authored a second one. The consequences were all of a piece:
+
+- The point an attack hangs from was not a point you could grab; it was wherever a dashed ring had
+  been dragged, and that ring was simultaneously standing in for a plan object.
+- There was no direction to edit. The authored facing was the angle between two placeholders, which
+  meant it **skewed under a non-square stretch** — unit space scales x and y independently, so
+  widening a frontal quietly re-aimed it.
+- Saying "point that way" cost a second slot, and so a second thing for the planner to fill.
+- Ordinary objects had none of it: rotation was always about the bounding box's centre.
+
+The replacement puts the geometry on the transform, where a photo editor has always put it.
+`TransformSchema` gains **`ox`/`oy`** — the origin, as a *fraction* of the object's own box, so it
+survives every resize and maps out of unit space for free — and **`dir`**, the direction it points,
+as an angle in its own unrotated frame, which is what makes it immune to the stretch. Absent means
+centred and pointing right, so nothing in a saved plan changes and nothing pays for the feature
+until it uses it. Both are dragged on the canvas (`OriginHandle`) as a crosshair and an arrow.
+
+What is left to say is only *who they follow*, which is one field: `follow: { pin, aim }`. `pin`
+puts this thing's origin on that object; `aim` turns its direction towards one. That single field
+replaces `anchor.originId`, `anchor.facingId` and the whole `lookAts` array, and it sits on plan
+objects, on a definition's parts, and on the definition itself. Ids resolve in the **expanded**
+plan's namespace through the very `resolveId` choke point tether ends already use, so a part can
+follow a sibling part or — through a filled placeholder — one of the plan's own objects, with no
+second mechanism for the second case.
+
+`solveFollow` is the whole of the geometry and is pure: **pin, then aim**. The order is not a
+detail — aiming means "at the tank *from where I stand*", so it has to be asked after the pin has
+said where that is. Aiming then turns about the origin, which a rotation cannot move, so the pin
+survives it and one pass settles both. Size is never touched: a frontal's reach is the ability's.
+
+`useFollowing` runs it on GSAP's ticker in **both** the editor and the viewer, in two passes: whole
+attacks first, carried by a correction on their group exactly as §18.15 did (the parts keep one
+truth about their position and this never fights the tween engine), then individual followers,
+measured against the board *as pass one has just left it*. That ordering is what closes §18.16's
+hole — an attack that is both pinned and has an internally-aiming part now works, because the part's
+target is read in the frame the group correction already produced.
+
+Rotation about the origin needed no renderer changes at all. Konva's `Transformer` always turns the
+selection about its bounding box and offers no way to move that, so `ObjectNode` corrects instead:
+it keeps whatever rotation the handle produced and re-derives `x/y` so the origin is the point that
+did not move. The document still says top-left plus degrees, so every renderer, exporter and
+hit-test reads the same three numbers it always did. [DONE]

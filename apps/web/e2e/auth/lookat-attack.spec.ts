@@ -8,12 +8,14 @@ interface KonvaNodeLike {
 }
 
 /**
- * A look-at, end to end (plan §18.16): a part of the attack kept turned towards
- * another part as that part's own animation flies it across.
+ * A part that follows another part, end to end (plan §18.17): one piece of the
+ * attack kept turned towards another as that other piece's own animation flies
+ * it across.
  *
  * No plan object is involved and nothing outside the attack moves — the arrow
- * re-aims purely because the orb is animating, which is exactly what tells this
- * apart from an anchor.
+ * re-aims purely because the orb is animating. It is set the same way an
+ * ordinary object's aim is set, in the properties panel, because after §18.17
+ * there is no separate kind of thing here to configure.
  */
 test("an internal indicator turns to follow the attack's own moving part", async ({
   page,
@@ -30,10 +32,8 @@ test("an internal indicator turns to follow the attack's own moving part", async
   await page.getByTestId("attack-name").fill("Homing Arrow");
 
   await page.getByRole("tab", { name: "Shapes" }).click();
-  // The arrow, drawn at the middle pointing right at the orb.
-  await page.getByRole("button", { name: "Add Beam" }).click();
-  await page.getByTestId("prop-name").fill("arrow");
-  // The orb, off to the right.
+  // The orb first, off to the right — adding a shape selects it, and the arrow
+  // is added last so it is the selection when its aim is set.
   await page.getByRole("button", { name: "Add Soak" }).click();
   await page.getByTestId("prop-name").fill("orb");
   await page.getByTestId("prop-x").fill("800");
@@ -46,10 +46,12 @@ test("an internal indicator turns to follow the attack's own moving part", async
   await page.getByTestId("prop-y").fill("850");
   await page.getByTestId("prop-y").blur();
 
-  // Declare the look-at: the arrow faces the orb.
-  await page.getByRole("button", { name: "Add look-at" }).click();
-  await page.getByLabel("Look-at 0 aimer").selectOption({ label: "arrow" });
-  await page.getByLabel("Look-at 0 target").selectOption({ label: "orb" });
+  // The arrow, drawn at the middle pointing right at the orb, and told to keep
+  // aiming at it — the same two fields any object gets.
+  await page.getByRole("button", { name: "Layout" }).click();
+  await page.getByRole("button", { name: "Add Beam" }).click();
+  await page.getByTestId("prop-name").fill("arrow");
+  await page.getByTestId("prop-follow-aim").selectOption({ label: "orb" });
 
   await page.getByTestId("save-attack").click();
   await expect(page.getByText("Homing Arrow")).toBeVisible();

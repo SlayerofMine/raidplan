@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   ATTACK_AUTHORING_SIZE,
   ATTACK_BOX_ASSET,
-  anchorPlacement,
+  attackFollow,
   attackNaturalMs,
-  lookAtRotation,
+  attackPlacement,
   attackSlots,
   attackSpanMs,
   slotsFilled,
@@ -77,7 +77,6 @@ const makeDef = (over: Partial<AttackDef> = {}): AttackDef => ({
   objects: [defObj("o1")],
   overrides: {},
   animations: [],
-  lookAts: [],
   params: [],
   bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
   ...over,
@@ -670,101 +669,62 @@ describe("expandPlan — placeholders", () => {
   });
 });
 
-describe("lookAtRotation — a part turned towards another", () => {
-  const P = (x: number, y: number) => ({ x, y });
-
-  it("holds still when the target hasn't moved", () => {
-    // Drawn pointing right at the orb; the orb is where it was, so no turn.
-    expect(lookAtRotation(0, P(0, 0), P(10, 0), P(0, 0), P(10, 0))).toBeCloseTo(
-      0,
-    );
-  });
-
-  it("turns by exactly how far the target swung around it", () => {
-    // Orb was to the right, now straight below: a quarter turn clockwise.
-    expect(lookAtRotation(0, P(0, 0), P(10, 0), P(0, 0), P(0, 10))).toBeCloseTo(
-      90,
-    );
-  });
-
-  it("keeps the angle it was drawn at, not just 'points at'", () => {
-    // Drawn 90° off the orb (orb right, aimer pointing down, rest rotation 0).
-    // The orb swings to straight-below; the aimer keeps its 90° offset.
-    const r = lookAtRotation(0, P(0, 0), P(10, 0), P(0, 0), P(-10, 0));
-    expect(r).toBeCloseTo(180);
-  });
-
-  it("adds onto the aimer's own drawn rotation", () => {
-    // Same geometry, but the aimer was drawn already turned 30°.
-    expect(
-      lookAtRotation(30, P(0, 0), P(10, 0), P(0, 0), P(0, 10)),
-    ).toBeCloseTo(120);
-  });
-
-  it("follows the aimer's origin when the aimer itself has moved", () => {
-    // The aimer slid to (5,5); the orb is straight right of it now.
-    expect(lookAtRotation(0, P(0, 0), P(10, 0), P(5, 5), P(20, 5))).toBeCloseTo(
-      0,
-    );
-  });
-});
-
-describe("anchorPlacement — an attack pinned to the board", () => {
-  /** A frontal: it hangs off "boss" and looks towards "target". */
+describe("attackPlacement — an attack that follows the board", () => {
+  /**
+   * A frontal: cast from the middle of its left edge, pointing right, hanging
+   * off the "boss" hole and aimed at the "target" one.
+   *
+   * The origin and direction are the definition's *own* geometry now — two
+   * numbers and an angle — rather than being read off where a pair of ghost
+   * placeholders happened to be dragged. The placeholders remain only for what
+   * they are actually for: holes the plan fills.
+   */
   const frontal = makeDef({
     defaultSize: { w: 200, h: 200 },
     objects: [
-      // The art fills unit space; the two holes sit on the left and right edge.
       defObj("cone"),
-      {
-        id: "boss",
-        type: "placeholder",
-        base: base({ x: -1.1, y: -0.1, w: 0.2, h: 0.2 }),
-      },
-      {
-        id: "target",
-        type: "placeholder",
-        base: base({ x: 0.9, y: -0.1, w: 0.2, h: 0.2 }),
-      },
+      { id: "boss", type: "placeholder", base: base() },
+      { id: "target", type: "placeholder", base: base() },
     ],
-    anchor: { originId: "boss", facingId: "target" },
+    ox: 0,
+    oy: 0.5,
+    dir: 0,
+    follow: { pin: "boss", aim: "target" },
   });
 
   const at =
     (points: Record<string, { x: number; y: number }>) => (id: string) =>
       points[id] ?? null;
 
-  it("leaves an unanchored attack where the plan put it", () => {
-    expect(anchorPlacement(makeDef(), inst(), () => ({ x: 0, y: 0 }))).toBe(
+  it("leaves an attack that follows nothing where the plan put it", () => {
+    expect(attackPlacement(makeDef(), inst(), () => ({ x: 0, y: 0 }))).toBe(
       null,
     );
   });
 
-  it("says nothing when the anchor isn't on the board", () => {
-    // Nothing to follow: the stored rectangle stands rather than snapping to
-    // the origin.
-    expect(anchorPlacement(frontal, inst(), () => null)).toBe(null);
+  it("says nothing when what it follows isn't on the board", () => {
+    // The stored rectangle stands rather than snapping to the origin.
+    expect(attackPlacement(frontal, inst(), () => null)).toBe(null);
     expect(
-      anchorPlacement(frontal, inst({ slots: { boss: "b" } }), () => null),
+      attackPlacement(frontal, inst({ slots: { boss: "b" } }), () => null),
     ).toBe(null);
   });
 
-  it("hangs the attack off its origin object", () => {
-    const placed = anchorPlacement(
+  it("hangs the attack off the object filling its pin hole", () => {
+    const placed = attackPlacement(
       frontal,
-      inst({ slots: { boss: "b" }, w: 200, h: 200 }),
+      inst({ slots: { boss: "b" } }),
       at({ b: { x: 500, y: 500 } }),
     )!;
-    // The origin placeholder sits on the rectangle's left edge, so the
-    // rectangle starts where the boss is.
+    // The origin is the rectangle's left edge, so the rectangle starts there.
     expect(placed.x).toBeCloseTo(500);
     expect(placed.y).toBeCloseTo(400);
   });
 
   it("turns to face its target", () => {
-    const placed = anchorPlacement(
+    const placed = attackPlacement(
       frontal,
-      inst({ slots: { boss: "b", target: "t" }, w: 200, h: 200 }),
+      inst({ slots: { boss: "b", target: "t" } }),
       // The target is straight down from the boss: a quarter turn.
       at({ b: { x: 500, y: 500 }, t: { x: 500, y: 900 } }),
     )!;
@@ -772,17 +732,13 @@ describe("anchorPlacement — an attack pinned to the board", () => {
   });
 
   it("re-aims when the target moves — that's the whole point", () => {
-    const instance = inst({
-      slots: { boss: "b", target: "t" },
-      w: 200,
-      h: 200,
-    });
-    const east = anchorPlacement(
+    const instance = inst({ slots: { boss: "b", target: "t" } });
+    const east = attackPlacement(
       frontal,
       instance,
       at({ b: { x: 500, y: 500 }, t: { x: 900, y: 500 } }),
     )!;
-    const west = anchorPlacement(
+    const west = attackPlacement(
       frontal,
       instance,
       at({ b: { x: 500, y: 500 }, t: { x: 100, y: 500 } }),
@@ -792,31 +748,91 @@ describe("anchorPlacement — an attack pinned to the board", () => {
   });
 
   it("keeps its own size — reach belongs to the ability, not the distance", () => {
-    const near = anchorPlacement(
+    const near = attackPlacement(
       frontal,
-      inst({ slots: { boss: "b", target: "t" }, w: 200, h: 200 }),
+      inst({ slots: { boss: "b", target: "t" } }),
       at({ b: { x: 500, y: 500 }, t: { x: 600, y: 500 } }),
     )!;
-    const far = anchorPlacement(
+    const far = attackPlacement(
       frontal,
-      inst({ slots: { boss: "b", target: "t" }, w: 200, h: 200 }),
+      inst({ slots: { boss: "b", target: "t" } }),
       at({ b: { x: 500, y: 500 }, t: { x: 5000, y: 500 } }),
     )!;
-    // Same rectangle, just aimed: only x/y/rotation are the anchor's business.
     expect(near.x).toBeCloseTo(far.x);
     expect(near.y).toBeCloseTo(far.y);
   });
 
   it("stays hung off the origin however it is turned", () => {
-    const placed = anchorPlacement(
+    const placed = attackPlacement(
       frontal,
-      inst({ slots: { boss: "b", target: "t" }, w: 200, h: 200 }),
+      inst({ slots: { boss: "b", target: "t" } }),
       at({ b: { x: 500, y: 500 }, t: { x: 500, y: 900 } }),
     )!;
-    // A quarter turn about the boss: the rectangle's centre swings round to
-    // sit below him, and the apex stays put.
-    expect(placed.x + 100).toBeCloseTo(500);
-    expect(placed.y + 100).toBeCloseTo(600);
+    // A quarter turn about the boss: the rectangle swings round to sit below
+    // him, and the point it hangs from stays put.
+    expect(placed.rotation).toBeCloseTo(90);
+    // Origin = (x,y) + R(90)·(0·200, 0.5·200) = (x − 100, y) — back on the boss.
+    expect(placed.x - 100).toBeCloseTo(500);
+    expect(placed.y).toBeCloseTo(500);
+  });
+
+  it("an instance's own follow beats the definition's", () => {
+    const placed = attackPlacement(
+      frontal,
+      inst({
+        slots: { boss: "b", target: "t" },
+        follow: { pin: "other" },
+      }),
+      at({
+        b: { x: 500, y: 500 },
+        t: { x: 500, y: 900 },
+        other: { x: 10, y: 10 },
+      }),
+    )!;
+    // Pinned to what the planner said, and not turned, because their follow
+    // said nothing about aiming.
+    expect(placed.x).toBeCloseTo(10);
+    expect(placed.rotation).toBeCloseTo(0);
+  });
+
+  it("an instance's origin overrides the definition's", () => {
+    const placed = attackPlacement(
+      frontal,
+      inst({ slots: { boss: "b" }, ox: 0.5, oy: 0.5 }),
+      at({ b: { x: 500, y: 500 } }),
+    )!;
+    // Hung from the middle now, so the rectangle straddles the boss.
+    expect(placed.x).toBeCloseTo(400);
+    expect(placed.y).toBeCloseTo(400);
+  });
+});
+
+describe("attackFollow — resolving a definition's holes", () => {
+  const frontal = makeDef({ follow: { pin: "boss", aim: "target" } });
+
+  it("maps the definition's placeholder ids through the instance's slots", () => {
+    expect(
+      attackFollow(frontal, inst({ slots: { boss: "b", target: "t" } })),
+    ).toEqual({ pin: "b", aim: "t" });
+  });
+
+  it("drops the half nobody filled rather than following a hole", () => {
+    expect(attackFollow(frontal, inst({ slots: { boss: "b" } }))).toEqual({
+      pin: "b",
+    });
+  });
+
+  it("is undefined when the definition follows nothing", () => {
+    expect(attackFollow(makeDef(), inst())).toBeUndefined();
+  });
+
+  it("takes the instance's own follow as-is — those are plan ids already", () => {
+    expect(
+      attackFollow(
+        frontal,
+        inst({ slots: { boss: "b" }, follow: { aim: "z" } }),
+      ),
+    ).toEqual({ aim: "z" });
   });
 });
 

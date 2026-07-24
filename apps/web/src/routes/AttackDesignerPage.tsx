@@ -6,13 +6,13 @@ import {
   type AttackBindings,
   type AttackDef,
   type AttackParam,
+  type Follow,
 } from "@raidplan/shared";
 import { api } from "../api/client";
 import { TetherButton } from "../editor/TetherButton";
 import { AnimationPanel } from "../editor/AnimationPanel";
 import {
-  AttackAnchorPanel,
-  AttackLookAtsPanel,
+  AttackFollowPanel,
   AttackParamsPanel,
 } from "../editor/AttackParamsPanel";
 import { AttackBoundsOverlay } from "../editor/canvas/AttackBoundsOverlay";
@@ -51,7 +51,6 @@ function blankDef(encounterId: string): AttackDef {
     objects: [],
     overrides: {},
     animations: [],
-    lookAts: [],
     params: [],
     bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
   };
@@ -83,7 +82,7 @@ function AttackDesigner({
   const navigate = useNavigate();
   const selectStep = useEditorStore((s) => s.selectStep);
   const onBase = useEditorStore((s) => s.currentStepIndex === BASE_STEP_INDEX);
-  // The holes this definition leaves, as the anchor panel needs to name them.
+  // The holes this definition leaves, for the follow panel to name.
   const objects = useEditorStore((s) => s.objects);
   const objectIds = useEditorStore((s) => s.objectIds);
   const slots = useMemo(
@@ -100,21 +99,15 @@ function AttackDesigner({
   // Declared parameters and their bindings aren't spatial, so they live beside
   // the canvas rather than in it — and must survive a save untouched.
   const [params, setParams] = useState<AttackParam[]>([]);
-  const [anchor, setAnchor] = useState<AttackDef["anchor"]>(undefined);
-  const [lookAts, setLookAts] = useState<AttackDef["lookAts"]>([]);
-  // Every object the designer has drawn, for the look-at rows to choose between
-  // — placeholders included, since a part may track where a plan object lands.
-  const parts = useMemo(
-    () =>
-      objectIds
-        .map((id) => objects[id])
-        .filter((o) => o !== undefined)
-        .map((o) => ({
-          id: o!.id,
-          label: o!.base.name ?? o!.base.label ?? o!.type,
-        })),
-    [objectIds, objects],
-  );
+  // The whole bundle's origin, direction and what it follows. A *part* that
+  // follows something is set in the properties panel like any other object —
+  // after §18.17 there is no separate look-at to keep here.
+  const [follow, setFollow] = useState<Follow | undefined>(undefined);
+  const [origin, setOrigin] = useState<{
+    ox?: number;
+    oy?: number;
+    dir?: number;
+  }>({});
   const [bindings, setBindings] = useState<AttackBindings>({
     collideWith: {},
     durationMs: {},
@@ -133,8 +126,8 @@ function AttackDesigner({
       setName(d.name);
       setParams(d.params);
       setBindings(d.bindings);
-      setAnchor(d.anchor);
-      setLookAts(d.lookAts);
+      setFollow(d.follow);
+      setOrigin({ ox: d.ox, oy: d.oy, dir: d.dir });
       useEditorStore.getState().loadPlan(defToPlan(d));
       clearHistory();
       useEditorStore.getState().selectStep(BASE_STEP_INDEX);
@@ -162,8 +155,8 @@ function AttackDesigner({
         name: name.trim() || "Attack",
         params,
         bindings,
-        anchor,
-        lookAts,
+        follow,
+        ...origin,
       });
       if (attackId)
         await api.attack.update.mutate({ id: attackId, ...content });
@@ -272,11 +265,14 @@ function AttackDesigner({
           onParamsChange={setParams}
           onBindingsChange={setBindings}
         />
-        <AttackAnchorPanel slots={slots} anchor={anchor} onChange={setAnchor} />
-        <AttackLookAtsPanel
-          objects={parts}
-          lookAts={lookAts}
-          onChange={setLookAts}
+        <AttackFollowPanel
+          slots={slots}
+          follow={follow}
+          ox={origin.ox}
+          oy={origin.oy}
+          dir={origin.dir}
+          onFollowChange={setFollow}
+          onOriginChange={(p) => setOrigin((o) => ({ ...o, ...p }))}
         />
       </div>
       <div style={{ gridArea: "timeline" }} className="flex min-h-0 flex-col">

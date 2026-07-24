@@ -1,5 +1,8 @@
 // Public surface of @raidplan/shared — the contract imported by web and api.
 export * from "./transform.js";
+// Following: an origin pinned to one object and a direction aimed at another
+// (plan §18.17). One solver for plan objects, attack parts and whole attacks.
+export * from "./follow.js";
 export * from "./effects.js";
 export * from "./plan.js";
 export * from "./resolve.js";

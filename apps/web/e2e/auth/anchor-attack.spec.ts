@@ -2,12 +2,12 @@ import { expect, test } from "@playwright/test";
 import { signIn } from "../support/auth";
 
 /**
- * An attack anchored to the board (plan §18.15): a frontal that hangs off one
- * of the plan's objects and turns to face another, re-aimed **per frame** — so
- * dragging the target swings the cone round as you drag, with no step change
- * and no re-render in the loop.
+ * An attack that follows the board (plan §18.17): a frontal whose **origin** is
+ * pinned to one of the plan's objects and whose **direction** is aimed at
+ * another, re-solved **per frame** — so dragging the target swings the cone
+ * round as you drag, with no step change and no re-render in the loop.
  */
-test("an anchored frontal follows the board as its target is dragged", async ({
+test("a pinned frontal follows the board as its target is dragged", async ({
   page,
 }) => {
   await signIn(page);
@@ -32,8 +32,14 @@ test("an anchored frontal follows the board as its target is dragged", async ({
   await page.getByTestId("prop-x").fill("750");
   await page.getByTestId("prop-x").blur();
 
-  await page.getByLabel("Anchor origin").selectOption({ label: "caster" });
-  await page.getByLabel("Anchor facing").selectOption({ label: "target" });
+  // The cone is cast from the middle of its left edge, pointing right — two
+  // numbers and an angle, rather than wherever a ghost object was dragged.
+  await page.getByTestId("attack-follow-ox").fill("0");
+  await page.getByTestId("attack-follow-ox").blur();
+  await page.getByTestId("attack-follow-oy").fill("50");
+  await page.getByTestId("attack-follow-oy").blur();
+  await page.getByTestId("attack-follow-pin").selectOption({ label: "caster" });
+  await page.getByTestId("attack-follow-aim").selectOption({ label: "target" });
   await page.getByTestId("save-attack").click();
   await expect(page.getByText("Aimed Frontal")).toBeVisible();
 
@@ -93,7 +99,7 @@ test("an anchored frontal follows the board as its target is dragged", async ({
   await page.mouse.up();
 
   // Pointing up now, so the strip it used to fill is empty. An attack that
-  // ignored its anchor would still be lying across it.
+  // ignored what it follows would still be lying across it.
   await expect
     .poll(async () => (await rightOfCaster()).equals(aimedRight))
     .toBe(false);

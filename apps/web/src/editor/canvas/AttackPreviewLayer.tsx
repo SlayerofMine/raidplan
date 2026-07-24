@@ -5,8 +5,10 @@ import type { Rect as RectNode } from "konva/lib/shapes/Rect";
 import type { KonvaEventObject } from "konva/lib/Node";
 import type { Group as GroupNode } from "konva/lib/Group";
 import {
+  attackFollow,
   attackGroupId,
   expandPlan,
+  isFollowing,
   resolveObjectState,
   SCHEMA_VERSION,
   type AttackDef,
@@ -82,9 +84,9 @@ function PlacedAttack({
   dimmed: boolean;
 }) {
   const muted = instance.visible === false;
-  // An anchored attack is placed by what it follows; dragging it would be
+  // A following attack is placed by what it follows; dragging it would be
   // arguing with the boss about where he is standing.
-  const anchored = Boolean(def.anchor);
+  const anchored = isFollowing(attackFollow(def, instance));
   const selected = useEditorStore((s) =>
     s.selectedAttackIds.includes(instance.id),
   );

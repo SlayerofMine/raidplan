@@ -46,7 +46,6 @@ const def: AttackDef = {
   ],
   overrides: {},
   animations: [],
-  lookAts: [],
   params: [],
   bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
 };

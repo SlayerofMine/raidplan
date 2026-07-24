@@ -45,7 +45,7 @@ const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   ],
   overrides: {},
   animations: [],
-  lookAts: [],
+
   params: [],
   bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
   ...over,

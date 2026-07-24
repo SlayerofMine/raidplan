@@ -1,7 +1,10 @@
 import { useShallow } from "zustand/react/shallow";
+import { attackFollow } from "@raidplan/shared";
 import type { MechFillStyle, ObjectStyle, PlanObject } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
 import { selectObjectState } from "../store/selectors";
+import { FollowFields } from "./FollowFields";
+import { useFollowChoices } from "./useFollowChoices";
 
 /** Round for display without fighting the user mid-edit. */
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -38,6 +41,8 @@ export function PropertiesPanel() {
   const updateObject = useEditorStore((s) => s.updateObject);
   const updateStyle = useEditorStore((s) => s.updateStyle);
   const setLocked = useEditorStore((s) => s.setLocked);
+  const setFollow = useEditorStore((s) => s.setFollow);
+  const followChoices = useFollowChoices(object?.id);
   const bringForward = useEditorStore((s) => s.bringForward);
   const sendBackward = useEditorStore((s) => s.sendBackward);
   const bringToFront = useEditorStore((s) => s.bringToFront);
@@ -161,6 +166,17 @@ export function PropertiesPanel() {
             />
           </label>
 
+          <FollowFields
+            ox={object.base.ox}
+            oy={object.base.oy}
+            dir={object.base.dir}
+            follow={object.follow}
+            choices={followChoices}
+            testIdPrefix="prop-follow"
+            onOrigin={(p) => updateObject(object.id, p)}
+            onFollow={(next) => setFollow(object.id, next)}
+          />
+
           <StyleControls object={object} updateStyle={updateStyle} />
 
           <label className="flex items-center justify-between gap-2 text-sm">
@@ -232,6 +248,10 @@ function AttackProperties({ instanceId }: { instanceId: string }) {
   const updateAttack = useEditorStore((s) => s.updateAttack);
   const reorderAttack = useEditorStore((s) => s.reorderAttack);
   const attackCount = useEditorStore((s) => s.attacks.length);
+  const def = useEditorStore((s) =>
+    instance ? s.attackDefs[instance.attackId] : undefined,
+  );
+  const followChoices = useFollowChoices();
 
   if (!instance) return null;
   const patch = (p: Parameters<typeof updateAttack>[1]) =>
@@ -276,6 +296,22 @@ function AttackProperties({ instanceId }: { instanceId: string }) {
         step={15}
         value={round(instance.rotation)}
         onChange={(rotation) => patch({ rotation })}
+      />
+
+      {/*
+        Blank fields fall back to the definition's, because that is what this
+        copy is actually using until the planner says otherwise — showing empty
+        boxes would suggest a frontal has no origin.
+      */}
+      <FollowFields
+        ox={instance.ox ?? def?.ox}
+        oy={instance.oy ?? def?.oy}
+        dir={instance.dir ?? def?.dir}
+        follow={def ? attackFollow(def, instance) : instance.follow}
+        choices={followChoices}
+        testIdPrefix="attack-prop-follow"
+        onOrigin={(p) => patch(p)}
+        onFollow={(follow) => patch({ follow })}
       />
 
       <label className="flex items-center justify-between gap-2 text-sm">

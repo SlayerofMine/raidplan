@@ -2,6 +2,7 @@ import { memo, useRef } from "react";
 import { Group, Rect } from "react-konva";
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
 import { useShallow } from "zustand/react/shallow";
+import { rotateAboutPivot } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { selectObjectState } from "../../store/selectors";
 import { useIconSrc } from "../iconSrc";
@@ -94,6 +95,33 @@ export const ObjectNode = memo(function ObjectNode({
     drag.current = null;
   };
 
+  /**
+   * Konva's Transformer always turns the selection about its bounding box's
+   * centre, and offers no way to move that. So the object turns about its own
+   * **origin** by correction: whatever rotation the handle produced is kept, and
+   * `x/y` are re-derived so the origin is the point that didn't move (§18.17).
+   *
+   * Applied during the gesture, not just on release, or the shape would swing
+   * about its middle under the cursor and jump on drop. It is measured from the
+   * *document's* transform each time rather than the last frame's, so repeated
+   * events in one gesture settle on the same answer instead of drifting.
+   *
+   * A resize is left alone — `x/y` then belong to the handle being dragged, and
+   * there is no rotation delta to correct anyway.
+   */
+  const pivotCorrection = (node: KonvaNode) => {
+    if (node.rotation() === rotation) return null;
+    return rotateAboutPivot(
+      { x, y, w, h, rotation, ox: object.base.ox, oy: object.base.oy },
+      node.rotation() - rotation,
+    );
+  };
+
+  const handleTransform = (e: KonvaEventObject<Event>) => {
+    const placed = pivotCorrection(e.target);
+    if (placed) e.target.position({ x: placed.x, y: placed.y });
+  };
+
   /** Konva resizes by scaling; fold that scale back into w/h and reset it. */
   const handleTransformEnd = (e: KonvaEventObject<Event>) => {
     const node = e.target;
@@ -101,9 +129,10 @@ export const ObjectNode = memo(function ObjectNode({
     const scaleY = node.scaleY();
     node.scaleX(1);
     node.scaleY(1);
+    const placed = pivotCorrection(node);
     updateObject(objectId, {
-      x: node.x(),
-      y: node.y(),
+      x: placed?.x ?? node.x(),
+      y: placed?.y ?? node.y(),
       w: Math.max(8, w * scaleX),
       h: Math.max(8, h * scaleY),
       rotation: node.rotation(),
@@ -137,6 +166,7 @@ export const ObjectNode = memo(function ObjectNode({
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
+      onTransform={handleTransform}
       onTransformEnd={handleTransformEnd}
     >
       <ObjectContent

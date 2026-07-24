@@ -31,7 +31,6 @@ const def: AttackDef = {
       easing: "none",
     },
   ],
-  lookAts: [],
   params: [],
   bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
 };

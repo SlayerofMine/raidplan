@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PointSchema, TransformSchema } from "./transform.js";
+import { FollowSchema } from "./follow.js";
 import {
   AnimEffectSchema,
   AnimKindSchema,
@@ -73,6 +74,15 @@ export const PlanObjectSchema = z.object({
    * strand one.
    */
   groupId: z.string().min(1).optional(),
+  /**
+   * What this object follows (plan §18.17): its origin pinned to one object,
+   * its direction aimed at another. Absent means it stays where it's put.
+   *
+   * On an ordinary object, not just an attack, because "this cone starts at the
+   * boss and points at the tank" is a thing a planner wants to say about a shape
+   * they drew, without authoring a definition to say it in.
+   */
+  follow: FollowSchema.optional(),
 });
 export type PlanObject = z.infer<typeof PlanObjectSchema>;
 
@@ -137,8 +147,26 @@ export const AttackInstanceSchema = z.object({
   y: z.number().finite(),
   w: z.number().finite().positive(),
   h: z.number().finite().positive(),
-  /** Degrees clockwise, about the rectangle's centre. */
+  /** Degrees clockwise, about the rectangle's origin. */
   rotation: z.number().finite().default(0),
+  /**
+   * This copy's own origin and direction, overriding the definition's (plan
+   * §18.17). Absent — the normal case — means the definition's, because where an
+   * attack hangs from is a property of the ability, not of one placement of it.
+   * Present when a planner has nudged this particular copy.
+   */
+  ox: z.number().finite().optional(),
+  oy: z.number().finite().optional(),
+  dir: z.number().finite().optional(),
+  /**
+   * What this copy follows, overriding the definition's (plan §18.17).
+   *
+   * The definition says what the attack *is* — a frontal is always cast from
+   * someone — and names its own placeholders. This says which of *this plan's*
+   * objects this copy hangs off, named directly, so a shape can be pinned to the
+   * boss without the definition having declared a hole for him first.
+   */
+  follow: FollowSchema.optional(),
   /**
    * What this copy is called, for the author's benefit. The definition's name is
    * what it *is*; this is which one it is — "north cone" against "south cone" —

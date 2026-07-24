@@ -109,7 +109,6 @@ describe("addAttack — placeholders", () => {
         ],
         overrides: {},
         animations: [],
-        lookAts: [],
         params: [],
         bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
       },

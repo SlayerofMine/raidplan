@@ -5,11 +5,13 @@ import { immer } from "zustand/middleware/immer";
 import {
   attackSlots,
   attackZ,
+  isFollowing,
   resolveObjectState,
   type Anim,
   type AttackDef,
   type AttackInstance,
   type Background,
+  type Follow,
   type ObjectBase,
   type ObjectState,
   type ObjectStyle,
@@ -83,6 +85,12 @@ export interface EditorState extends PlanDoc {
   moveObject: (id: string, x: number, y: number) => void;
   nudgeSelected: (dx: number, dy: number, big?: boolean) => void;
   setLocked: (id: string, locked: boolean) => void;
+  /**
+   * Say what an object follows — its origin pinned to one object, its direction
+   * aimed at another (plan §18.17). Step-independent, like style and lock: what
+   * a thing follows is a fact about the thing, not about the moment.
+   */
+  setFollow: (id: string, follow: Follow | undefined) => void;
   deleteObjects: (ids: string[]) => void;
   deleteSelected: () => void;
   duplicateSelected: () => string[];
@@ -517,6 +525,17 @@ export const useEditorStore = create<EditorState>()(
         set((s) => {
           const object = s.objects[id];
           if (object) object.locked = locked;
+        }),
+
+      setFollow: (id, follow) =>
+        set((s) => {
+          const object = s.objects[id];
+          if (!object) return;
+          // An empty follow is dropped rather than stored: "follows nothing" and
+          // "has no opinion" are the same state, and keeping both would let a
+          // plan disagree with itself about which it meant.
+          if (isFollowing(follow)) object.follow = follow;
+          else delete object.follow;
         }),
 
       deleteObjects: (ids) =>

@@ -4,8 +4,10 @@ import {
   type AttackBindings,
   type AttackParam,
   type AttackParamType,
+  type Follow,
 } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
+import { FollowFields } from "./FollowFields";
 
 /** Stable empty list: defaulting *inside* a selector returns a fresh array
  * every call, which never compares equal and re-renders forever. */
@@ -352,211 +354,60 @@ function SlotChecklist({
 }
 
 /**
- * Pinning the attack to the board (plan §18.15).
+ * What the whole attack follows (plan §18.17).
  *
- * A definition can hang off one of its placeholders and turn to face another —
- * a frontal from the boss at a player. Both are placeholders, because both are
- * objects only the plan knows; this just says which is which.
+ * A definition hangs off one of its placeholders and turns towards another — a
+ * frontal from the boss at a player. Both are placeholders, because both are
+ * objects only the plan knows; this just says which is which, and the planner
+ * fills the holes when they place it.
+ *
+ * The origin is where the bundle hangs *from*, as a fraction of its own
+ * rectangle: `0, 50` is the middle of the left edge, which is where a frontal
+ * comes out of the caster. It used to be inferred from where a ghost
+ * placeholder had been dragged, which meant you could not say "here" without
+ * also saying "and someone stands here".
+ *
+ * There is no look-at panel any more: a *part* that keeps facing another part is
+ * an object that follows something, set in the properties panel like any other.
  */
-export function AttackAnchorPanel({
+export function AttackFollowPanel({
   slots,
-  anchor,
-  onChange,
+  follow,
+  ox,
+  oy,
+  dir,
+  onFollowChange,
+  onOriginChange,
 }: {
   slots: { id: string; label: string }[];
-  anchor: { originId: string; facingId?: string } | undefined;
-  onChange: (next: { originId: string; facingId?: string } | undefined) => void;
+  follow: Follow | undefined;
+  ox: number | undefined;
+  oy: number | undefined;
+  dir: number | undefined;
+  onFollowChange: (next: Follow | undefined) => void;
+  onOriginChange: (patch: { ox?: number; oy?: number; dir?: number }) => void;
 }) {
   return (
     <section
       className="border-t border-panelborder p-3"
-      data-testid="attack-anchor-panel"
+      data-testid="attack-follow-panel"
     >
-      <h2 className="mb-2 text-sm font-semibold text-neutral-300">Anchor</h2>
-      {slots.length === 0 ? (
-        <p data-testid="anchor-needs-slot" className="text-xs text-neutral-500">
-          Add a slot first — an attack follows one of the plan&apos;s objects,
-          and a slot is how it asks for one.
-        </p>
-      ) : (
-        <>
-          <p className="mb-2 text-xs text-neutral-500">
-            Placed copies follow these instead of sitting where they were
-            dropped, and re-aim whenever either one moves.
-          </p>
-          <label className="flex items-center gap-1 text-xs text-neutral-400">
-            hangs off
-            <select
-              aria-label="Anchor origin"
-              value={anchor?.originId ?? ""}
-              onChange={(e) =>
-                onChange(
-                  e.target.value
-                    ? {
-                        originId: e.target.value,
-                        ...(anchor?.facingId
-                          ? { facingId: anchor.facingId }
-                          : {}),
-                      }
-                    : undefined,
-                )
-              }
-              className={FIELD}
-            >
-              <option value="">nothing — stays where it&apos;s put</option>
-              {slots.map((slot) => (
-                <option key={slot.id} value={slot.id}>
-                  {slot.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {anchor && (
-            <label className="mt-1 flex items-center gap-1 text-xs text-neutral-400">
-              and faces
-              <select
-                aria-label="Anchor facing"
-                value={anchor.facingId ?? ""}
-                onChange={(e) =>
-                  onChange({
-                    originId: anchor.originId,
-                    ...(e.target.value ? { facingId: e.target.value } : {}),
-                  })
-                }
-                className={FIELD}
-              >
-                <option value="">nothing — keeps its own rotation</option>
-                {slots
-                  .filter((slot) => slot.id !== anchor.originId)
-                  .map((slot) => (
-                    <option key={slot.id} value={slot.id}>
-                      {slot.label}
-                    </option>
-                  ))}
-              </select>
-            </label>
-          )}
-        </>
-      )}
-    </section>
-  );
-}
-
-/**
- * Parts that keep facing other parts (plan §18.16).
- *
- * Purely internal — both ends are the attack's own objects — so it needs no
- * slot and no plan. Each row turns one object to keep pointing at another as the
- * attack animates.
- */
-export function AttackLookAtsPanel({
-  objects,
-  lookAts,
-  onChange,
-}: {
-  objects: { id: string; label: string }[];
-  lookAts: { objectId: string; targetId: string }[];
-  onChange: (next: { objectId: string; targetId: string }[]) => void;
-}) {
-  const labelOf = (id: string) => objects.find((o) => o.id === id)?.label ?? id;
-
-  const add = () => {
-    const first = objects[0]?.id;
-    const second = objects.find((o) => o.id !== first)?.id;
-    if (!first || !second) return;
-    onChange([...lookAts, { objectId: first, targetId: second }]);
-  };
-
-  const setRow = (
-    index: number,
-    patch: Partial<{ objectId: string; targetId: string }>,
-  ) =>
-    onChange(
-      lookAts.map((row, i) => (i === index ? { ...row, ...patch } : row)),
-    );
-
-  return (
-    <section
-      className="border-t border-panelborder p-3"
-      data-testid="attack-lookats-panel"
-    >
-      <h2 className="mb-2 text-sm font-semibold text-neutral-300">Look-at</h2>
-      {objects.length < 2 ? (
-        <p
-          data-testid="lookat-needs-parts"
-          className="text-xs text-neutral-500"
-        >
-          Draw at least two objects — a look-at turns one to keep facing
-          another.
-        </p>
-      ) : (
-        <>
-          <p className="mb-2 text-xs text-neutral-500">
-            Keeps one part pointed at another as this attack&apos;s own
-            animation moves it. No plan involved.
-          </p>
-          <ul className="mb-2 flex flex-col gap-2" data-testid="lookat-list">
-            {lookAts.map((row, index) => (
-              <li
-                key={index}
-                className="flex flex-col gap-1 rounded border border-panelborder p-2"
-              >
-                <div className="flex items-center gap-1 text-xs text-neutral-400">
-                  <select
-                    aria-label={`Look-at ${index} aimer`}
-                    value={row.objectId}
-                    onChange={(e) =>
-                      setRow(index, { objectId: e.target.value })
-                    }
-                    className={FIELD}
-                  >
-                    {objects.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                  faces
-                  <select
-                    aria-label={`Look-at ${index} target`}
-                    value={row.targetId}
-                    onChange={(e) =>
-                      setRow(index, { targetId: e.target.value })
-                    }
-                    className={FIELD}
-                  >
-                    {objects
-                      .filter((o) => o.id !== row.objectId)
-                      .map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.label}
-                        </option>
-                      ))}
-                  </select>
-                  <button
-                    type="button"
-                    aria-label={`Remove look-at ${labelOf(row.objectId)}`}
-                    onClick={() =>
-                      onChange(lookAts.filter((_, i) => i !== index))
-                    }
-                    className="ml-auto rounded border border-panelborder px-1.5 py-0.5 text-amber-400 hover:border-amber-400"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            aria-label="Add look-at"
-            onClick={add}
-            className="rounded border border-panelborder px-2 py-0.5 text-xs hover:border-accent"
-          >
-            Add look-at
-          </button>
-        </>
-      )}
+      <h2 className="mb-2 text-sm font-semibold text-neutral-300">Follows</h2>
+      <p className="mb-2 text-xs text-neutral-500">
+        Placed copies hang off these instead of sitting where they were dropped,
+        and re-aim whenever either one moves. Add a slot to offer the planner a
+        hole to fill.
+      </p>
+      <FollowFields
+        ox={ox}
+        oy={oy}
+        dir={dir}
+        follow={follow}
+        choices={slots}
+        testIdPrefix="attack-follow"
+        onOrigin={onOriginChange}
+        onFollow={onFollowChange}
+      />
     </section>
   );
 }

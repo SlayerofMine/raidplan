@@ -116,7 +116,6 @@ const def: AttackDef = {
     },
   ],
   overrides: { cone: { x: 0.5, y: -1 } },
-  lookAts: [],
   animations: [
     {
       id: "slide",

@@ -4,6 +4,7 @@ import {
   AnimSchema,
   AttackBindingsSchema,
   AttackParamSchema,
+  FollowSchema,
   PlanObjectSchema,
   StepOverrideSchema,
 } from "@raidplan/shared";
@@ -34,20 +35,10 @@ const attackContent = {
   objects: z.array(PlanObjectSchema),
   overrides: z.record(z.string().min(1), StepOverrideSchema).default({}),
   animations: z.array(AnimSchema),
-  anchor: z
-    .object({
-      originId: z.string().min(1),
-      facingId: z.string().min(1).optional(),
-    })
-    .optional(),
-  lookAts: z
-    .array(
-      z.object({
-        objectId: z.string().min(1),
-        targetId: z.string().min(1),
-      }),
-    )
-    .default([]),
+  ox: z.number().finite().optional(),
+  oy: z.number().finite().optional(),
+  dir: z.number().finite().optional(),
+  follow: FollowSchema.optional(),
   params: z.array(AttackParamSchema).default([]),
   bindings: AttackBindingsSchema,
 };
