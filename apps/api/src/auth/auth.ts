@@ -34,6 +34,45 @@ export interface AuthDeps {
 
 export type Auth = ReturnType<typeof createAuth>;
 
+/**
+ * The provider's identity gate, extracted from the better-auth `getUserInfo`
+ * hook so it can be exercised directly instead of only through a full OAuth
+ * callback.
+ *
+ * Verify the Discord access token, refuse anyone who isn't on the server (or
+ * when Discord is unreachable), and project the verified identity onto our
+ * domain tables while we still know their role. Returning `null` refuses the
+ * login outright — no user row, no session.
+ */
+export async function discordUserInfo(
+  { db, config, fetchImpl }: AuthDeps,
+  accessToken: string,
+) {
+  const identity = await verifyDiscordIdentity({
+    accessToken,
+    guildId: config.DISCORD_GUILD_ID!,
+    roleMapping: config.roleMapping,
+    ...(fetchImpl ? { fetchImpl } : {}),
+  });
+  // Not on the server (or Discord unreachable) → no login at all.
+  if (!identity) return null;
+
+  // Project the verified identity onto our domain tables now, while we still
+  // know their role. better-auth owns `user`; this owns `users`.
+  syncDomainUser(db, config, identity);
+
+  return {
+    user: {
+      id: identity.discordId,
+      name: identity.name,
+      email: identity.email,
+      emailVerified: false,
+      image: identity.image,
+    },
+    data: { id: identity.discordId },
+  };
+}
+
 export function createAuth({ db, config, fetchImpl }: AuthDeps) {
   if (!config.authEnabled) {
     throw new Error("createAuth called without Discord/session config");
@@ -65,31 +104,11 @@ export function createAuth({ db, config, fetchImpl }: AuthDeps) {
         // our server?" — without listing every server they belong to.
         disableDefaultScope: true,
         scope: ["identify", "guilds.members.read"],
-        getUserInfo: async (token) => {
-          const identity = await verifyDiscordIdentity({
-            accessToken: token.accessToken!,
-            guildId: config.DISCORD_GUILD_ID!,
-            roleMapping: config.roleMapping,
-            ...(fetchImpl ? { fetchImpl } : {}),
-          });
-          // Not on the server (or Discord unreachable) → no login at all.
-          if (!identity) return null;
-
-          // Project the verified identity onto our domain tables now, while we
-          // still know their role. better-auth owns `user`; this owns `users`.
-          syncDomainUser(db, config, identity);
-
-          return {
-            user: {
-              id: identity.discordId,
-              name: identity.name,
-              email: identity.email,
-              emailVerified: false,
-              image: identity.image,
-            },
-            data: { id: identity.discordId },
-          };
-        },
+        getUserInfo: (token) =>
+          discordUserInfo(
+            { db, config, ...(fetchImpl ? { fetchImpl } : {}) },
+            token.accessToken!,
+          ),
       },
     },
     session: {
