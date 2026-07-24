@@ -146,3 +146,33 @@ export function pinTo<T extends Pivoted>(t: T, at: Point): T {
   const pivot = pivotPoint(t);
   return { ...t, x: t.x + (at.x - pivot.x), y: t.y + (at.y - pivot.y) };
 }
+
+/**
+ * Drag the origin handle of a **pinned** object to `pointer`, without letting
+ * the origin leave the attach point (plan §18.17).
+ *
+ * When a thing's origin is welded to another object, chasing the crosshair with
+ * the cursor would tear the origin off the attach point and strand it in space.
+ * So the handle stays put and the *body slides the opposite way* instead: grab
+ * the origin, pull right, and the object walks left out from under a fixed pin.
+ *
+ * Returned as a new `x/y` plus the `ox/oy` that keep the origin exactly where it
+ * was — {@link pivotPoint} of the result is the same point it started on, so a
+ * re-pin the next frame is a no-op and the crosshair never jumps. The box moves
+ * by the pointer's offset from that origin, negated; the fraction is read off
+ * the pointer, which is why it equals a plain {@link pivotFraction} of `pointer`
+ * (translating the box by that same offset cancels out of the maths).
+ */
+export function slidePinnedOrigin(
+  t: Pivoted,
+  pointer: Point,
+): { x: number; y: number; ox: number; oy: number } {
+  const anchor = pivotPoint(t);
+  const { ox, oy } = pivotFraction(t, pointer);
+  return {
+    x: t.x - (pointer.x - anchor.x),
+    y: t.y - (pointer.y - anchor.y),
+    ox,
+    oy,
+  };
+}

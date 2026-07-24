@@ -116,6 +116,11 @@ test.describe("selection & movement", () => {
     const box = (await page.getByTestId("canvas-container").boundingBox())!;
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
+    // Clear the selection first: a selected token shows its origin crosshair
+    // right at its centre (plan §18.17), and grabbing dead-centre would drag the
+    // origin, not the token. Deselected, the same press lands on the body, which
+    // selects and drags it — the gesture a planner actually makes.
+    await page.mouse.click(box.x + 6, box.y + 6);
     await page.mouse.move(cx, cy);
     await page.mouse.down();
     await page.mouse.move(cx + 120, cy + 80, { steps: 8 });

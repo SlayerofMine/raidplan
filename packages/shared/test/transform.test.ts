@@ -7,6 +7,7 @@ import {
   pivotFraction,
   pivotPoint,
   rotateAboutPivot,
+  slidePinnedOrigin,
   type Pivoted,
 } from "../src/transform.js";
 
@@ -140,6 +141,54 @@ describe("pinTo", () => {
     const p = pivotPoint(moved);
     near(p.x, 300);
     near(p.y, -100);
+  });
+});
+
+describe("slidePinnedOrigin", () => {
+  it("leaves the origin exactly on the attach point", () => {
+    // Whatever the pointer does, the origin must not budge — that is the whole
+    // point of a pinned object.
+    for (const t of [
+      box({ ox: 0.5, oy: 0.5, x: 30, y: -15 }),
+      box({ ox: 0, oy: 1, x: 5, y: 7, rotation: 25 }),
+      box({ ox: -0.3, oy: 0.4, x: -40, y: 60, rotation: -80 }),
+    ]) {
+      const before = pivotPoint(t);
+      for (const pointer of [{ x: 200, y: 90 }, { x: -50, y: -120 }, before]) {
+        const after = pivotPoint({ ...t, ...slidePinnedOrigin(t, pointer) });
+        near(after.x, before.x);
+        near(after.y, before.y);
+      }
+    }
+  });
+
+  it("slides the body the opposite way to the pointer's pull", () => {
+    const t = box({ ox: 0.5, oy: 0.5 }); // origin at (50, 20)
+    // Pull the handle 30 right and 10 down of the origin…
+    const slid = slidePinnedOrigin(t, { x: 80, y: 30 });
+    // …and the box walks 30 left and 10 up out from under it.
+    near(slid.x, -30);
+    near(slid.y, -10);
+  });
+
+  it("is a no-op when the pointer is already on the origin", () => {
+    const t = box({ ox: 0.25, oy: 0.75, x: 12, y: -8, rotation: 37 });
+    const slid = slidePinnedOrigin(t, pivotPoint(t));
+    near(slid.x, t.x);
+    near(slid.y, t.y);
+    near(slid.ox, 0.25);
+    near(slid.oy, 0.75);
+  });
+
+  it("reads the new fraction straight off the pointer", () => {
+    // The returned ox/oy are where the pointer lands in the box, so the crosshair
+    // the planner sees follows the same maths the free-origin drag uses.
+    const t = box({ ox: 0.5, oy: 0.5, x: 40, y: 40, rotation: 18 });
+    const pointer = { x: 130, y: 5 };
+    const slid = slidePinnedOrigin(t, pointer);
+    const fraction = pivotFraction(t, pointer);
+    near(slid.ox, fraction.ox);
+    near(slid.oy, fraction.oy);
   });
 });
 
