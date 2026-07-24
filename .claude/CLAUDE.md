@@ -7,7 +7,7 @@
 
 ## Codebase Intelligence for raidplan (Repowise)
 
-Indexed by [Repowise](https://repowise.dev). Last indexed: 2026-07-24 (commit 1484ba2)
+Indexed by [Repowise](https://repowise.dev). Last indexed: 2026-07-24 (commit 5426ef0). Confidence: 100%.
 The MCP tools below serve pre-verified docs, symbols, history, and health from that index. Every response carries `_meta` freshness fields; a `stale_warning` appears only when a file the response actually serves changed after indexing — silence means current.
 
 ### How to work in this repo
@@ -29,9 +29,9 @@ The MCP tools below serve pre-verified docs, symbols, history, and health from t
 | Tool                                                       | When and why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `get_answer(question)`                                     | First call for any how / where / why question. `confidence: "high"` or `grounding: "extracted"` is content-grounded — cite it directly. When the question names an indexed symbol, `symbol_bodies` carries its full live body (skip the `get_symbol` follow-up). Low confidence returns `best_guesses` with one-line justifications plus `code_rationale` (rationale comments mined live from candidate source).                                                                                                   |
-| `get_context(targets=[...])`                               | Triage card for files/modules/symbols: summary, signatures, `symbol_id`s, `hotspot` bit. File targets auto-serve a `verified` skeleton (every signature at a fraction of a full Read); `mostly_full` marks files where Read costs little more. Batch targets in one call. Opt-in blocks: `include=["callers"                                                                                                                                                                                                       | "callees"     | "ownership"            | "decisions"                                                    | "metrics"]`. |
+| `get_context(targets=[...])`                               | Triage card for files/modules/symbols: summary, signatures, `symbol_id`s, `hotspot` bit. File targets auto-serve a `verified` skeleton (every signature at a fraction of a full Read); `mostly_full` marks files where Read costs little more. Batch targets in one call. Opt-in blocks: `include=["callers"                                                                                                                                                                                                       | "callees"     | "ownership"            | "decisions"                                                                                                                                 | "metrics"]`. |
 | `get_symbol(id)`                                           | One verified body: `"path.py::Name"` (indexed symbol), `"path.py:140-180"` (live range read), or `"repowise#<hex>"` (omission ref). Source arrives in Read's numbered format — treat it as an already-performed Read. `truncated` responses carry a `continuation` naming the exact next range; ambiguous ids return every match in `candidates`. Index misses fall back to live-grep `fallback_lines`.                                                                                                            |
-| `search_codebase(query)`                                   | Hybrid search, auto-routed by query shape: identifier → symbol hits (pipe `symbol_id` into `get_symbol`), path → file pages, prose → wiki-semantic. Force with `mode=symbol                                                                                                                                                                                                                                                                                                                                        | path          | concept                | hybrid`. Verify concept hits carrying `search_method: "bm25"`. |
+| `search_codebase(query)`                                   | Hybrid search, auto-routed by query shape: identifier → symbol hits (pipe `symbol_id` into `get_symbol`), path → file pages, prose → wiki-semantic. Force with `mode=symbol                                                                                                                                                                                                                                                                                                                                        | path          | concept                | hybrid`. Concept hits carry a `sources`list; a hit whose sources are`[fts]` only is a keyword match with no semantic agreement — verify it. |
 | `get_why(query, targets?)`                                 | Why the code is shaped this way: decision records with evidence and supersession lineage, falling back to git archaeology and `code_rationale` comments. Call before refactors or pattern divergences.                                                                                                                                                                                                                                                                                                             |
 | `get_risk(targets, changed_files?)`                        | What history says about touching these files: churn, owners, co-change partners, blast radius. PR mode (`changed_files`) leads with a `directive` block — read `will_break` / `missing_cochanges` / `missing_tests` / `tests_to_run` first. `tests_to_run` is coverage-backed (the tests the per-test map proves exercise the changed files); empty means unknown, never no tests. To score a whole commit or diff range instead, use `get_change_risk`.                                                           |
 | `get_change_risk(revspec, extensions?, exclude_patterns?)` | Pre-merge defect score for a whole commit or `base..head` range, computed from its diff shape on the live checkout (no index, no LLM). Lead with `risk_percentile` (this change ranked against sampled recent commits), summarized by `review_priority` and `classification`; `score` / `probability` / `level` are the corpus-calibrated fallback. Distinct from `get_risk`, which scores indexed files by path. A `warning` field flags an empty diff (bad revspec or over-tight extension / exclusion filters). |
@@ -40,6 +40,43 @@ The MCP tools below serve pre-verified docs, symbols, history, and health from t
 | `get_overview()`                                           | Architecture map + tool recipes. Call once, first, in an unfamiliar repo; skip it after that.                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 **Compose them:** low-confidence `get_answer` → Read `best_guesses[0].file`; `get_context` shows `hotspot: true` → `get_risk` before editing; `decision_records` titles → `get_why(targets=[...])`; PR review → `get_risk(targets, changed_files)` and read `directive` first. A `tombstone` error means the file moved — follow `successor_paths`.
+
+### Architecture
+
+**Files:** 275 | **Lines:** 34805 | **Monorepo:** 3 packages
+raidplan is a multi-package typescript codebase of 275 files, split across 3 packages. Execution starts at apps/api/src/app.ts, apps/api/src/server.ts, apps/web/src/App.tsx and 2 other entry points. Start here when reading the codebase. Ranked by PageRank over the import graph: the files most of the codebase ultimately depends on.
+
+### Key modules
+
+- `packages/shared/src` — packages/shared/src
+  **Language:** typescript | **Files:** 12 | **Public symbols:** 97 / 141
+  Covers the 12 source files in…
+- `apps/web/src/editor` — apps/web/src/editor
+  **Language:** typescript | **Files:** 32 | **Public symbols:** 76 / 124
+  Covers the 32 source files in…
+- `apps/api/src/db` — apps/api/src/db · apps/api/src/encounters
+  **Language:** typescript | **Files:** 6 | **Public symbols:** 19 / 25
+  Covers the 6 source files…
+- `apps/web/src/store` — apps/web/src/store · apps/web/src/ui
+  **Language:** typescript | **Files:** 9 | **Public symbols:** 32 / 53
+  Covers the 9 source files in 2…
+- `apps/web/src/editor/canvas` — apps/web/src/editor/canvas
+  **Language:** typescript | **Files:** 16 | **Public symbols:** 40 / 70
+  Covers the 16 source files in…
+- `apps/api/src/icons` — apps/api/src/icons
+  **Language:** typescript | **Files:** 14 | **Public symbols:** 48 / 60
+  Covers the 14 source files in apps/api/src/icons
+- `apps/api/src/jobs` — apps/api/src/jobs · apps/api/src/middleware · apps/api/src/og · apps/api/src/plans · apps/api/src/trpc · apps/api/src/uploads
+  **Language:**…
+- `apps/api/src` — apps/api/src · apps/api/src/attacks · apps/api/src/auth
+  **Language:** typescript | **Files:** 11 | **Public symbols:** 46 / 52
+  Covers the…
+- `apps/web/src` — apps/web/src · apps/web/src/anim
+  **Language:** typescript | **Files:** 12 | **Public symbols:** 34 / 45
+  Covers the 12 source files in 2…
+- `apps/web/src/api` — apps/web/src/api · apps/web/src/routes
+  **Language:** typescript | **Files:** 11 | **Public symbols:** 25 / 42
+  Covers the 11 source files in…
 
 ### Entry points
 
@@ -50,23 +87,23 @@ The MCP tools below serve pre-verified docs, symbols, history, and health from t
 
 ### Files that need care (bug-fix history first, then churn — check `get_risk` before editing)
 
-- `apps/web/src/editor/canvas/ObjectNode.tsx` — 4 bug fixes, last fix yesterday (bug magnet); 15 commits/90d
-- `apps/web/test/anim/attackCollision.test.ts` — 3 bug fixes, last fix yesterday; 6 commits/90d
-- `packages/shared/test/attack.test.ts` — 3 bug fixes, last fix yesterday; 16 commits/90d
-- `packages/shared/src/attack.ts` — 3 bug fixes, last fix yesterday; 16 commits/90d
-- `apps/web/test/anim/attackPlayback.test.ts` — 3 bug fixes, last fix yesterday; 8 commits/90d
+- `apps/web/src/editor/canvas/ObjectNode.tsx` — 4 bug fixes, last fix 2 days ago (bug magnet); 15 commits/90d
+- `apps/web/test/anim/attackCollision.test.ts` — 3 bug fixes, last fix 2 days ago; 6 commits/90d
+- `packages/shared/test/attack.test.ts` — 3 bug fixes, last fix 2 days ago; 16 commits/90d
+- `packages/shared/src/attack.ts` — 3 bug fixes, last fix 2 days ago; 16 commits/90d
+- `apps/web/test/anim/attackPlayback.test.ts` — 3 bug fixes, last fix 2 days ago; 8 commits/90d
 
 ### Code health
 
-Three co-equal signals: defect risk 8.57/10 avg, hotspot health 6.64/10 (stable), worst `apps/web/src/anim/usePlayback.ts` at 3.09/10 · maintainability 9.37/10 · performance risk 2 open static I/O-in-loop / N+1 findings. Detail: `get_health()`.
+Three co-equal signals: defect risk 8.56/10 avg, hotspot health 6.62/10 (stable), worst `apps/web/src/anim/usePlayback.ts` at 3.09/10 · maintainability 9.38/10 · performance risk 2 open static I/O-in-loop / N+1 findings. Detail: `get_health()`.
 
 Critical files:
 
 - `apps/api/src/db/schema.ts` — untested hotspot — impact −2.0
-- `apps/web/src/store/editorStore.ts` — function hotspot (immer callback) — impact −1.4
-- `apps/web/src/editor/AttacksPanel.tsx` — change entropy — impact −1.3
-- `apps/api/test/attacks/attacksRepo.test.ts` — hidden coupling — impact −1.3
-- `apps/api/src/app.ts` — change entropy — impact −1.2
+- `apps/web/test/anim/attackCollision.test.ts` — prior defect — impact −1.6
+- `apps/web/src/anim/usePlayback.ts` — prior defect — impact −1.5
+- `apps/api/src/app.ts` — change entropy — impact −1.4
+- `apps/web/src/store/editorStore.ts` — change entropy — impact −1.4
 
 ### Commands
 

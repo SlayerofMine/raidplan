@@ -1,9 +1,14 @@
 {
   "mcpServers": {
     "repowise": {
-      "command": "repowise",
-      "args": ["mcp", "--transport", "stdio"],
-      "description": "repowise: codebase intelligence — docs, graph, git signals, dead code, decisions"
+      "command": "/home/william/repowise/.venv/bin/repowise",
+      "args": [
+        "mcp",
+        "/home/william/repowise/raidplan",
+        "--transport",
+        "stdio"
+      ],
+      "description": "repowise: codebase intelligence \u2014 docs, graph, git signals, dead code, decisions"
     }
   }
 }
