@@ -12,6 +12,7 @@
     "dev:auth": "DEV_AUTH=1 pnpm dev",
     "build": "pnpm -r --if-present build",
     "test": "pnpm -r --if-present test",
+    "coverage": "vitest run --coverage",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@vitest/coverage-v8": "^2.1.8",
     "eslint": "^9.17.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.16",
@@ -28,7 +30,8 @@
     "lint-staged": "^15.3.0",
     "prettier": "^3.4.2",
     "typescript": "^5.7.2",
-    "typescript-eslint": "^8.19.0"
+    "typescript-eslint": "^8.19.0",
+    "vitest": "^2.1.8"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
