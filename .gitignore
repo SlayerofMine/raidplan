@@ -37,3 +37,4 @@ apps/api/data/icons/*
 # repowise index — regenerable, ~12M
 .repowise/
 .claude/settings.local.json
+.vscode/extensions.json

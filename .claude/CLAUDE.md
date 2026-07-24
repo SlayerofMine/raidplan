@@ -7,7 +7,7 @@
 
 ## Codebase Intelligence for raidplan (Repowise)
 
-Indexed by [Repowise](https://repowise.dev). Last indexed: 2026-07-23 (commit ba9245e)
+Indexed by [Repowise](https://repowise.dev). Last indexed: 2026-07-24 (commit 1484ba2)
 The MCP tools below serve pre-verified docs, symbols, history, and health from that index. Every response carries `_meta` freshness fields; a `stale_warning` appears only when a file the response actually serves changed after indexing — silence means current.
 
 ### How to work in this repo
@@ -50,22 +50,22 @@ The MCP tools below serve pre-verified docs, symbols, history, and health from t
 
 ### Files that need care (bug-fix history first, then churn — check `get_risk` before editing)
 
-- `apps/web/src/editor/canvas/ObjectNode.tsx` — 4 bug fixes, last fix yesterday (bug magnet); 14 commits/90d
-- `apps/web/test/anim/attackCollision.test.ts` — 3 bug fixes, last fix yesterday; 5 commits/90d
-- `packages/shared/test/attack.test.ts` — 3 bug fixes, last fix yesterday; 15 commits/90d
-- `packages/shared/src/attack.ts` — 3 bug fixes, last fix yesterday; 15 commits/90d
-- `apps/web/test/anim/attackPlayback.test.ts` — 3 bug fixes, last fix yesterday; 7 commits/90d
+- `apps/web/src/editor/canvas/ObjectNode.tsx` — 4 bug fixes, last fix yesterday (bug magnet); 15 commits/90d
+- `apps/web/test/anim/attackCollision.test.ts` — 3 bug fixes, last fix yesterday; 6 commits/90d
+- `packages/shared/test/attack.test.ts` — 3 bug fixes, last fix yesterday; 16 commits/90d
+- `packages/shared/src/attack.ts` — 3 bug fixes, last fix yesterday; 16 commits/90d
+- `apps/web/test/anim/attackPlayback.test.ts` — 3 bug fixes, last fix yesterday; 8 commits/90d
 
 ### Code health
 
-Three co-equal signals: defect risk 8.56/10 avg, hotspot health 6.51/10 (stable), worst `apps/web/src/anim/usePlayback.ts` at 3.09/10 · maintainability 9.37/10 · performance risk 2 open static I/O-in-loop / N+1 findings. Detail: `get_health()`.
+Three co-equal signals: defect risk 8.57/10 avg, hotspot health 6.64/10 (stable), worst `apps/web/src/anim/usePlayback.ts` at 3.09/10 · maintainability 9.37/10 · performance risk 2 open static I/O-in-loop / N+1 findings. Detail: `get_health()`.
 
 Critical files:
 
 - `apps/api/src/db/schema.ts` — untested hotspot — impact −2.0
-- `apps/web/test/anim/attackCollision.test.ts` — prior defect — impact −2.0
+- `apps/web/src/store/editorStore.ts` — function hotspot (immer callback) — impact −1.4
 - `apps/web/src/editor/AttacksPanel.tsx` — change entropy — impact −1.3
-- `packages/shared/src/plan.ts` — change entropy — impact −1.3
+- `apps/api/test/attacks/attacksRepo.test.ts` — hidden coupling — impact −1.3
 - `apps/api/src/app.ts` — change entropy — impact −1.2
 
 ### Commands
