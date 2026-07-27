@@ -68,6 +68,11 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
     () => boardStack({ objects, objectIds, attacks }),
     [objects, objectIds, attacks],
   );
+  // Read here rather than inside `SelectionTransformer`, so attaching the
+  // handles happens in the same render that creates the nodes they attach to.
+  // See the note on that component.
+  const selectedIds = useEditorStore((s) => s.selectedIds);
+  const selectedAttackIds = useEditorStore((s) => s.selectedAttackIds);
   const view = useEditorStore((s) => s.view);
   const snapEnabled = useEditorStore((s) => s.snapEnabled);
   const gridSize = useEditorStore((s) => s.gridSize);
@@ -302,7 +307,12 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
               listening={false}
             />
           )}
-          <SelectionTransformer />
+          <SelectionTransformer
+            selectedIds={selectedIds}
+            selectedAttackIds={selectedAttackIds}
+            attacks={attacks}
+            objectIds={objectIds}
+          />
           <OriginHandle />
         </Layer>
       </Stage>

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Transformer } from "react-konva";
+import type { AttackInstance } from "@raidplan/shared";
 import type { Node as KonvaNode } from "konva/lib/Node";
 import type { Transformer as TransformerNode } from "konva/lib/shapes/Transformer";
 import { useEditorStore } from "../../store/editorStore";
@@ -13,13 +14,35 @@ const MIN_SIZE = 8;
  * `Transformer` works imperatively on node references, so it lives outside the
  * declarative object tree: on every selection change we look the nodes up by id
  * and re-attach. Locked objects are skipped — they must not be transformable.
+ *
+ * Everything it needs arrives as **props**, deliberately, and subscribing to the
+ * store here instead is a bug: `CanvasStage` is what turns the document into
+ * Konva nodes, so a component that hears about a change *before* `CanvasStage`
+ * re-renders will look for a node that does not exist yet. A second subscriber
+ * inside the stage does exactly that — react-konva renders the stage's children
+ * through its own reconciler, driven from `CanvasStage`'s commit, while a
+ * `useSyncExternalStore` subscription re-renders this component the moment the
+ * store is written. Adding an object writes the object and selects it in one
+ * go, so that early pass saw the new id and an empty layer, attached the
+ * transformer to nothing, and — its dependencies now satisfied — never ran
+ * again: a freshly added object came up selected with no handles round it.
+ *
+ * Taking the same values as props puts this back in `CanvasStage`'s render, so
+ * the nodes are created in the commit whose effects then attach to them.
  */
-export function SelectionTransformer() {
+export function SelectionTransformer({
+  selectedIds,
+  selectedAttackIds,
+  attacks,
+  objectIds,
+}: {
+  selectedIds: readonly string[];
+  selectedAttackIds: readonly string[];
+  attacks: readonly AttackInstance[];
+  /** Not read — a dependency, so added or removed nodes force a re-attach. */
+  objectIds: readonly string[];
+}) {
   const ref = useRef<TransformerNode>(null);
-  const selectedIds = useEditorStore((s) => s.selectedIds);
-  const selectedAttackIds = useEditorStore((s) => s.selectedAttackIds);
-  const attacks = useEditorStore((s) => s.attacks);
-  const objectIds = useEditorStore((s) => s.objectIds);
 
   useEffect(() => {
     const transformer = ref.current;

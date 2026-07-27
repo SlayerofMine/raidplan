@@ -1,4 +1,33 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+/**
+ * The object ids the selection `Transformer` is currently attached to.
+ *
+ * Reaching into Konva is the only way to assert on canvas chrome: the handles
+ * are pixels, not DOM, and `Konva.stages` is the library's own registry of live
+ * stages. Which is worth the reach — selection has *two* halves that can drift
+ * apart, the store's `selectedIds` (what the properties panel reads) and the
+ * nodes the transformer is attached to, and only the second is what a planner
+ * sees round the thing they just added.
+ */
+const attachedIds = (page: Page): Promise<string[]> =>
+  page.evaluate(() => {
+    interface NodeLike {
+      id(): string;
+    }
+    interface StageLike {
+      findOne(selector: string): { nodes(): NodeLike[] } | undefined;
+    }
+    const konva = (window as unknown as { Konva?: { stages: StageLike[] } })
+      .Konva;
+    const stage = konva?.stages.at(-1);
+    return (
+      stage
+        ?.findOne("Transformer")
+        ?.nodes()
+        .map((n) => n.id()) ?? []
+    );
+  });
 
 test.describe("selection & movement", () => {
   test("adding an icon selects it and fills the properties panel", async ({
@@ -13,6 +42,31 @@ test.describe("selection & movement", () => {
       .click();
     await expect(page.getByTestId("properties")).toBeVisible();
     await expect(page.getByTestId("no-selection")).toHaveCount(0);
+  });
+
+  test("a newly added object comes up with handles round it", async ({
+    page,
+  }) => {
+    await page.goto("/plan/local/edit");
+
+    // Adding writes the object and selects it in one store update, so this is
+    // the case where the transformer can be asked to attach to a node the
+    // canvas has not created yet — and it used to, silently, leaving a selected
+    // object with no handles that no amount of clicking would bring back (the
+    // click is a no-op: the thing is already selected).
+    await page.getByRole("button", { name: "Add Marker 1" }).click();
+    await expect(page.getByTestId("properties")).toBeVisible();
+    await expect.poll(() => attachedIds(page)).toHaveLength(1);
+    const [first] = await attachedIds(page);
+
+    // A second add moves the handles on to the new object rather than leaving
+    // them behind on the first.
+    await page.getByRole("button", { name: "Add Marker 2" }).click();
+    await expect.poll(() => attachedIds(page)).toEqual([expect.any(String)]);
+    expect((await attachedIds(page))[0]).not.toBe(first);
+
+    await page.keyboard.press("Escape");
+    await expect.poll(() => attachedIds(page)).toEqual([]);
   });
 
   test("Escape clears the selection", async ({ page }) => {

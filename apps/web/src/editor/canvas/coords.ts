@@ -83,3 +83,45 @@ export function zoomAt(view: View, focal: Point, factor: number): View {
     y: focal.y - native.y * scale,
   };
 }
+
+/** A placement: the top-left an object is drawn at, and the turn about it. */
+export interface Placement {
+  x: number;
+  y: number;
+  rotation: number;
+}
+
+/** Just enough of a Konva node to say where it currently is. */
+export interface Placed {
+  x: () => number;
+  y: () => number;
+  rotation: () => number;
+}
+
+/**
+ * The group transform that carries chrome authored at `base` on to where the
+ * object it belongs to *actually is* — the live node, which for a following
+ * object is not where the document put it (plan §18.17).
+ *
+ * The same offset-and-turn `useFollowing` uses to carry a followed attack: sit
+ * the group's offset on the authored top-left, its position on the live one, and
+ * turn it by the difference. A child authored at document point `p` then lands
+ * at `live + R(live.rotation − base.rotation) · (p − base)`, which for any point
+ * of the object's own box is exactly where that part of the object now is. So
+ * the chrome inside can be laid out in plain document coordinates and stay
+ * ignorant of following entirely.
+ *
+ * Identity when the object hasn't moved, so a free object pays nothing for it.
+ */
+export function carryToNode(
+  base: Placement,
+  node: Placed,
+): Placement & { offsetX: number; offsetY: number } {
+  return {
+    offsetX: base.x,
+    offsetY: base.y,
+    x: node.x(),
+    y: node.y(),
+    rotation: node.rotation() - base.rotation,
+  };
+}

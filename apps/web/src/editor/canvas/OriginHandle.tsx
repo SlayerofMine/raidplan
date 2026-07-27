@@ -1,10 +1,14 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
+import gsap from "gsap";
 import { Circle, Group, Line } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
+import type { Group as GroupNode } from "konva/lib/Group";
+import type { Transform } from "konva/lib/Util";
 import type { Vector2d } from "konva/lib/types";
 import {
   angleDeg,
   facingDeg,
+  isFollowing,
   pinTo,
   pivotFraction,
   pivotPoint,
@@ -13,6 +17,7 @@ import {
 } from "@raidplan/shared";
 import { temporalStore, useEditorStore } from "../../store/editorStore";
 import { selectObjectState } from "../../store/selectors";
+import { carryToNode } from "./coords";
 
 /** How far the direction arrow reaches, in plan pixels. */
 const ARROW = 56;
@@ -66,7 +71,65 @@ export function OriginHandle() {
     base: Pivoted;
     start: { ox: number; oy: number; x?: number; y?: number };
     last: { ox: number; oy: number; x?: number; y?: number } | null;
+    /** Screen → the space `base` is written in, frozen for the gesture. */
+    toBase: Transform | null;
   } | null>(null);
+
+  /**
+   * The handle is drawn from the *document's* placement, but a following object
+   * is never where the document says: `useFollowing` re-solves the pin and the
+   * aim on to the live Konva node every frame and deliberately leaves the store
+   * alone (§18.17 — one truth about position, and it isn't the document). So a
+   * handle drawn from the store would sit where the object *was authored*, not
+   * where it hangs — stranded the moment you pin it, and left behind entirely
+   * when whatever it is pinned to moves.
+   *
+   * So {@link carryToNode} corrects the whole group on to the live node once a
+   * frame. Every child then lands on the part of the object it belongs to, which
+   * means the geometry below — and every drag handler that reads a child's
+   * position — carries on speaking plain document coordinates and knows nothing
+   * about following at all.
+   */
+  const groupRef = useRef<GroupNode>(null);
+  const followed = isFollowing(object?.follow);
+  const followId = object?.id;
+
+  /**
+   * The placement the correction is measured *from*, in a ref rather than in the
+   * effect's dependencies: an origin drag rewrites it on every frame, and a
+   * ticker callback torn down and re-added that often would shuffle itself to
+   * the back of the queue mid-gesture. The callback reads it when it runs, so it
+   * is never stale.
+   */
+  const baseRef = useRef({ x: 0, y: 0, rotation: 0 });
+  useEffect(() => {
+    baseRef.current = {
+      x: state?.x ?? 0,
+      y: state?.y ?? 0,
+      rotation: state?.rotation ?? 0,
+    };
+  });
+
+  useEffect(() => {
+    const group = groupRef.current;
+    if (!group) return;
+    // Konva attrs survive re-renders, so a group that has stopped following has
+    // to be put back by hand; nothing else ever writes these.
+    if (!followed || !followId) {
+      group.setAttrs({ offsetX: 0, offsetY: 0, x: 0, y: 0, rotation: 0 });
+      return;
+    }
+    const sync = () => {
+      const node = group.getStage()?.findOne(`#${followId}`);
+      if (!node) return;
+      group.setAttrs(carryToNode(baseRef.current, node));
+    };
+    // Once now, so pinning snaps the handle across immediately rather than on
+    // whichever frame the ticker next comes round.
+    sync();
+    gsap.ticker.add(sync);
+    return () => gsap.ticker.remove(sync);
+  }, [followed, followId]);
 
   if (selectedIds.length !== 1 || !object || !state) return null;
   // A tether is drawn from its endpoints and has no box to take a fraction of.
@@ -123,6 +186,12 @@ export function OriginHandle() {
       pinned,
       anchorAbs: e.target.getAbsolutePosition(),
       base: transform,
+      // Taken once, not per frame: the group's transform is rewritten every
+      // frame from the live node, and reading it mid-gesture would let a frame
+      // where the follow hadn't run yet be mistaken for the object moving. The
+      // frame the gesture measures in cannot move, because a pinned drag holds
+      // the origin still — so freeze it here and the pointer stays honest.
+      toBase: groupRef.current?.getAbsoluteTransform().copy().invert() ?? null,
       start: pinned
         ? {
             ox: transform.ox ?? 0.5,
@@ -141,14 +210,12 @@ export function OriginHandle() {
 
     if (d.pinned) {
       // The crosshair is locked (see `dragBoundFunc`), so its own position is no
-      // use — read the pointer directly and pull it into plan space. The body
-      // then slides the *opposite* way, leaving the origin welded to the anchor.
-      const stage = e.target.getStage();
-      const layer = e.target.getLayer();
-      const pointer = stage?.getPointerPosition();
-      if (!stage || !layer || !pointer) return;
-      const p = layer.getAbsoluteTransform().copy().invert().point(pointer);
-      d.last = slidePinnedOrigin(d.base, p);
+      // use — read the pointer directly and pull it back into the space `d.base`
+      // is written in. The body then slides the *opposite* way, leaving the
+      // origin welded to the anchor.
+      const pointer = e.target.getStage()?.getPointerPosition();
+      if (!pointer || !d.toBase) return;
+      d.last = slidePinnedOrigin(d.base, d.toBase.point(pointer));
     } else {
       d.last = pivotFraction(d.base, e.target.position());
     }
@@ -187,7 +254,7 @@ export function OriginHandle() {
   };
 
   return (
-    <Group listening name="origin-handle">
+    <Group ref={groupRef} listening name="origin-handle">
       <Line
         points={[pivot.x, pivot.y, tip.x, tip.y]}
         stroke={ACCENT}
