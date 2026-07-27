@@ -24,11 +24,10 @@ export interface OneShotParams {
   /**
    * Where the animated object is *right now*. Playback passes the object's live
    * node state, so a triggered animation continues from where the object
-   * actually is rather than snapping back to the slide's start.
+   * actually is rather than snapping back to the slide's opening layout — which
+   * is the whole point of a trigger that fires mid-slide.
    */
-  start: ResolvedStates;
-  /** The slide's settled end state, the target for effects that resolve to it. */
-  end: ResolvedStates;
+  states: ResolvedStates;
   apply: (objectId: string, props: Partial<ObjectState>) => void;
   onUpdate?: () => void;
 }
@@ -36,8 +35,7 @@ export interface OneShotParams {
 export function compileOneShot({
   anim,
   slide,
-  start,
-  end,
+  states,
   apply,
   onUpdate,
 }: OneShotParams): CompiledStep {
@@ -46,8 +44,7 @@ export function compileOneShot({
       ...slide,
       animations: [{ ...anim, trigger: "onEnter", delayMs: 0 }],
     },
-    start,
-    end,
+    states,
     apply,
     ...(onUpdate ? { onUpdate } : {}),
   });

@@ -184,7 +184,25 @@ const plan: Plan = {
       args: { victims: ["tank"] },
     },
   ],
-  slides: [{ id: "s0", states: {}, animations: [] }],
+  // The token is on the opening slide — a slide's `states` is its cast list, so
+  // an object with no entry there simply isn't in the scene to be hit.
+  slides: [
+    {
+      id: "s0",
+      states: {
+        tank: {
+          x: 300,
+          y: 0,
+          w: SIZE,
+          h: SIZE,
+          rotation: 0,
+          opacity: 1,
+          visible: true,
+        },
+      },
+      animations: [],
+    },
+  ],
   schemaVersion: SCHEMA_VERSION,
 };
 
@@ -220,7 +238,7 @@ describe("an attack colliding with a plan object", () => {
     // The victim is nowhere near the cone's path, so the slide ends with no
     // contact...
     const late = structuredClone(plan);
-    late.objects[0]!.base.x = 900;
+    late.slides[0]!.states["tank"]!.x = 900;
     useEditorStore.getState().loadPlan(expandPlan(late, { atk: def }));
 
     const { ref, nodes } = fakeStage(useEditorStore.getState().objectIds);

@@ -7,7 +7,14 @@ import {
   type DragEvent as ReactDragEvent,
   type ReactNode,
 } from "react";
-import { Layer, Line, Image as KonvaImage, Rect, Stage } from "react-konva";
+import {
+  Group,
+  Layer,
+  Line,
+  Image as KonvaImage,
+  Rect,
+  Stage,
+} from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import type { Stage as StageNode } from "konva/lib/Stage";
 import type { PlanObject, ShapeKind } from "@raidplan/shared";
@@ -22,6 +29,7 @@ import {
   SHAPE_DATA_TYPE,
 } from "../paletteDrag";
 import { screenToNative, type Point } from "./coords";
+import { snapValue } from "./snapping";
 import {
   MARQUEE_THRESHOLD_PX,
   normalizeRect,
@@ -30,6 +38,12 @@ import {
 import { PlacedAttackNode } from "./AttackPreviewLayer";
 import { ObjectNode } from "./ObjectNode";
 import { MotionPathLayer } from "./MotionPathLayer";
+import { MoveDraftLayer } from "./MoveDraftLayer";
+import {
+  finishMoveDraft,
+  useMoveDraft,
+  useMoveDraftKeys,
+} from "./useMoveDraft";
 import { OriginHandle } from "./OriginHandle";
 import { SelectionTransformer } from "./SelectionTransformer";
 import { setStageNode } from "./stageHandle";
@@ -43,6 +57,8 @@ interface Marquee {
 }
 
 const ZOOM_STEP = 1.1;
+/** How close the second click of a double-click must land, in screen pixels. */
+const DBLCLICK_SLOP_PX = 8;
 
 /**
  * The Konva canvas (plan §6). Two layers only: a non-interactive background
@@ -66,9 +82,19 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
   const objects = useEditorStore((s) => s.objects);
   const objectIds = useEditorStore((s) => s.objectIds);
   const attacks = useEditorStore((s) => s.attacks);
+  // The cast of the slide being edited. Objects are plan-level, but a slide
+  // holds only the ones in its own scene — the others aren't drawn at all, so
+  // there is nothing on the board that can't be clicked.
+  const slideStates = useEditorStore(
+    (s) => s.slides[s.currentSlideIndex]?.states,
+  );
   const stack = useMemo(
-    () => boardStack({ objects, objectIds, attacks }),
-    [objects, objectIds, attacks],
+    () =>
+      boardStack({ objects, objectIds, attacks }).filter(
+        (item) =>
+          item.kind !== "object" || slideStates?.[item.id] !== undefined,
+      ),
+    [objects, objectIds, attacks, slideStates],
   );
   // Read here rather than inside `SelectionTransformer`, so attaching the
   // handles happens in the same render that creates the nodes they attach to.
@@ -90,6 +116,13 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
   const addIcon = useEditorStore((s) => s.addIcon);
   const addPrimitive = useEditorStore((s) => s.addPrimitive);
   const addAttack = useEditorStore((s) => s.addAttack);
+  const drawMove = useEditorStore((s) => s.drawMove);
+
+  // Drawing a route is a *mode*: while it is on, a click means "corner here"
+  // rather than "select that". Nothing else on the board listens (see the
+  // `listening` group below), so the stage handlers below get every click.
+  const drawing = useMoveDraft((s) => s.objectId !== null);
+  useMoveDraftKeys();
 
   // The sweep lives in state (to draw it) and a ref (to read it from the
   // window-level mouseup without stale-closure games).
@@ -148,7 +181,8 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
    * and needs no mode switch.
    */
   const handleStageMouseDown = (e: KonvaEventObject<MouseEvent>) => {
-    if (isPanning) return;
+    // A sweep during a draw would rubber-band the board instead of drawing.
+    if (isPanning || drawing) return;
     const stage = e.target.getStage();
     if (!stage || e.target !== stage) return;
     const pointer = stage.getPointerPosition();
@@ -159,7 +193,22 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
     updateMarquee({ start, current: start });
   };
 
+  /** Where the pointer is, in the plan's own coordinates — snapped if snapping is on. */
+  const nativePointer = (e: KonvaEventObject<MouseEvent>): Point | null => {
+    const pointer = e.target.getStage()?.getPointerPosition();
+    if (!pointer) return null;
+    const at = screenToNative(pointer, view);
+    const grid = snapEnabled ? gridSize : 0;
+    return { x: snapValue(at.x, grid), y: snapValue(at.y, grid) };
+  };
+
   const handleStageMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+    if (drawing) {
+      // The line from the last corner to the cursor is what makes this feel
+      // like drawing rather than like entering coordinates.
+      useMoveDraft.getState().setCursor(nativePointer(e));
+      return;
+    }
     if (!marqueeRef.current) return;
     const pointer = e.target.getStage()?.getPointerPosition();
     if (!pointer) return;
@@ -169,9 +218,47 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
     });
   };
 
+  /** A click while drawing drops a corner; a double-click ends the route. */
+  const handleStageClick = (e: KonvaEventObject<MouseEvent>) => {
+    if (!drawing) return;
+    const at = nativePointer(e);
+    if (at) useMoveDraft.getState().addPoint(at);
+  };
+
+  /**
+   * Double-click ends the route — but only a *real* double-click.
+   *
+   * Konva calls any two clicks inside its 400ms window a double-click, however
+   * far apart they land, and clicking corners quickly is exactly what drawing a
+   * route looks like. So the second click has to be on top of the first to
+   * count: that is what someone means by double-clicking, and it leaves fast
+   * corner-clicking alone.
+   */
+  const handleStageDblClick = (e: KonvaEventObject<MouseEvent>) => {
+    if (!drawing) return;
+    // Both of the double-click's clicks have already dropped a corner, so a
+    // deliberate double-click shows up as the last *two* corners being in the
+    // same place. Comparing the event's own position against the last corner
+    // would compare it to the one its second click just added — always zero.
+    const points = useMoveDraft.getState().points;
+    const last = points.at(-1);
+    const previous = points.at(-2);
+    if (!last || !previous) return;
+    // In screen pixels, so the tolerance doesn't change with the zoom level.
+    const apart =
+      Math.hypot(last.x - previous.x, last.y - previous.y) * view.scale;
+    if (apart > DBLCLICK_SLOP_PX) return;
+
+    e.evt.preventDefault();
+    // Drop the duplicate the second click left behind, then end there.
+    useMoveDraft.getState().undoPoint();
+    finishMoveDraft(drawMove);
+  };
+
   const finishMarquee = useCallback(() => {
     const sweep = marqueeRef.current;
     if (!sweep) return;
+    if (useMoveDraft.getState().objectId !== null) return;
     updateMarquee(null);
 
     const rect = normalizeRect(sweep.start, sweep.current);
@@ -273,6 +360,8 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
         onWheel={handleWheel}
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
+        onClick={handleStageClick}
+        onDblClick={handleStageDblClick}
         onDragEnd={handleStageDragEnd}
       >
         {/* Background + grid: never interactive, so clicks fall through. */}
@@ -293,21 +382,36 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
           )}
         </Layer>
         <Layer>
-          {/* One stack: an attack can sit under the token standing on it, and
-              whatever is on top is what a click finds. */}
-          {stack.map((item) =>
-            item.kind === "object" ? (
-              <ObjectNode
-                key={item.id}
-                objectId={item.id}
-                draggable={!isPanning}
-              />
-            ) : (
-              <PlacedAttackNode key={item.id} instanceId={item.id} />
-            ),
-          )}
-          {/* Chrome only one caller wants — the designer's bounding box. */}
-          {overlay}
+          {/* Everything that can normally be clicked or dragged. While a route
+              is being drawn the whole group stops listening, so a click means
+              "corner here" and can't accidentally grab a token instead. */}
+          <Group listening={!drawing}>
+            {/* One stack: an attack can sit under the token standing on it, and
+                whatever is on top is what a click finds. */}
+            {stack.map((item) =>
+              item.kind === "object" ? (
+                <ObjectNode
+                  key={item.id}
+                  objectId={item.id}
+                  draggable={!isPanning && !drawing}
+                />
+              ) : (
+                <PlacedAttackNode key={item.id} instanceId={item.id} />
+              ),
+            )}
+            {/* Chrome only one caller wants — the designer's bounding box. */}
+            {overlay}
+            <SelectionTransformer
+              selectedIds={selectedIds}
+              selectedAttackIds={selectedAttackIds}
+              attacks={attacks}
+              objectIds={objectIds}
+              selectionSizes={selectionSizes}
+            />
+            <MotionPathLayer />
+            <OriginHandle />
+          </Group>
+          <MoveDraftLayer />
           {marquee && (
             <Rect
               {...normalizeRect(marquee.start, marquee.current)}
@@ -319,15 +423,6 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
               listening={false}
             />
           )}
-          <SelectionTransformer
-            selectedIds={selectedIds}
-            selectedAttackIds={selectedAttackIds}
-            attacks={attacks}
-            objectIds={objectIds}
-            selectionSizes={selectionSizes}
-          />
-          <MotionPathLayer />
-          <OriginHandle />
         </Layer>
       </Stage>
     </div>

@@ -43,9 +43,10 @@ test.describe("slides", () => {
     await page.getByTestId("prop-x").fill("100");
     await page.getByTestId("prop-y").fill("100");
 
-    // Two more slides, both inheriting that layout as they're created.
-    await page.getByTestId("add-slide").click();
-    await page.getByTestId("add-slide").click();
+    // Two more slides that continue from it, so the token is in all three
+    // scenes. (A plain "+ Slide" would open an empty stage — see below.)
+    await page.getByTestId("continue-slide-0").click();
+    await page.getByTestId("continue-slide-1").click();
 
     // Move it on slide 2 only.
     await page.getByTestId("slide-1").click();
@@ -67,7 +68,7 @@ test.describe("slides", () => {
     await page.goto("/plan/local/edit");
     await page.getByRole("button", { name: "Add Marker 1" }).click();
 
-    await page.getByTestId("add-slide").click();
+    await page.getByTestId("continue-slide-0").click();
     await expect(page.getByTestId("anim-empty")).toBeVisible();
 
     await page.getByTestId("add-animation").click();
@@ -92,7 +93,7 @@ test.describe("slides", () => {
     await page.goto("/plan/local/edit");
     await page.getByRole("button", { name: "Add Marker 1" }).click();
     await page.getByRole("button", { name: "Add Marker 2" }).click();
-    await page.getByTestId("add-slide").click();
+    await page.getByTestId("continue-slide-0").click();
 
     await page.keyboard.press("Control+a");
     await expect(page.getByTestId("add-animation")).toHaveText(
@@ -129,7 +130,7 @@ test.describe("slides", () => {
   }) => {
     await page.goto("/plan/local/edit");
     await page.getByRole("button", { name: "Add Marker 1" }).click();
-    await page.getByTestId("add-slide").click();
+    await page.getByTestId("continue-slide-0").click();
     await page.getByTestId("add-animation").click();
     await expect(page.getByTestId("anim-row")).toHaveCount(1);
 
@@ -150,12 +151,76 @@ test.describe("slides", () => {
   test("deleting an object removes its animations", async ({ page }) => {
     await page.goto("/plan/local/edit");
     await page.getByRole("button", { name: "Add Marker 1" }).click();
-    await page.getByTestId("add-slide").click();
+    await page.getByTestId("continue-slide-0").click();
     await page.getByTestId("add-animation").click();
     await expect(page.getByTestId("anim-row")).toHaveCount(1);
 
     await page.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page.getByTestId("object-count")).toHaveText("0");
     await expect(page.getByTestId("anim-row")).toHaveCount(0);
+
+    // Deleting took it out of *this* scene. Slide 1 is a different scene and
+    // still has it — which is what makes slides independent.
+    await page.getByTestId("slide-0").click();
+    await expect(page.getByTestId("object-count")).toHaveText("1");
+  });
+
+  /**
+   * The whole authoring loop for a move, driven the way a planner drives it —
+   * because "slides own their objects" makes an empty slide a dead end for
+   * animating, and the empty state has to lead out of it.
+   */
+  test("an empty slide offers to carry the previous one's objects over", async ({
+    page,
+  }) => {
+    await page.goto("/plan/local/edit");
+    await page.getByRole("button", { name: "Add Marker 1" }).click();
+    await page.getByTestId("prop-x").fill("200");
+
+    // A blank slide: nothing to animate, and the hint says what to do about it.
+    await page.getByTestId("add-slide").click();
+    await expect(page.getByTestId("empty-slide-hint")).toBeVisible();
+    await expect(page.getByTestId("add-animation")).toBeDisabled();
+
+    await page.getByTestId("empty-slide-continue").click();
+    await expect(page.getByTestId("empty-slide-hint")).toHaveCount(0);
+    // Filled in place — still two slides, not three.
+    await expect(page.getByTestId("slide-2")).toHaveCount(0);
+
+    // And now the token is here, so it can be moved and animated.
+    await page
+      .getByTestId("canvas-container")
+      .click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press("Control+a");
+    await expect(page.getByTestId("prop-x")).toHaveValue("200");
+    await page.getByTestId("prop-x").fill("900");
+    await page.getByTestId("add-animation").click();
+    await expect(page.getByTestId("anim-effect")).toHaveValue("move");
+
+    // The opening slide still has it where it started.
+    await page.getByTestId("slide-0").click();
+    await expect(page.getByTestId("prop-x")).toHaveValue("200");
+  });
+
+  test("a slide owns its objects: adding one leaves the other slides alone", async ({
+    page,
+  }) => {
+    await page.goto("/plan/local/edit");
+    await page.getByRole("button", { name: "Add Marker 1" }).click();
+    await expect(page.getByTestId("object-count")).toHaveText("1");
+
+    // "+ Slide" is an empty stage, not a copy of the one before it.
+    await page.getByTestId("add-slide").click();
+    await expect(page.getByTestId("object-count")).toHaveText("0");
+
+    // A token added here belongs to this slide, and to no other.
+    await page.getByRole("button", { name: "Add Marker 2" }).click();
+    await expect(page.getByTestId("object-count")).toHaveText("1");
+    await page.getByTestId("slide-0").click();
+    await expect(page.getByTestId("object-count")).toHaveText("1");
+
+    // …and "⇥" is how a scene carries on: same cast, same places.
+    await page.getByTestId("continue-slide-0").click();
+    await expect(page.getByTestId("object-count")).toHaveText("1");
   });
 });

@@ -119,15 +119,17 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
     (anim: Anim) => {
       const slide = slides[slideIndex];
       if (!slide) return;
-      const end = resolveAll(slideIndex);
-      const target = end[anim.objectId];
+      const here = resolveAll(slideIndex);
+      const target = here[anim.objectId];
       if (!target) return;
 
       const { timeline: tl, initial } = compileOneShot({
         anim,
         slide,
-        start: { [anim.objectId]: liveStateOf(anim.objectId, target) },
-        end,
+        states: {
+          ...here,
+          [anim.objectId]: liveStateOf(anim.objectId, target),
+        },
         apply: applyToNode,
         onUpdate: redraw,
       });
@@ -166,8 +168,7 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
 
       const { timeline: tl, initial } = compileStep({
         slide,
-        start: resolveAll(index - 1),
-        end: resolveAll(index),
+        states: resolveAll(index),
         apply: applyToNode,
         onUpdate: redraw,
       });

@@ -19,7 +19,9 @@ async function buildPlan(page: Page, objectCount: number, slideCount: number) {
   );
 
   for (let slide = 0; slide < slideCount - 1; slide++) {
-    await page.getByTestId("add-slide").click();
+    // Continue from the slide we're on, so the tokens are in every scene and
+    // have somewhere to move from.
+    await page.getByTestId(`continue-slide-${slide}`).click();
     // Move the selection somewhere new and animate it into place.
     await page.getByTestId("prop-x").fill(String(200 + slide * 250));
     await page.getByTestId("prop-y").fill(String(150 + slide * 120));
@@ -35,13 +37,13 @@ test.describe("viewer", () => {
     await page.goto("/plan/local/edit");
     await page.getByRole("button", { name: "Add Marker 1" }).click();
     // On slide 2: slide 1 is the opening layout and animates nothing.
-    await page.getByTestId("add-slide").click();
+    await page.getByTestId("continue-slide-0").click();
     await page.getByTestId("add-animation").click();
     await page.getByTestId("anim-effect").selectOption("scale");
     await page.getByTestId("anim-duration").fill("1200");
-    // The end state the scale grows into.
-    await page.getByTestId("prop-w").fill("400");
-    await page.getByTestId("prop-h").fill("400");
+    // How much it grows — the animation's own, not a size difference between
+    // two slides.
+    await page.getByTestId("anim-scale").fill("3");
     await page.waitForTimeout(1400); // let autosave flush
 
     await page.getByTestId("open-viewer").click();

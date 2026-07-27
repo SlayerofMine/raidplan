@@ -6,6 +6,7 @@ import {
   isInstantEffect,
 } from "../anim/effectChoices";
 import { useEditorStore } from "../store/editorStore";
+import { finishMoveDraft, useMoveDraft } from "./canvas/useMoveDraft";
 import { objectDisplayName } from "./objectName";
 
 /** GSAP eases offered in the picker (plan §7: easing is a GSAP ease name). */
@@ -43,10 +44,16 @@ export function AnimationPanel() {
   const slide = useEditorStore((s) => s.slides[s.currentSlideIndex]);
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const animateSelection = useEditorStore((s) => s.animateSelection);
+  const begin = useMoveDraft((s) => s.begin);
+  const drawing = useMoveDraft((s) => s.objectId !== null);
+  const cancelDraw = useMoveDraft((s) => s.cancel);
+  const drawMove = useEditorStore((s) => s.drawMove);
 
   if (!slide) return null;
 
   const count = selectedIds.length;
+  // A route belongs to one object — "draw where these six go" isn't a journey.
+  const routable = count === 1 ? selectedIds[0]! : null;
   const mine = slide.animations.filter((a) => selectedIds.includes(a.objectId));
   const elsewhere = slide.animations.length - mine.length;
   const rows = groupAnimations(mine);
@@ -67,6 +74,54 @@ export function AnimationPanel() {
       >
         {count > 1 ? `+ Animate ${count} objects` : "+ Animate selection"}
       </button>
+
+      {/* A move is a journey, so it is drawn rather than configured: click the
+          corners on the board, Enter to finish. */}
+      {drawing ? (
+        <div
+          data-testid="draw-move-active"
+          className="flex flex-col gap-1 rounded border border-accent px-2 py-1.5 text-xs text-neutral-300"
+        >
+          <span>
+            Click the board to add corners. <strong>Enter</strong> finishes,{" "}
+            <strong>Backspace</strong> takes one back, <strong>Esc</strong>{" "}
+            cancels.
+          </span>
+          <span className="flex justify-end gap-3">
+            <button
+              type="button"
+              data-testid="draw-move-cancel"
+              onClick={cancelDraw}
+              className="text-neutral-500 hover:text-accent"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              data-testid="draw-move-finish"
+              onClick={() => finishMoveDraft(drawMove)}
+              className="text-accent hover:underline"
+            >
+              Finish
+            </button>
+          </span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          data-testid="draw-move"
+          disabled={routable === null}
+          title={
+            routable === null
+              ? "Select one object to draw a route for"
+              : "Click the corners of the route on the board"
+          }
+          onClick={() => begin(routable!, currentSlideIndex)}
+          className="w-full rounded border border-panelborder py-1 text-sm hover:border-accent disabled:opacity-40"
+        >
+          ✎ Draw a move
+        </button>
+      )}
 
       {selectedIds.length === 0 ? (
         <p data-testid="anim-no-selection" className="text-sm text-neutral-500">
@@ -234,7 +289,10 @@ function AnimationRow({
           onChange={patch}
         />
       )}
-      {anim.effect === "move" && <RouteRow anim={anim} onChange={patch} />}
+      {anim.effect === "move" && (
+        <RouteRow anim={anim} slideIndex={slideIndex} onChange={patch} />
+      )}
+      {anim.effect === "scale" && <ScaleRow anim={anim} onChange={patch} />}
       {/* An instant effect ignores both, so it isn't offered either. */}
       {!isInstantEffect(anim.effect) && (
         <Picker
@@ -270,24 +328,56 @@ function AnimationRow({
 /**
  * The shape of a `move`'s route (plan §7 "Motion paths").
  *
- * The waypoints themselves are dragged on the canvas, where they mean something
- * — this only carries the two things a route needs that aren't a position: how
- * much it rounds off at the corners, and a way to be rid of it. A straight move
- * has no route and shows nothing but the hint.
+ * The route itself is drawn and dragged on the canvas, where a position means
+ * something — this only carries what a route needs that isn't a position: how
+ * much it rounds off at the corners, a way to redraw it from scratch, and a way
+ * to be rid of its corners. A move with no destination hasn't been drawn yet.
  */
 function RouteRow({
   anim,
+  slideIndex,
   onChange,
 }: {
   anim: Anim;
+  slideIndex: number;
   onChange: (patch: Partial<Omit<Anim, "id">>) => void;
 }) {
+  const begin = useMoveDraft((s) => s.begin);
   const waypoints = anim.params?.path ?? [];
+  const drawn =
+    anim.params?.toX !== undefined || anim.params?.toY !== undefined;
+
+  const redraw = (
+    <button
+      type="button"
+      data-testid="anim-route-redraw"
+      onClick={() => begin(anim.objectId, slideIndex, anim.id)}
+      className="self-end text-xs text-neutral-500 hover:text-accent"
+    >
+      {drawn ? "Redraw route" : "Draw the route"}
+    </button>
+  );
+
+  if (!drawn) {
+    return (
+      <div className="flex flex-col gap-1">
+        <p data-testid="anim-route-empty" className="text-xs text-amber-500/80">
+          This move has nowhere to go yet — draw its route on the board.
+        </p>
+        {redraw}
+      </div>
+    );
+  }
+
   if (waypoints.length === 0) {
     return (
-      <p data-testid="anim-route-hint" className="text-xs text-neutral-500">
-        Straight line. Double-click the route on the board to bend it.
-      </p>
+      <div className="flex flex-col gap-1">
+        <p data-testid="anim-route-hint" className="text-xs text-neutral-500">
+          Straight line. Double-click the route on the board to bend it, or drag
+          its end to move the destination.
+        </p>
+        {redraw}
+      </div>
     );
   }
   return (
@@ -318,7 +408,54 @@ function RouteRow({
         Straighten ({waypoints.length}{" "}
         {waypoints.length === 1 ? "waypoint" : "waypoints"})
       </button>
+      {redraw}
     </div>
+  );
+}
+
+/**
+ * How much a `scale` grows or shrinks its object, as a multiple of the size it
+ * has on this slide.
+ *
+ * A factor rather than a target size, because that is what the animation is: a
+ * scale used to be the *difference* between two slides' sizes, which meant it
+ * could only exist where there was a next slide to differ from, and the same
+ * drag edited both a layout and an animation.
+ */
+function ScaleRow({
+  anim,
+  onChange,
+}: {
+  anim: Anim;
+  onChange: (patch: Partial<Omit<Anim, "id">>) => void;
+}) {
+  const factor = anim.params?.scale ?? 1;
+  return (
+    <label className="flex items-center justify-between gap-2 text-sm">
+      <span className="text-neutral-500">Scale to</span>
+      <span className="flex items-center gap-2">
+        <input
+          type="number"
+          min={0.1}
+          max={10}
+          step={0.1}
+          data-testid="anim-scale"
+          value={factor}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            // A factor of zero collapses the object to nothing and can't be
+            // scaled back out of; the schema rejects it, so the panel does too.
+            if (Number.isFinite(n) && n > 0) {
+              onChange({ params: { ...anim.params, scale: n } });
+            }
+          }}
+          className="w-20 rounded border border-panelborder bg-neutral-900 px-2 py-0.5 text-right tabular-nums"
+        />
+        <span className="w-10 text-xs text-neutral-500 tabular-nums">
+          {Math.round(factor * 100)}%
+        </span>
+      </span>
+    </label>
   );
 }
 

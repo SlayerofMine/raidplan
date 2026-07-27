@@ -35,18 +35,48 @@ describe("slides — CRUD", () => {
     expect(state().currentSlideIndex).toBe(2);
   });
 
-  it("a new slide opens looking exactly like the one it follows", () => {
-    // Otherwise adding a slide would teleport the whole board back to wherever
-    // it started, and every slide would have to be rebuilt from scratch.
+  it("addSlide opens an empty stage", () => {
+    // A slide is its own scene. Carrying the last one's cast over is a thing to
+    // ask for — that is what `continueSlide` is — not the price of adding one.
+    const id = state().addIcon(iconId, { x: 100, y: 100 });
+    state().addSlide();
+    expect(state().slides[1]!.states).toEqual({});
+    expect(at(id, 1).visible).toBe(false);
+  });
+
+  it("continueSlide carries the cast over, where it was left", () => {
     const id = state().addIcon(iconId, { x: 100, y: 100 });
     state().moveObject(id, 640, 480);
+
+    state().continueSlide(0);
+
+    expect(state().currentSlideIndex).toBe(1);
+    expect(at(id, 1)).toMatchObject({ x: 640, y: 480, visible: true });
+  });
+
+  it("continueSlide copies where things are, not what happens", () => {
+    // The difference from duplicate: this is the "and then…" slide, so it
+    // starts with nothing happening on it.
+    const id = state().addIcon(iconId);
+    state().addAnimation(0, id);
+
+    state().continueSlide(0);
+
+    expect(state().slides[1]!.states[id]).toBeDefined();
+    expect(state().slides[1]!.animations).toEqual([]);
+  });
+
+  it("continueSlide inserts after its source, not at the end", () => {
     state().addSlide();
-    expect(at(id, 1)).toMatchObject({ x: 640, y: 480 });
+    state().addSlide();
+    state().continueSlide(0);
+    expect(state().slides).toHaveLength(4);
+    expect(state().currentSlideIndex).toBe(1);
   });
 
   it("duplicateSlide copies the layout and gives animations fresh ids", () => {
     const id = state().addIcon(iconId);
-    state().addSlide();
+    state().continueSlide(0);
     state().moveObject(id, 500, 500);
     state().addAnimation(1, id);
 
@@ -103,8 +133,8 @@ describe("slides — edits land on one slide and no other", () => {
   it("editing one slide leaves every other slide alone", () => {
     const id = state().addIcon(iconId, { x: 100, y: 100 });
     const home = at(id, 0);
-    state().addSlide(); // slide 1
-    state().addSlide(); // slide 2
+    state().continueSlide(0); // slide 1
+    state().continueSlide(1); // slide 2
     state().selectSlide(1);
     state().moveObject(id, 500, 400);
 
@@ -113,23 +143,17 @@ describe("slides — edits land on one slide and no other", () => {
     expect(at(id, 2)).toMatchObject({ x: home.x, y: home.y });
   });
 
-  it("a new object gets a state on every slide", () => {
-    state().addSlide();
-    state().addSlide();
-    const id = state().addIcon(iconId, { x: 100, y: 100 });
-    for (const slide of state().slides) {
-      expect(slide.states[id]).toBeDefined();
-    }
-  });
-
-  it("an object added later is hidden on the slides before it", () => {
-    // It hasn't entered the fight yet; making it appear retroactively on the
-    // opening layout is never what adding it on slide 3 meant.
+  it("a new object joins the slide being edited, and no other", () => {
+    // The point of the whole change: adding a token while writing slide 3 is
+    // about slide 3. Slides 1 and 2 are other scenes and are left alone.
     state().addSlide();
     state().addSlide();
     state().selectSlide(2);
     const id = state().addIcon(iconId, { x: 100, y: 100 });
 
+    expect(
+      state().slides.map((slide) => slide.states[id] !== undefined),
+    ).toEqual([false, false, true]);
     expect(at(id, 0).visible).toBe(false);
     expect(at(id, 1).visible).toBe(false);
     expect(at(id, 2).visible).toBe(true);
@@ -138,7 +162,7 @@ describe("slides — edits land on one slide and no other", () => {
   it("writes the object's position into the slide, not onto its base", () => {
     const id = state().addIcon(iconId, { x: 100, y: 100 });
     const base = { ...state().objects[id]!.base };
-    state().addSlide();
+    state().continueSlide(0);
     state().moveObject(id, 500, 400);
 
     // `base` is the creation seed and stops being read once slides exist.
@@ -149,7 +173,7 @@ describe("slides — edits land on one slide and no other", () => {
 
   it("splits a patch: transforms follow the slide, tint/label stay on the object", () => {
     const id = state().addIcon(iconId);
-    state().addSlide();
+    state().continueSlide(0);
     state().updateObject(id, { opacity: 0.25, label: "MT", tint: "#ff0000" });
 
     // Slide-independent properties belong to the object…
@@ -164,7 +188,7 @@ describe("slides — edits land on one slide and no other", () => {
 
   it("nudges from where the object appears on this slide", () => {
     const id = state().addIcon(iconId, { x: 100, y: 100 });
-    state().addSlide();
+    state().continueSlide(0);
     state().moveObject(id, 500, 500);
     state().select([id]);
     state().nudgeSelected(1, 0);
@@ -174,8 +198,9 @@ describe("slides — edits land on one slide and no other", () => {
 
   it("a clone lands where the original appears on the current slide", () => {
     const id = state().addIcon(iconId, { x: 100, y: 100 });
-    state().addSlide();
+    state().continueSlide(0);
     state().moveObject(id, 800, 600);
+    state().select([id]);
 
     const [cloneId] = state().duplicateSelected();
     // The copy lands beside where the original *visibly is* on this slide.
@@ -184,23 +209,100 @@ describe("slides — edits land on one slide and no other", () => {
 });
 
 describe("slides — deleting an object cleans up after itself", () => {
-  it("drops its state and animations from every slide", () => {
+  it("takes it out of this scene, and leaves the others alone", () => {
+    // Delete means what it means in PowerPoint: the copy on the next slide is a
+    // different appearance of the object, and isn't what you pointed at.
     const id = state().addIcon(iconId);
     const other = state().addIcon(iconId);
-    state().addSlide();
-    state().addSlide();
+    state().continueSlide(0);
     state().addAnimation(1, id);
     state().addAnimation(1, other);
+    state().selectSlide(1);
 
     state().deleteObjects([id]);
 
-    for (const slide of state().slides) {
-      expect(slide.states[id]).toBeUndefined();
-      expect(slide.states[other]).toBeDefined();
-    }
+    expect(state().slides[0]!.states[id]).toBeDefined();
+    expect(state().slides[1]!.states[id]).toBeUndefined();
+    expect(state().slides[1]!.states[other]).toBeDefined();
+    // Its animation on this slide goes with it — an animation is about an
+    // object being in the scene.
     expect(state().slides[1]!.animations.map((a) => a.objectId)).toEqual([
       other,
     ]);
+    // Still a plan object, because slide 1 still has it.
+    expect(state().objects[id]).toBeDefined();
+  });
+
+  it("drops the object entirely once no slide has it", () => {
+    const id = state().addIcon(iconId);
+    state().addAnimation(0, id);
+
+    state().deleteObjects([id]);
+
+    expect(state().objects[id]).toBeUndefined();
+    expect(state().objectIds).not.toContain(id);
+    expect(state().slides[0]!.animations).toEqual([]);
+  });
+});
+
+describe("slides — bringing an object into another scene", () => {
+  it("pastes the same object onto a slide it wasn't on", () => {
+    // Not a copy: a `move` animates one object across two slides, so the two
+    // scenes have to hold the *same* token for the token to have moved.
+    const id = state().addIcon(iconId, { x: 100, y: 100 });
+    state().select([id]);
+    state().copySelected();
+    state().addSlide();
+
+    const pasted = state().paste();
+
+    expect(pasted).toEqual([id]);
+    expect(state().objectIds).toEqual([id]);
+    expect(at(id, 1)).toMatchObject({ x: at(id, 0).x, visible: true });
+  });
+
+  it("still copies when the object is already in the scene", () => {
+    const id = state().addIcon(iconId, { x: 100, y: 100 });
+    state().select([id]);
+    state().copySelected();
+
+    const pasted = state().paste();
+
+    expect(pasted[0]).not.toBe(id);
+    expect(state().objectIds).toHaveLength(2);
+  });
+});
+
+/**
+ * The attack designer is the one editor where the slides are *not* separate
+ * scenes: a def is one thing in two states, laid out as Start and End, so a part
+ * drawn on either belongs to both.
+ */
+describe("slides — a shared cast", () => {
+  it("puts a new object on every slide", () => {
+    state().continueSlide(0);
+    state().setSharedCast(true);
+    state().selectSlide(0);
+
+    const id = state().addIcon(iconId);
+
+    expect(state().slides.map((s) => s.states[id] !== undefined)).toEqual([
+      true,
+      true,
+    ]);
+    state().setSharedCast(false);
+  });
+
+  it("takes a deleted object off every slide", () => {
+    state().continueSlide(0);
+    state().setSharedCast(true);
+    const id = state().addIcon(iconId);
+
+    state().deleteObjects([id]);
+
+    expect(state().slides.some((s) => s.states[id])).toBe(false);
+    expect(state().objects[id]).toBeUndefined();
+    state().setSharedCast(false);
   });
 });
 
@@ -260,7 +362,7 @@ describe("slides — history", () => {
 
   it("undoes a move written on a slide", () => {
     const id = state().addIcon(iconId, { x: 0, y: 0 });
-    state().addSlide();
+    state().continueSlide(0);
     state().moveObject(id, 500, 500);
     expect(at(id, 1)).toMatchObject({ x: 500 });
 
@@ -286,7 +388,6 @@ describe("animateSelection", () => {
   const seed = () => {
     const a = state().addPrimitive("shape", "circle");
     const b = state().addPrimitive("shape", "circle");
-    state().addSlide();
     return { a, b };
   };
 

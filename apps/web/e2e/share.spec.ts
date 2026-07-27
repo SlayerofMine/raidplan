@@ -11,7 +11,7 @@ test.describe("viewer routing", () => {
   }) => {
     await page.goto("/plan/local/edit");
     await page.getByRole("button", { name: "Add Marker 1" }).click();
-    await page.getByTestId("add-slide").click();
+    await page.getByTestId("continue-slide-0").click();
     await page.waitForTimeout(1400); // let autosave flush
 
     await page.getByTestId("open-viewer").click();

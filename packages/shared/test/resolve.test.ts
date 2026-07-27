@@ -10,7 +10,7 @@ import {
   normalizeSlides,
   resolveObjectState,
   resolveSlideStates,
-  resolveSlideTransition,
+  settledStates,
   seedState,
 } from "../src/resolve.js";
 
@@ -48,6 +48,26 @@ function state(over: Partial<SlideState> = {}): SlideState {
 
 function slide(id: string, states: Record<string, SlideState>): Slide {
   return { id, states, animations: [] };
+}
+
+function move(
+  objectId: string,
+  params: Slide["animations"][number]["params"],
+): Slide["animations"][number] {
+  return { ...anim(objectId), ...(params ? { params } : {}) };
+}
+
+function anim(objectId: string): Slide["animations"][number] {
+  return {
+    id: `anim_${objectId}`,
+    objectId,
+    kind: "motion",
+    effect: "move",
+    trigger: "onEnter",
+    delayMs: 0,
+    durationMs: 500,
+    easing: "power2.out",
+  };
 }
 
 function plan(objects: PlanObject[], slides: Slide[]): Plan {
@@ -104,14 +124,42 @@ describe("resolveObjectState", () => {
     expect(resolveObjectState(o, slides, -1)).toMatchObject({ x: 100 });
   });
 
-  it("falls back to the seed when a slide has no entry for the object", () => {
+  it("is invisible on a slide it is not on", () => {
     const o = obj("a", { x: 7, y: 9 });
-    expect(resolveObjectState(o, [slide("s0", {})], 0)).toEqual(seedState(o));
+    expect(resolveObjectState(o, [slide("s0", {})], 0)).toEqual({
+      ...seedState(o),
+      visible: false,
+    });
   });
 
-  it("falls back to the seed when there are no slides at all", () => {
+  it("borrows its geometry from the last slide that had it", () => {
+    // So a token that leaves the scene fades out where it stood, rather than
+    // snapping back to wherever it was first dropped.
     const o = obj("a", { x: 7 });
-    expect(resolveObjectState(o, [], 0)).toEqual(seedState(o));
+    const slides = [slide("s0", { a: state({ x: 300 }) }), slide("s1", {})];
+    expect(resolveObjectState(o, slides, 1)).toMatchObject({
+      x: 300,
+      visible: false,
+    });
+  });
+
+  it("looks forward when no earlier slide has it", () => {
+    // An entrance on slide 2 starts from where slide 2 puts it, so a fade-in
+    // happens in place instead of sliding in from the object's creation point.
+    const o = obj("a", { x: 7 });
+    const slides = [slide("s0", {}), slide("s1", { a: state({ x: 400 }) })];
+    expect(resolveObjectState(o, slides, 0)).toMatchObject({
+      x: 400,
+      visible: false,
+    });
+  });
+
+  it("falls back to the seed, hidden, when there are no slides at all", () => {
+    const o = obj("a", { x: 7 });
+    expect(resolveObjectState(o, [], 0)).toEqual({
+      ...seedState(o),
+      visible: false,
+    });
   });
 
   it("agrees with resolveSlideStates for the same object", () => {
@@ -191,53 +239,70 @@ describe("resolveSlideStates", () => {
   });
 });
 
-describe("resolveSlideTransition", () => {
-  it("animates from the previous slide's layout to this one's", () => {
-    const p = plan(
-      [obj("a")],
-      [
-        slide("s0", { a: state({ x: 100 }) }),
-        slide("s1", { a: state({ x: 400 }) }),
-      ],
-    );
-    const { start, end } = resolveSlideTransition(p, 1);
-    expect(start.a).toMatchObject({ x: 100 });
-    expect(end.a).toMatchObject({ x: 400 });
+/**
+ * Where a slide leaves things — its opening layout with its own `move`s applied.
+ * Editor-only: it is how "continue from this slide" knows to carry a token to
+ * the end of its journey rather than back to where the journey started.
+ */
+describe("settledStates", () => {
+  it("leaves an object where its move ends", () => {
+    const s = settledStates({
+      id: "s0",
+      states: { a: state({ x: 100, y: 100 }) },
+      animations: [move("a", { toX: 700, toY: 250 })],
+    });
+    expect(s["a"]).toMatchObject({ x: 700, y: 250 });
   });
 
-  it("makes slide 0 static — it has nothing before it to move from", () => {
-    const p = plan(
-      [obj("a", { x: 7 })],
-      [slide("s0", { a: state({ x: 100 }) })],
-    );
-    const { start, end } = resolveSlideTransition(p, 0);
-    expect(start).toEqual(end);
-    expect(start.a).toMatchObject({ x: 100 });
+  it("leaves an undrawn move alone — it goes nowhere", () => {
+    const s = settledStates({
+      id: "s0",
+      states: { a: state({ x: 100 }) },
+      animations: [move("a", {})],
+    });
+    expect(s["a"]).toMatchObject({ x: 100 });
   });
 
-  it("throws on an out-of-range slide index", () => {
-    const p = plan([obj("a")], [slide("s0", { a: state() })]);
-    expect(() => resolveSlideTransition(p, 1)).toThrow(RangeError);
-    expect(() => resolveSlideTransition(p, -1)).toThrow(RangeError);
+  it("follows a chain of moves to the last one", () => {
+    const s = settledStates({
+      id: "s0",
+      states: { a: state({ x: 0 }) },
+      animations: [move("a", { toX: 200 }), move("a", { toX: 800 })],
+    });
+    expect(s["a"]).toMatchObject({ x: 800 });
   });
 
-  it("throws on a non-integer slide index", () => {
-    const p = plan([obj("a")], [slide("s0", { a: state() })]);
-    expect(() => resolveSlideTransition(p, 0.5)).toThrow(RangeError);
+  it("ignores animations belonging to another object", () => {
+    const s = settledStates({
+      id: "s0",
+      states: { a: state({ x: 10 }), b: state({ x: 20 }) },
+      animations: [move("b", { toX: 900 })],
+    });
+    expect(s["a"]).toMatchObject({ x: 10 });
+    expect(s["b"]).toMatchObject({ x: 900 });
   });
 });
 
 describe("normalizeSlides", () => {
-  it("fills a missing entry from the slide before it", () => {
+  it("leaves a missing entry missing — that is the object not being there", () => {
     const objects = [obj("a")];
     const slides = [slide("s0", { a: state({ x: 50 }) }), slide("s1", {})];
     const fixed = normalizeSlides(objects, slides);
-    expect(fixed[1]!.states.a).toMatchObject({ x: 50 });
+    expect(fixed[1]!.states.a).toBeUndefined();
   });
 
-  it("fills a missing entry on the first slide from the object's seed", () => {
-    const fixed = normalizeSlides([obj("a", { x: 12 })], [slide("s0", {})]);
-    expect(fixed[0]!.states.a).toMatchObject({ x: 12 });
+  it("drops animations for objects that no longer exist", () => {
+    const fixed = normalizeSlides(
+      [obj("a")],
+      [
+        {
+          id: "s0",
+          states: { a: state() },
+          animations: [anim("ghost"), anim("a")],
+        },
+      ],
+    );
+    expect(fixed[0]!.animations.map((x) => x.objectId)).toEqual(["a"]);
   });
 
   it("drops entries for objects that no longer exist", () => {
@@ -257,7 +322,7 @@ describe("normalizeSlides", () => {
     expect(normalizeSlides(objects, once)).toEqual(once);
   });
 
-  it("leaves an already-dense slide referentially untouched", () => {
+  it("leaves an already-clean slide referentially untouched", () => {
     const objects = [obj("a")];
     const original = slide("s0", { a: state({ x: 3 }) });
     const fixed = normalizeSlides(objects, [original]);

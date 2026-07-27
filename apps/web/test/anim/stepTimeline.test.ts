@@ -56,8 +56,7 @@ describe("layoutStepTimeline — matches the compiled GSAP timeline", () => {
     const slide: Slide = { id: "s", states: {}, animations };
     const { timeline } = compileStep({
       slide,
-      start: states,
-      end: states,
+      states,
       apply: () => {},
     });
     return timeline.duration();

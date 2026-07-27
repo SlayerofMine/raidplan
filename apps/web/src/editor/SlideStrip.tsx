@@ -9,13 +9,17 @@ import { useEditorStore } from "../store/editorStore";
  * the question of which of the two an edit was about to land in — is gone.
  *
  * Selecting a slide means edits land in *that slide's* layout, and in no other
- * (plan §5).
+ * (plan §5). A slide owns its cast too, so the three ways to make one are
+ * genuinely different things to say: **+ Slide** is an empty stage, **⇥** keeps
+ * the objects where the previous slide left them (what a `move` needs — it
+ * animates one object across two slides), and **⧉** copies what happens as well.
  */
 export function SlideStrip() {
   const slides = useEditorStore((s) => s.slides);
   const currentSlideIndex = useEditorStore((s) => s.currentSlideIndex);
   const selectSlide = useEditorStore((s) => s.selectSlide);
   const addSlide = useEditorStore((s) => s.addSlide);
+  const continueSlide = useEditorStore((s) => s.continueSlide);
   const duplicateSlide = useEditorStore((s) => s.duplicateSlide);
   const deleteSlide = useEditorStore((s) => s.deleteSlide);
   const moveSlide = useEditorStore((s) => s.moveSlide);
@@ -64,7 +68,19 @@ export function SlideStrip() {
               onClick={() => moveSlide(index, index + 1)}
             />
             <IconBtn
+              label={`Continue from ${slide.name ?? `Slide ${index + 1}`}`}
+              title={`New slide with the same objects where ${
+                slide.name ?? `Slide ${index + 1}`
+              } leaves them`}
+              testId={`continue-slide-${index}`}
+              glyph="⇥"
+              onClick={() => continueSlide(index)}
+            />
+            <IconBtn
               label={`Duplicate ${slide.name ?? `Slide ${index + 1}`}`}
+              title={`Copy ${
+                slide.name ?? `Slide ${index + 1}`
+              } — its objects and what happens on it`}
               glyph="⧉"
               onClick={() => duplicateSlide(index)}
             />
@@ -82,6 +98,7 @@ export function SlideStrip() {
         type="button"
         onClick={addSlide}
         data-testid="add-slide"
+        title="New empty slide — use ⇥ on a slide to carry its objects forward"
         className="rounded border border-panelborder px-2 py-1 text-sm hover:border-accent"
       >
         + Slide
@@ -105,11 +122,16 @@ const chip = (active: boolean) =>
 
 function IconBtn({
   label,
+  title,
+  testId,
   glyph,
   onClick,
   disabled,
 }: {
   label: string;
+  /** Hover text, where the accessible name is too terse to explain the button. */
+  title?: string;
+  testId?: string;
   glyph: string;
   onClick: () => void;
   disabled?: boolean;
@@ -118,7 +140,8 @@ function IconBtn({
     <button
       type="button"
       aria-label={label}
-      title={label}
+      title={title ?? label}
+      {...(testId ? { "data-testid": testId } : {})}
       onClick={onClick}
       disabled={disabled}
       className="px-1 text-xs text-neutral-500 hover:text-accent disabled:opacity-30"

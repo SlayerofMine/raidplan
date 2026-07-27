@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import {
-  makeEmptyPlan,
+  makePlanFromPreset,
   PlanSchema,
   SCHEMA_VERSION,
   type Plan,
@@ -87,17 +87,25 @@ export function createPlan(
 ): PlanWithDoc {
   const id = randomUUID();
   const slug = generateSlug();
-  const doc = makeEmptyPlan({
+  // Built by the shared seeder rather than by overlaying the fields here. The
+  // preset's `slides` defaults to `[]` — every bundled encounter is a background
+  // and nothing else — and an empty array is truthy, so assigning it wiped the
+  // opening slide `makeEmptyPlan` had just provided. The result was a plan with
+  // no slides, which `PlanSchema` refuses to parse, so every plan created this
+  // way 404'd on load: no background, no thumbnail, and a dead play button.
+  const doc = makePlanFromPreset({
     id,
     ...(params.title !== undefined ? { title: params.title } : {}),
     ...(params.raid !== undefined ? { raid: params.raid } : {}),
     ...(params.encounterId !== undefined
       ? { encounterId: params.encounterId }
       : {}),
-    background: params.background,
+    preset: {
+      background: params.background,
+      objects: params.objects ?? [],
+      slides: params.slides ?? [],
+    },
   });
-  if (params.objects) doc.objects = params.objects;
-  if (params.slides) doc.slides = params.slides;
   const at = nowSeconds();
 
   db.transaction((tx) => {
@@ -160,7 +168,17 @@ export function getPlanWithDoc(db: Db, id: string): PlanWithDoc | undefined {
   if (!data) return undefined;
 
   const parsed = PlanSchema.safeParse(JSON.parse(data.doc));
-  if (!parsed.success) return undefined;
+  if (!parsed.success) {
+    // The row exists; its contents are unreadable. Callers answer NOT_FOUND
+    // either way — a document we can't parse is a plan we can't serve — but
+    // say so in the log, because from the outside this is indistinguishable
+    // from a bad id, and it took a database dump to tell the two apart once.
+    console.warn(
+      `plan ${id}: stored document does not match the current schema —`,
+      parsed.error.issues.slice(0, 3),
+    );
+    return undefined;
+  }
 
   return { ...toSummary(row), doc: parsed.data, version: data.version };
 }

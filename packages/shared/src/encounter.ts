@@ -6,7 +6,7 @@ import {
   StepSchema,
   type Plan,
 } from "./plan.js";
-import { normalizeSlides } from "./resolve.js";
+import { normalizeSlides, seedState } from "./resolve.js";
 import { BACKGROUNDS, toBackground } from "./assets/backgrounds.js";
 
 /**
@@ -69,28 +69,59 @@ export interface DefaultEncounter {
  * Uses {@link makeEmptyPlan} for the identity/defaults, then overlays the
  * preset's body. The preset's objects/slides are copied verbatim — their ids
  * only need to be unique within one document, so two plans seeded from the same
- * encounter don't collide — then normalised, so a preset that lists objects but
- * no state for them still opens on a board you can see.
+ * encounter don't collide.
+ *
+ * A preset that lists objects but no slide states for them is taken to mean
+ * "these are the encounter's furniture": they are placed on the **opening
+ * slide**, at their authored transform. Only there — where else a boss stands is
+ * the plan's story to tell, not the encounter's.
+ *
+ * A preset with **no slides** keeps the empty plan's opening slide, rather than
+ * being copied over it. Every bundled encounter is exactly that — a background
+ * and nothing else — so getting this wrong produces a plan with no slides at
+ * all, which `PlanSchema` refuses to parse and no editor can open.
+ *
+ * The single place a plan is built from a preset, for that reason: the API's
+ * `createPlan` delegates here rather than overlaying the fields itself.
  */
 export function makePlanFromPreset(params: {
   id: string;
   title?: string;
   raid?: string;
+  /** Which encounter seeded this plan — drives the attack palette (plan §17). */
+  encounterId?: string;
   preset: EncounterPreset;
 }): Plan {
   const base = makeEmptyPlan({
     id: params.id,
     ...(params.title !== undefined ? { title: params.title } : {}),
     ...(params.raid !== undefined ? { raid: params.raid } : {}),
+    ...(params.encounterId !== undefined
+      ? { encounterId: params.encounterId }
+      : {}),
     background: params.preset.background,
   });
-  const slides =
+  const authored =
     params.preset.slides.length > 0 ? params.preset.slides : base.slides;
-  return {
-    ...base,
-    objects: params.preset.objects,
-    slides: normalizeSlides(params.preset.objects, slides),
-  };
+  const slides = normalizeSlides(params.preset.objects, authored);
+  const opening = slides[0];
+  if (opening) {
+    const missing = params.preset.objects.filter(
+      (object) => !slides.some((slide) => slide.states[object.id]),
+    );
+    if (missing.length > 0) {
+      slides[0] = {
+        ...opening,
+        states: {
+          ...opening.states,
+          ...Object.fromEntries(
+            missing.map((object) => [object.id, seedState(object)]),
+          ),
+        },
+      };
+    }
+  }
+  return { ...base, objects: params.preset.objects, slides };
 }
 
 /**

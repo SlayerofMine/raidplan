@@ -116,6 +116,14 @@ function AttackDesigner({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The two slides are the *same* scene in two states (see `onStart`), not two
+  // scenes, so a part drawn on either belongs to both — unlike a plan, where a
+  // slide owns its own cast.
+  useEffect(() => {
+    useEditorStore.getState().setSharedCast(true);
+    return () => useEditorStore.getState().setSharedCast(false);
+  }, []);
+
   // Load the def (fetched for edit, blank for new) onto the store, once.
   useEffect(() => {
     let cancelled = false;

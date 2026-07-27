@@ -31,10 +31,15 @@ import {
  */
 export interface CompileStepParams {
   slide: Slide;
-  /** Object states when the slide is entered (settled state of the slide before). */
-  start: ResolvedStates;
-  /** Object states when the slide has finished (this slide's settled state). */
-  end: ResolvedStates;
+  /**
+   * The layout the slide **opens** on: every object in the scene, where it
+   * stands before anything plays.
+   *
+   * One map, not a start and an end. An animation states its own target, so
+   * there is nothing to look up in a neighbouring slide — which is what lets a
+   * `move` mean the same thing on the first slide as on the ninth.
+   */
+  states: ResolvedStates;
   /**
    * Push tweened values at a target. Called on every tick, with **only the
    * properties this animation drives** — see `addTween`.
@@ -74,8 +79,7 @@ const PULSE_SCALE = 1.15;
 
 export function compileStep({
   slide,
-  start,
-  end,
+  states,
   apply,
   onUpdate,
 }: CompileStepParams): CompiledStep {
@@ -84,11 +88,11 @@ export function compileStep({
 
   // Stale animations (object deleted) must never break playback.
   const animations = slide.animations.filter(
-    (a) => !isDeferred(a) && start[a.objectId] && end[a.objectId],
+    (a) => !isDeferred(a) && states[a.objectId],
   );
 
   const initial: ResolvedStates = {};
-  for (const [id, s] of Object.entries(start)) initial[id] = { ...s };
+  for (const [id, s] of Object.entries(states)) initial[id] = { ...s };
   for (const anim of animations) {
     const from = initial[anim.objectId];
     if (from) Object.assign(from, entranceOffset(anim, from));
@@ -103,7 +107,7 @@ export function compileStep({
   const proxyFor = (objectId: string): ObjectState => {
     let proxy = proxies.get(objectId);
     if (!proxy) {
-      proxy = { ...(initial[objectId] ?? start[objectId]!) };
+      proxy = { ...(initial[objectId] ?? states[objectId]!) };
       proxies.set(objectId, proxy);
     }
     return proxy;
@@ -125,7 +129,7 @@ export function compileStep({
       anim,
       proxy: proxyFor(anim.objectId),
       initial: initial[anim.objectId]!,
-      end: end[anim.objectId]!,
+      state: states[anim.objectId]!,
       at: span.startMs / MS,
       duration: anim.durationMs / MS,
       apply,
@@ -164,8 +168,10 @@ interface TweenParams {
   anim: Anim;
   /** Shared, per-object; mutated by GSAP and pushed out on each tick. */
   proxy: ObjectState;
+  /** Where this animation starts: the slide's layout, plus any entrance offset. */
   initial: ObjectState;
-  end: ObjectState;
+  /** The slide's own value for this object, before an entrance displaced it. */
+  state: ObjectState;
   at: number;
   duration: number;
   apply: (objectId: string, props: Partial<ObjectState>) => void;
@@ -197,7 +203,7 @@ function addTween({
   anim,
   proxy,
   initial,
-  end,
+  state,
   at,
   duration,
   apply,
@@ -231,7 +237,7 @@ function addTween({
 
   switch (anim.effect) {
     case "appear":
-      setAt({ visible: true, opacity: end.opacity }, at);
+      setAt({ visible: true, opacity: state.opacity }, at);
       return;
 
     case "disappear":
@@ -242,18 +248,24 @@ function addTween({
       // The entrance's opacity-0 start is already in `initial`.
       tweenTo({
         opacity:
-          anim.kind === "exit" ? 0 : (anim.params?.toOpacity ?? end.opacity),
+          anim.kind === "exit" ? 0 : (anim.params?.toOpacity ?? state.opacity),
       });
       return;
 
     case "fly":
-      tweenTo({ x: end.x, y: end.y, opacity: end.opacity });
+      // Flies *in* to where the slide puts it, from the origin `entranceOffset`
+      // parked it at. Entrance-only, so there is no "flies away" reading.
+      tweenTo({ x: state.x, y: state.y, opacity: state.opacity });
       return;
 
     case "move": {
+      // The journey is the animation's own: it starts where the object stands on
+      // this slide and ends where the author drew it. A move with no destination
+      // has not been drawn yet and goes nowhere, rather than quietly borrowing
+      // some other slide's idea of where the object belongs.
       const destination = {
-        x: anim.params?.toX ?? end.x,
-        y: anim.params?.toY ?? end.y,
+        x: anim.params?.toX ?? initial.x,
+        y: anim.params?.toY ?? initial.y,
       };
       const waypoints = anim.params?.path ?? [];
       // No waypoints is the overwhelmingly common case and stays a plain
@@ -303,9 +315,21 @@ function addTween({
       return;
     }
 
-    case "scale":
-      tweenTo({ w: end.w, h: end.h });
+    case "scale": {
+      // A multiple of the object's own size, about its centre — so "grow to
+      // 150%" is one number the animation carries, not a size difference
+      // between two slides that only exists if there is a slide after this one.
+      const factor = anim.params?.scale ?? 1;
+      const w = initial.w * factor;
+      const h = initial.h * factor;
+      tweenTo({
+        w,
+        h,
+        x: initial.x - (w - initial.w) / 2,
+        y: initial.y - (h - initial.h) / 2,
+      });
       return;
+    }
 
     case "pulse": {
       // Swell about the centre, then settle back to exactly where it started.

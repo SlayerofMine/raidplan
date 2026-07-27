@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SCHEMA_VERSION, type Plan } from "@raidplan/shared";
+import { SCHEMA_VERSION, seedState, type Plan } from "@raidplan/shared";
 import { createApp } from "../../src/app.js";
 import { loadConfig, type Config } from "../../src/config.js";
 import type { Db } from "../../src/db/client.js";
@@ -64,16 +64,26 @@ function makePlan(visibility: "private" | "unlisted" | "public") {
 }
 
 function planDoc(over: Partial<Plan> = {}): Plan {
+  const objects = over.objects ?? [];
   return {
     id: "p",
     title: "Test",
     raid: "",
     background: BACKGROUND,
-    objects: [],
     attacks: [],
-    slides: [],
+    // A slide's `states` is its cast list, so the fixture's objects have to be
+    // *on* the opening slide to be drawn — placed at their creation transform,
+    // which is what the editor does when one is added.
+    slides: [
+      {
+        id: "s0",
+        states: Object.fromEntries(objects.map((o) => [o.id, seedState(o)])),
+        animations: [],
+      },
+    ],
     schemaVersion: SCHEMA_VERSION,
     ...over,
+    objects,
   };
 }
 
@@ -231,6 +241,32 @@ describe("uploaded backgrounds in the preview", () => {
     ).toBeUndefined();
   });
 
+  it("transcodes an uploaded WebP to PNG, so resvg can actually draw it", async () => {
+    // The upload route accepts WebP, but resvg decodes only PNG/JPEG/GIF and
+    // drops an embedded WebP *silently* — inlining the stored bytes as-is
+    // produced a valid data URI and a blank map.
+    const { default: sharp } = await import("sharp");
+    const webp = await sharp(PNG_2x1).webp({ lossless: true }).toBuffer();
+
+    const dir = await mkdtemp(join(tmpdir(), "raidplans-og-"));
+    try {
+      await writeFile(join(dir, "map.webp"), webp);
+      const src = await inlineUploadedBackground("/uploads/map.webp", dir);
+      expect(src?.startsWith("data:image/png;base64,")).toBe(true);
+
+      // And it reaches the canvas: without the transcode this is all base colour.
+      const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4">' +
+        '<rect width="8" height="4" fill="#0f141c"/>' +
+        `<image href="${src}" width="8" height="4"/></svg>`;
+      const pixels = new Resvg(svg).render().pixels;
+      const drawn = pixels.filter((_, i) => i % 4 === 0 && pixels[i] === 0xc0);
+      expect(drawn.length).toBe(8 * 4);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("cannot be walked out of the uploads directory", async () => {
     const dir = await mkdtemp(join(tmpdir(), "raidplans-og-"));
     try {
@@ -355,7 +391,7 @@ describe("planDescription", () => {
   });
 
   it("pluralises, and leads with the raid when set", () => {
-    expect(planDescription(planDoc({ raid: "Aberrus" }))).toBe(
+    expect(planDescription(planDoc({ raid: "Aberrus", slides: [] }))).toBe(
       "Aberrus · 0 slides · 0 objects",
     );
   });

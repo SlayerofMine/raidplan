@@ -2,6 +2,7 @@ import { AnimationPanel } from "./AnimationPanel";
 import { AttackDefResolver } from "./AttackDefResolver";
 import { AttacksPanel } from "./AttacksPanel";
 import { CanvasStage } from "./canvas/CanvasStage";
+import { EmptySlideHint } from "./EmptySlideHint";
 import { IconPalette } from "./IconPalette";
 import { isLocalPlan, LOCAL_PLAN_ID } from "./planScope";
 import { PropertiesPanel } from "./PropertiesPanel";
@@ -56,8 +57,9 @@ export function EditorLayout({ planId }: { planId: string }) {
       <div style={{ gridArea: "palette" }} className="min-h-0">
         <IconPalette />
       </div>
-      <div style={{ gridArea: "canvas" }} className="min-h-0">
+      <div style={{ gridArea: "canvas" }} className="relative min-h-0">
         <CanvasStage />
+        <EmptySlideHint />
       </div>
       {/* Fetches URLs for synced WoW tokens a reopened plan references. */}
       <SyncedIconResolver />

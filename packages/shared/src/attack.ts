@@ -641,7 +641,6 @@ function expandInstance(
 ): {
   objects: PlanObject[];
   animations: Anim[];
-  overrides: Record<string, StepOverride>;
 } {
   // The def's own extent is mapped onto the instance's rectangle, so the frame
   // hugs the attack whatever coordinates it happens to be authored in.
@@ -787,7 +786,55 @@ function expandInstance(
     };
   }
 
-  return { objects, animations, overrides };
+  // The adapter, in one place. A def is still authored as two states — a start
+  // shape and the `overrides` its animations reach — because that is what an
+  // AttackDef is. A *plan's* animations state their own targets. So the end
+  // state is handed to the animations that are supposed to produce it, here, at
+  // the seam: nothing downstream has to know the def ever worked differently.
+  const startOf = new Map(objects.map((o) => [o.id, o.base]));
+  return {
+    objects,
+    animations: animations.map((a) =>
+      withDerivedTarget(a, startOf.get(a.objectId), overrides[a.objectId]),
+    ),
+  };
+}
+
+/**
+ * Give an expanded animation the target its definition expressed as an end
+ * state, unless it already carries one of its own.
+ *
+ * Only the effects that *go* somewhere need it: a pulse or a blink returns to
+ * where it started and has nothing to take from an end state.
+ */
+function withDerivedTarget(
+  anim: Anim,
+  start: ObjectBase | undefined,
+  end: StepOverride | undefined,
+): Anim {
+  if (!end || !start) return anim;
+  const params = anim.params ?? {};
+  switch (anim.effect) {
+    case "move":
+      if (params.toX !== undefined || params.toY !== undefined) return anim;
+      if (end.x === undefined && end.y === undefined) return anim;
+      return {
+        ...anim,
+        params: { ...params, toX: end.x ?? start.x, toY: end.y ?? start.y },
+      };
+    case "scale": {
+      if (params.scale !== undefined) return anim;
+      // The def says "ends this big"; a plan's scale says "by this much".
+      if (end.w === undefined || start.w === 0) return anim;
+      return { ...anim, params: { ...params, scale: end.w / start.w } };
+    }
+    case "fade":
+      if (params.toOpacity !== undefined || anim.kind === "exit") return anim;
+      if (end.opacity === undefined) return anim;
+      return { ...anim, params: { ...params, toOpacity: end.opacity } };
+    default:
+      return anim;
+  }
 }
 
 /**
@@ -842,17 +889,13 @@ export function expandPlan(
 
     for (const object of expanded.objects) {
       // Materialised hidden (see `expandInstance`), so the seed *is* the
-      // unplayed state — what the attack looks like before it goes off.
+      // unplayed state — what the attack looks like before it goes off, and now
+      // also what its own slide *opens* on. Its animations take it from there;
+      // the slide no longer states where it ends up, because the animations do.
       const unplayed: SlideState = { ...seedState(object), visible: false };
-      const settled: SlideState = {
-        ...seedState(object),
-        ...expanded.overrides[object.id],
-      };
-      // Slides are dense: a part needs a state on every one of them, not only
-      // on its own.
-      for (let i = 0; i < slides.length; i++) {
-        slides[i]!.states[object.id] = i === slideIndex ? settled : unplayed;
-      }
+      // On every slide, so a part is never a missing object mid-plan — hidden
+      // everywhere, revealed only by the animations on the slide that fires it.
+      for (const slide of slides) slide.states[object.id] = { ...unplayed };
     }
     slides[slideIndex]!.animations.push(...expanded.animations);
   }
@@ -926,8 +969,9 @@ export function defToPlan(def: AttackDef): Plan {
     base: mapBase(o.base, from, to),
   }));
 
-  // Slides are dense, so both carry a state for every object: Start is the
-  // mapped base, End is that same state with the def's overrides merged on.
+  // A def is one scene in two states, so both slides carry every part: Start is
+  // the mapped base, End is that same state with the def's overrides merged on.
+  // (The designer sets `sharedCast` so editing keeps it that way.)
   const start: Record<string, SlideState> = {};
   const end: Record<string, SlideState> = {};
   for (const o of objects) {

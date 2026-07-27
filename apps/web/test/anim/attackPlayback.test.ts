@@ -103,8 +103,7 @@ function playStep(doc: Plan, index: number) {
   const applied: Record<string, Partial<ObjectState>> = {};
   const { timeline, initial } = compileStep({
     slide: doc.slides[index]!,
-    start: statesOn(doc, index - 1),
-    end: statesOn(doc, index),
+    states: statesOn(doc, index),
     // A patch per push, merged the way a Konva node accumulates them.
     apply: (objectId, props) => {
       applied[objectId] = { ...applied[objectId], ...props };

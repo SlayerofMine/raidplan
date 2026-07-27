@@ -11,7 +11,6 @@ const iconId = ICONS[0]!.id;
 function seedOneAnimation() {
   const objectId = state().addIcon(iconId);
   state().updateObject(objectId, { label: "Tank" });
-  state().addSlide();
   const animId = state().addAnimation(0, objectId)!;
   return { objectId, animId };
 }
@@ -26,13 +25,11 @@ beforeEach(() => {
 
 describe("TimelineChart", () => {
   it("shows an empty hint for a slide with no animations", () => {
-    state().addSlide();
     render(<TimelineChart slideIndex={0} />);
     expect(screen.getByTestId("timeline-empty-0")).toBeInTheDocument();
   });
 
   it("keeps the measured track mounted with no animations, so it is sized before the first bar exists (regression: fresh slide → 0-width, undraggable bars until reload)", () => {
-    state().addSlide();
     render(<TimelineChart slideIndex={0} />);
     // The width-measuring wrapper must be present in the empty state; if it only
     // appeared alongside the first row it would never get observed.
@@ -49,7 +46,6 @@ describe("TimelineChart", () => {
   it("labels the row by the object's Name, not its internal id", () => {
     const objectId = state().addIcon(iconId);
     state().updateObject(objectId, { name: "Off-tank" });
-    state().addSlide();
     state().addAnimation(0, objectId);
     render(<TimelineChart slideIndex={0} />);
     const row = screen.getByTestId(`timeline-row-${objectId}`);
@@ -108,7 +104,6 @@ describe("TimelineChart", () => {
 
   it("gives concurrent animations on one object their own lane", () => {
     const objectId = state().addIcon(iconId);
-    state().addSlide();
     state().addAnimation(0, objectId);
     const secondId = state().addAnimation(0, objectId)!;
     state().updateAnimation(0, secondId, { trigger: "withPrevious" });

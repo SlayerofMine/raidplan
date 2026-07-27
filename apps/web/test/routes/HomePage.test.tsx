@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { DEFAULT_BACKGROUND } from "@raidplan/shared";
+import {
+  DEFAULT_BACKGROUND,
+  SCHEMA_VERSION,
+  type Plan,
+} from "@raidplan/shared";
 import { HomePage } from "../../src/routes/HomePage";
 import { LOCAL_PLAN_ID } from "../../src/editor/planScope";
+import { STORAGE_KEY } from "../../src/store/persistence";
 
 /**
  * The tRPC client is a Proxy — its methods don't physically exist until called,
@@ -20,6 +25,7 @@ vi.mock("../../src/api/client", () => {
         list: { query: vi.fn() },
         create: { mutate: vi.fn() },
         duplicate: { mutate: vi.fn() },
+        softDelete: { mutate: vi.fn() },
       },
       encounter: { list: { query: vi.fn() } },
     },
@@ -34,6 +40,7 @@ const meGet = vi.mocked(api.me.get.query);
 const planList = vi.mocked(api.plan.list.query);
 const planCreate = vi.mocked(api.plan.create.mutate);
 const planDuplicate = vi.mocked(api.plan.duplicate.mutate);
+const planSoftDelete = vi.mocked(api.plan.softDelete.mutate);
 const encounterList = vi.mocked(api.encounter.list.query);
 
 const encounter = (over: Record<string, unknown> = {}) =>
@@ -53,8 +60,24 @@ function trpcError(code: string) {
 
 const renderPage = () => render(<HomePage />, { wrapper: MemoryRouter });
 
+/** A valid saved offline plan, so the offline card sees something to delete. */
+function seedOfflinePlan() {
+  const plan: Plan = {
+    id: LOCAL_PLAN_ID,
+    title: "Scratch",
+    raid: "",
+    background: { assetId: "arena", width: 1600, height: 900 },
+    objects: [],
+    attacks: [],
+    slides: [{ id: "s1", states: {}, animations: [] }],
+    schemaVersion: SCHEMA_VERSION,
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
 });
 
 describe("HomePage — signed out", () => {
@@ -276,5 +299,102 @@ describe("HomePage — signed in", () => {
     expect(planDuplicate).toHaveBeenCalledWith({ id: "p1" });
     // list() is re-queried: once on mount, once after duplicating.
     await waitFor(() => expect(planList).toHaveBeenCalledTimes(2));
+  });
+
+  it("asks before deleting a plan, and does nothing until confirmed", async () => {
+    const user = userEvent.setup();
+    planList.mockResolvedValue([summary({ title: "Mythic Council" })]);
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Delete Mythic Council" }),
+    );
+    // Arming the button must not have deleted anything by itself.
+    expect(planSoftDelete).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByRole("button", { name: "Keep Mythic Council" }),
+    );
+    expect(planSoftDelete).not.toHaveBeenCalled();
+    // Cancelling restores the normal footer.
+    expect(
+      screen.getByRole("button", { name: "Duplicate Mythic Council" }),
+    ).toBeInTheDocument();
+  });
+
+  it("deletes a plan once confirmed and refreshes the list", async () => {
+    const user = userEvent.setup();
+    planList.mockResolvedValue([summary({ title: "Mythic Council" })]);
+    planSoftDelete.mockResolvedValue({ ok: true } as never);
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Delete Mythic Council" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Confirm deleting Mythic Council" }),
+    );
+
+    expect(planSoftDelete).toHaveBeenCalledWith({ id: "p1" });
+    // list() is re-queried: once on mount, once after deleting.
+    await waitFor(() => expect(planList).toHaveBeenCalledTimes(2));
+  });
+
+  it("surfaces a failed delete instead of pretending the plan is gone", async () => {
+    const user = userEvent.setup();
+    planList.mockResolvedValue([summary({ title: "Mythic Council" })]);
+    planSoftDelete.mockRejectedValue(trpcError("FORBIDDEN"));
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Delete Mythic Council" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Confirm deleting Mythic Council" }),
+    );
+
+    expect(await screen.findByTestId("plans-error")).toHaveTextContent(
+      /delete/i,
+    );
+  });
+});
+
+describe("HomePage — the offline plan", () => {
+  beforeEach(() => {
+    meGet.mockRejectedValue(trpcError("UNAUTHORIZED"));
+  });
+
+  it("offers no delete when nothing is saved yet", async () => {
+    renderPage();
+    await screen.findByTestId("sign-in");
+    expect(screen.queryByTestId("offline-delete")).not.toBeInTheDocument();
+  });
+
+  it("asks before wiping the offline plan — localStorage is the only copy", async () => {
+    const user = userEvent.setup();
+    seedOfflinePlan();
+    renderPage();
+
+    await user.click(await screen.findByTestId("offline-delete"));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
+  });
+
+  it("clears the saved plan once confirmed", async () => {
+    const user = userEvent.setup();
+    seedOfflinePlan();
+    renderPage();
+
+    await user.click(await screen.findByTestId("offline-delete"));
+    await user.click(screen.getByTestId("offline-delete-confirm"));
+
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    // Nothing left to delete, so the affordance goes away.
+    expect(screen.queryByTestId("offline-delete")).not.toBeInTheDocument();
+    // The editor link stays — you can always start a fresh offline plan.
+    expect(
+      screen.getByRole("link", { name: /offline editor/i }),
+    ).toBeInTheDocument();
   });
 });

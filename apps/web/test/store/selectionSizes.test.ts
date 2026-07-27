@@ -54,7 +54,7 @@ describe("selectSelectionSizes", () => {
 
   it("sees a resize that lands in a slide's overrides, not the base", () => {
     const id = state().addPrimitive("shape", "rect");
-    const slideId = state().addSlide();
+    const slideId = state().continueSlide(0);
     state().selectSlide(state().slides.findIndex((s) => s.id === slideId));
     state().select([id]);
 
@@ -67,7 +67,7 @@ describe("selectSelectionSizes", () => {
 
   it("changes when stepping to a slide that resizes the selection", () => {
     const id = state().addPrimitive("shape", "rect");
-    const slideId = state().addSlide();
+    const slideId = state().continueSlide(0);
     const slideIndex = state().slides.findIndex((s) => s.id === slideId);
     state().selectSlide(slideIndex);
     state().updateObject(id, { w: 250, h: 90 });

@@ -96,8 +96,7 @@ export function createFrameRenderer(params: {
     if (!slide) return null;
     const built = compileStep({
       slide,
-      start: resolveAll(slideIndex - 1),
-      end: resolveAll(slideIndex),
+      states: resolveAll(slideIndex),
       apply,
     });
     compiled.set(slideIndex, built);
@@ -122,18 +121,18 @@ export function createFrameRenderer(params: {
       if (!isColliding(rule, rectOf)) continue;
 
       const anim = slide.animations.find((a) => a.id === rule.animId);
-      const end = resolveAll(slideIndex);
-      const target = anim && end[anim.objectId];
+      const here = resolveAll(slideIndex);
+      const target = anim && here[anim.objectId];
       if (!anim || !target) continue;
 
       fired.add(rule.animId);
       const built = compileOneShot({
         anim,
         slide,
-        start: {
+        states: {
+          ...here,
           [anim.objectId]: readObjectState(stage, anim.objectId, target),
         },
-        end,
         apply,
       });
       applyStates(built.initial);

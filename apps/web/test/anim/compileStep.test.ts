@@ -39,13 +39,12 @@ function slide(animations: Anim[]): Slide {
 }
 
 /** Compile and collect the values pushed at each object. */
-function harness(s: Slide, start: ResolvedStates, end: ResolvedStates) {
+function harness(s: Slide, states: ResolvedStates) {
   const applied: Record<string, Partial<ObjectState>> = {};
   const onUpdate = vi.fn();
   const { timeline, initial } = compileStep({
     slide: s,
-    start,
-    end,
+    states,
     apply: (id, props) => {
       applied[id] = { ...applied[id], ...props };
     },
@@ -61,16 +60,12 @@ function harness(s: Slide, start: ResolvedStates, end: ResolvedStates) {
 
 describe("compileStep — timeline shape", () => {
   it("returns a paused timeline so the caller controls playback", () => {
-    const { timeline } = harness(
-      slide([anim()]),
-      { a: state() },
-      { a: state() },
-    );
+    const { timeline } = harness(slide([anim()]), { a: state() });
     expect(timeline.paused()).toBe(true);
   });
 
   it("an empty slide compiles to a zero-length timeline", () => {
-    const { timeline } = harness(slide([]), {}, {});
+    const { timeline } = harness(slide([]), {});
     expect(timeline.duration()).toBe(0);
   });
 
@@ -80,7 +75,7 @@ describe("compileStep — timeline shape", () => {
       anim({ id: "2", objectId: "b", trigger: "onEnter", durationMs: 800 }),
     ]);
     const states = { a: state(), b: state() };
-    const { timeline } = harness(s, states, states);
+    const { timeline } = harness(s, states);
     // Both start together, so the slide lasts as long as the longest.
     expect(timeline.duration()).toBeCloseTo(0.8);
   });
@@ -96,7 +91,7 @@ describe("compileStep — timeline shape", () => {
       }),
     ]);
     const states = { a: state(), b: state() };
-    const { timeline } = harness(s, states, states);
+    const { timeline } = harness(s, states);
     expect(timeline.duration()).toBeCloseTo(1);
   });
 
@@ -111,14 +106,14 @@ describe("compileStep — timeline shape", () => {
       }),
     ]);
     const states = { a: state(), b: state() };
-    const { timeline } = harness(s, states, states);
+    const { timeline } = harness(s, states);
     expect(timeline.duration()).toBeCloseTo(0.5);
   });
 
   it("applies delayMs on top of the trigger position", () => {
     const s = slide([anim({ durationMs: 500, delayMs: 250 })]);
     const states = { a: state() };
-    const { timeline } = harness(s, states, states);
+    const { timeline } = harness(s, states);
     expect(timeline.duration()).toBeCloseTo(0.75);
   });
 
@@ -126,7 +121,7 @@ describe("compileStep — timeline shape", () => {
     const states = { a: state() };
     for (const trigger of ["onClick", "onCollision"] as const) {
       const s = slide([anim({ trigger, durationMs: 500 })]);
-      expect(harness(s, states, states).timeline.duration()).toBe(0);
+      expect(harness(s, states).timeline.duration()).toBe(0);
     }
     expect(isDeferred(anim({ trigger: "onClick" }))).toBe(true);
     expect(isDeferred(anim({ trigger: "onCollision" }))).toBe(true);
@@ -135,54 +130,46 @@ describe("compileStep — timeline shape", () => {
 
   it("skips animations whose object no longer exists, without throwing", () => {
     const s = slide([anim({ objectId: "ghost" })]);
-    expect(() => harness(s, {}, {})).not.toThrow();
-    const { timeline } = harness(s, {}, {});
+    expect(() => harness(s, {})).not.toThrow();
+    const { timeline } = harness(s, {});
     expect(timeline.duration()).toBe(0);
   });
 });
 
-describe("compileStep — effects reach their end state", () => {
-  it("move tweens to the resolved end position", () => {
-    const s = slide([anim({ effect: "move", kind: "motion" })]);
-    const { timeline, applied } = harness(
-      s,
-      { a: state({ x: 0, y: 0 }) },
-      { a: state({ x: 400, y: 200 }) },
-    );
+describe("compileStep — an animation states its own target", () => {
+  it("move travels to the destination it carries", () => {
+    const s = slide([
+      anim({ effect: "move", kind: "motion", params: { toX: 400, toY: 200 } }),
+    ]);
+    const { timeline, applied } = harness(s, { a: state({ x: 0, y: 0 }) });
     timeline.progress(1);
     expect(applied.a).toMatchObject({ x: 400, y: 200 });
   });
 
-  it("move honours an explicit target point over the resolved end", () => {
-    const s = slide([anim({ effect: "move", params: { toX: 50, toY: 60 } })]);
-    const { timeline, applied } = harness(
-      s,
-      { a: state() },
-      { a: state({ x: 400, y: 200 }) },
-    );
+  it("a move with no destination goes nowhere", () => {
+    // It hasn't been drawn yet. Borrowing another slide's idea of where the
+    // object belongs is exactly the cross-slide dependency this model removed.
+    const s = slide([anim({ effect: "move" })]);
+    const { timeline, applied } = harness(s, { a: state({ x: 120, y: 80 }) });
     timeline.progress(1);
-    expect(applied.a).toMatchObject({ x: 50, y: 60 });
+    expect(applied.a).toMatchObject({ x: 120, y: 80 });
   });
 
   it("is mid-way at half progress (it really tweens)", () => {
-    const s = slide([anim({ effect: "move", easing: "none" })]);
-    const { timeline, applied } = harness(
-      s,
-      { a: state({ x: 0 }) },
-      { a: state({ x: 100 }) },
-    );
+    const s = slide([
+      anim({ effect: "move", easing: "none", params: { toX: 100 } }),
+    ]);
+    const { timeline, applied } = harness(s, { a: state({ x: 0 }) });
     timeline.progress(0.5);
     expect(applied.a?.x).toBeGreaterThan(0);
     expect(applied.a?.x).toBeLessThan(100);
   });
 
-  it("entrance fade starts hidden (via `initial`) and ends at the end opacity", () => {
+  it("entrance fade starts hidden (via `initial`) and ends at the slide opacity", () => {
     const s = slide([anim({ kind: "entrance", effect: "fade" })]);
-    const { timeline, initial, applied } = harness(
-      s,
-      { a: state({ opacity: 1 }) },
-      { a: state({ opacity: 1 }) },
-    );
+    const { timeline, initial, applied } = harness(s, {
+      a: state({ opacity: 1 }),
+    });
     // The engine snaps to `initial` before playing — that's what stops a
     // fade-in flashing at full opacity for a frame, and it's what makes the
     // object visible. The tween itself only ever writes what it animates.
@@ -191,15 +178,13 @@ describe("compileStep — effects reach their end state", () => {
     expect(applied.a).toEqual({ opacity: 1 });
   });
 
-  it("entrance fly starts at its origin and lands on the end state", () => {
+  it("entrance fly starts at its origin and lands where the slide puts it", () => {
     const s = slide([
       anim({ kind: "entrance", effect: "fly", params: { toX: -200, toY: 0 } }),
     ]);
-    const { timeline, initial, applied } = harness(
-      s,
-      { a: state({ x: 300, y: 100 }) },
-      { a: state({ x: 300, y: 100 }) },
-    );
+    const { timeline, initial, applied } = harness(s, {
+      a: state({ x: 300, y: 100 }),
+    });
     expect(initial.a).toMatchObject({ x: -200, opacity: 0 });
     timeline.progress(1);
     expect(applied.a).toMatchObject({ x: 300, y: 100, opacity: 1 });
@@ -207,7 +192,7 @@ describe("compileStep — effects reach their end state", () => {
 
   it("exit fade ends fully transparent", () => {
     const s = slide([anim({ kind: "exit", effect: "fade" })]);
-    const { timeline, applied } = harness(s, { a: state() }, { a: state() });
+    const { timeline, applied } = harness(s, { a: state() });
     timeline.progress(1);
     expect(applied.a?.opacity).toBeCloseTo(0);
   });
@@ -215,7 +200,6 @@ describe("compileStep — effects reach their end state", () => {
   it("appear shows the object; disappear hides it", () => {
     const appear = harness(
       slide([anim({ kind: "entrance", effect: "appear" })]),
-      { a: state({ visible: false, opacity: 0 }) },
       { a: state({ visible: true, opacity: 1 }) },
     );
     appear.timeline.progress(1);
@@ -224,30 +208,35 @@ describe("compileStep — effects reach their end state", () => {
     const disappear = harness(
       slide([anim({ kind: "exit", effect: "disappear" })]),
       { a: state() },
-      { a: state() },
     );
     disappear.timeline.progress(1);
     expect(disappear.applied.a).toMatchObject({ visible: false, opacity: 0 });
   });
 
-  it("scale tweens to the end size", () => {
-    const s = slide([anim({ kind: "emphasis", effect: "scale" })]);
-    const { timeline, applied } = harness(
-      s,
-      { a: state({ w: 100, h: 100 }) },
-      { a: state({ w: 200, h: 150 }) },
-    );
+  it("scale grows by the factor it carries, about its centre", () => {
+    const s = slide([
+      anim({ kind: "motion", effect: "scale", params: { scale: 1.5 } }),
+    ]);
+    const { timeline, applied } = harness(s, {
+      a: state({ x: 100, y: 100, w: 100, h: 100 }),
+    });
     timeline.progress(1);
-    expect(applied.a).toMatchObject({ w: 200, h: 150 });
+    // 150×150, and offset by half the growth so it swells in place.
+    expect(applied.a).toMatchObject({ w: 150, h: 150, x: 75, y: 75 });
+  });
+
+  it("a scale with no factor leaves the size alone", () => {
+    const s = slide([anim({ kind: "motion", effect: "scale" })]);
+    const { timeline, applied } = harness(s, { a: state({ w: 100, h: 100 }) });
+    timeline.progress(1);
+    expect(applied.a).toMatchObject({ w: 100, h: 100 });
   });
 
   it("pulse returns to its original size", () => {
     const s = slide([anim({ kind: "emphasis", effect: "pulse" })]);
-    const { timeline, applied } = harness(
-      s,
-      { a: state({ w: 100, h: 100 }) },
-      { a: state({ w: 100, h: 100 }) },
-    );
+    const { timeline, applied } = harness(s, {
+      a: state({ w: 100, h: 100 }),
+    });
     timeline.progress(0.5);
     expect(applied.a!.w).toBeGreaterThan(100); // swelled
     timeline.progress(1);
@@ -256,11 +245,7 @@ describe("compileStep — effects reach their end state", () => {
 
   it("blink returns to its original opacity", () => {
     const s = slide([anim({ kind: "emphasis", effect: "blink" })]);
-    const { timeline, applied } = harness(
-      s,
-      { a: state({ opacity: 1 }) },
-      { a: state({ opacity: 1 }) },
-    );
+    const { timeline, applied } = harness(s, { a: state({ opacity: 1 }) });
     timeline.progress(0.5);
     expect(applied.a!.opacity).toBeCloseTo(0);
     timeline.progress(1);
@@ -274,7 +259,13 @@ describe("compileStep — several animations on one object", () => {
     // contribute its own property to one shared state, not overwrite the other
     // with a stale snapshot.
     const s = slide([
-      anim({ id: "1", objectId: "a", effect: "move", trigger: "onEnter" }),
+      anim({
+        id: "1",
+        objectId: "a",
+        effect: "move",
+        trigger: "onEnter",
+        params: { toX: 400 },
+      }),
       anim({
         id: "2",
         objectId: "a",
@@ -283,11 +274,9 @@ describe("compileStep — several animations on one object", () => {
         trigger: "withPrevious",
       }),
     ]);
-    const { timeline, applied } = harness(
-      s,
-      { a: state({ x: 0, opacity: 1 }) },
-      { a: state({ x: 400, opacity: 1 }) },
-    );
+    const { timeline, applied } = harness(s, {
+      a: state({ x: 0, opacity: 1 }),
+    });
 
     timeline.progress(1);
     expect(applied.a).toMatchObject({ x: 400, opacity: 0 });
@@ -296,12 +285,8 @@ describe("compileStep — several animations on one object", () => {
 
 describe("compileStep — redraw hook", () => {
   it("calls onUpdate as the timeline ticks (→ batchDraw)", () => {
-    const s = slide([anim({ effect: "move" })]);
-    const { timeline, updates } = harness(
-      s,
-      { a: state({ x: 0 }) },
-      { a: state({ x: 100 }) },
-    );
+    const s = slide([anim({ effect: "move", params: { toX: 100 } })]);
+    const { timeline, updates } = harness(s, { a: state({ x: 0 }) });
     timeline.progress(0.5);
     expect(updates()).toBeGreaterThan(0);
   });
@@ -315,9 +300,8 @@ describe("compileStep — redraw hook", () => {
 describe("compileStep — an effect writes only what it drives", () => {
   it("a move pushes position and nothing else", () => {
     const { timeline, applied } = harness(
-      slide([anim({ effect: "move" })]),
+      slide([anim({ effect: "move", params: { toX: 100 } })]),
       { a: state({ x: 0 }) },
-      { a: state({ x: 100 }) },
     );
     timeline.progress(1);
     expect(Object.keys(applied.a!).sort()).toEqual(["x", "y"]);
@@ -327,7 +311,6 @@ describe("compileStep — an effect writes only what it drives", () => {
     const { timeline, applied } = harness(
       slide([anim({ kind: "exit", effect: "disappear" })]),
       { a: state() },
-      { a: state() },
     );
     timeline.progress(1);
     expect(applied.a).toEqual({ visible: false, opacity: 0 });
@@ -336,7 +319,6 @@ describe("compileStep — an effect writes only what it drives", () => {
   it("a pulse leaves opacity and visibility alone", () => {
     const { timeline, applied } = harness(
       slide([anim({ kind: "emphasis", effect: "pulse" })]),
-      { a: state() },
       { a: state() },
     );
     timeline.progress(1);

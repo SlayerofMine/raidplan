@@ -100,8 +100,9 @@ export function toPlan(doc: PlanDoc): Plan {
  * The shared `Plan` document → normalized editor document.
  *
  * Slides are normalised on the way in, which is the one place a document from
- * *outside* the store (a load, an import, a stale autosave) becomes one the
- * store's density invariant can be trusted for.
+ * *outside* the store (a load, an import, a stale autosave) is stripped of
+ * entries and animations naming objects the plan doesn't have. A *missing*
+ * entry is left alone — that is the object not being in that scene.
  */
 export function fromPlan(plan: Plan): PlanDoc {
   const objects: Record<string, PlanObject> = {};

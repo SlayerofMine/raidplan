@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SCHEMA_VERSION, type Plan, type PlanObject } from "@raidplan/shared";
+import {
+  SCHEMA_VERSION,
+  seedState,
+  type Plan,
+  type PlanObject,
+} from "@raidplan/shared";
 import type { Db } from "../../src/db/client.js";
 import { createTestDb } from "../../src/db/testDb.js";
 import { renderOgImage } from "../../src/og/renderOgImage.js";
@@ -35,7 +40,15 @@ const plan = (objects: PlanObject[]): Plan => ({
   background: { assetId: "no-such-bg", width: 400, height: 300 },
   objects,
   attacks: [],
-  slides: [],
+  // A slide's `states` is its cast list — an object with no entry isn't in the
+  // scene, so the fixture puts them all on the opening slide.
+  slides: [
+    {
+      id: "s0",
+      states: Object.fromEntries(objects.map((o) => [o.id, seedState(o)])),
+      animations: [],
+    },
+  ],
   schemaVersion: SCHEMA_VERSION,
 });
 

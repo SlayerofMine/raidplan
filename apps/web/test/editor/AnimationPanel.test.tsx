@@ -27,7 +27,7 @@ function seed() {
   state().updateObject(orb, { name: "Orb" });
   const tank = state().addIcon(iconId);
   state().updateObject(tank, { name: "Tank" });
-  state().addSlide();
+  state().continueSlide(0);
   const animId = state().addAnimation(SLIDE, orb)!;
   state().select([orb]);
   return { orb, tank, animId };
@@ -164,7 +164,7 @@ describe("AnimationPanel — one row, many objects", () => {
     state().updateObject(orb, { name: "Orb" });
     const tank = state().addIcon(iconId);
     state().updateObject(tank, { name: "Tank" });
-    state().addSlide();
+    state().continueSlide(0);
     state().select([orb, tank]);
     state().animateSelection(SLIDE);
     return { orb, tank };
@@ -234,7 +234,7 @@ describe("AnimationPanel — one row, many objects", () => {
 
   it("keeps two animations of one object apart, however alike", () => {
     const orb = state().addPrimitive("shape", "pickup");
-    state().addSlide();
+    state().continueSlide(0);
     state().addAnimation(SLIDE, orb);
     state().addAnimation(SLIDE, orb);
     state().select([orb]);
@@ -255,7 +255,7 @@ describe("AnimationPanel — one row, many objects", () => {
 describe("AnimationPanel — effects belong to a family", () => {
   const oneAnim = () => {
     const orb = state().addPrimitive("shape", "pickup");
-    state().addSlide();
+    state().continueSlide(0);
     const animId = state().addAnimation(SLIDE, orb)!;
     state().select([orb]);
     return animId;

@@ -21,8 +21,14 @@ import { ObjectStyleSchema } from "./mechanics.js";
  * Current on-disk schema version. Bump when a migration is required.
  *
  * **4** replaced the `base` + cascading sparse `steps` model with **slides**:
- * every slide carries a *complete* state for every object, so editing one slide
- * can never change another. Documents written at 3 or below do not parse.
+ * each slide carries a *complete* state for each object it contains, so editing
+ * one slide can never change another. Documents written at 3 or below do not
+ * parse.
+ *
+ * A slide's `states` doubles as its cast list — an object is on a slide iff it
+ * has an entry — which is a change of *meaning* within 4, not of shape. Every
+ * document written before it listed every object on every slide, which still
+ * says exactly what it always did: they are all in every scene.
  */
 export const SCHEMA_VERSION = 4;
 
@@ -40,8 +46,8 @@ const OpacitySchema = z.number().min(0).max(1);
  *  - `x`, `y`, `w`, `h`, `rotation`, `opacity`, `visible` are the **creation
  *    seed** only. Since schema 4 every slide carries its own complete
  *    {@link SlideStateSchema}, so nothing renders from these — they are read
- *    when a new slide entry is minted and by {@link ../resolve.js normalizeSlides},
- *    and are otherwise stale. Read the slide, never the seed.
+ *    when a new slide entry is minted, and are otherwise stale. Read the slide,
+ *    never the seed.
  *
  * They stay on one schema because an {@link ../attack.js AttackDef} is genuinely
  * two-state (a start shape and an end shape) and still uses `base` + a single
@@ -106,21 +112,41 @@ export const PlanObjectSchema = z.object({
 });
 export type PlanObject = z.infer<typeof PlanObjectSchema>;
 
-/** Tunable parameters for an animation, effect-dependent. */
+/**
+ * Tunable parameters for an animation, effect-dependent.
+ *
+ * **An animation says what it does, by itself.** Every effect starts from the
+ * object's state on its own slide and reaches a target stated here — nothing is
+ * read from a neighbouring slide, so a `move` means the same thing on slide 1 as
+ * on slide 9, and editing one slide can never change what another one plays.
+ */
 export const AnimParamsSchema = z.object({
+  /**
+   * Where a `move` ends up, as the object's top-left in plan pixels — the same
+   * coordinates as its {@link SlideStateSchema}. Absent means it goes nowhere.
+   *
+   * On an entrance `fly` this is read the other way round: the point it flies
+   * *in from*. The name predates both and is kept because documents use it.
+   */
   toX: z.number().finite().optional(),
   toY: z.number().finite().optional(),
   toOpacity: OpacitySchema.optional(),
   /**
+   * What a `scale` grows or shrinks to, as a multiple of the object's size on
+   * its slide — `1.5` is half again as big, `0.5` is half. About the centre, so
+   * the object swells in place. Absent means no change.
+   */
+  scale: z.number().finite().positive().optional(),
+  /**
    * **Interior** waypoints for a `move`, as absolute plan-pixel positions of the
-   * object's *centre* — the route it takes rather than where it ends up.
+   * object's *centre* — the corners of the route between where the object starts
+   * and `toX`/`toY`.
    *
-   * The endpoints are deliberately **not** stored. The route always starts at
-   * the object's state on the previous slide and ends at its state on this one
-   * (or at `toX`/`toY`), so the path cannot desync from the slides: dragging the
-   * destination handle *is* editing this slide's state, and there is no second
-   * copy of it to fall out of step. Absent or empty means a straight line, which
-   * is exactly what a `move` did before paths existed.
+   * Interior only: the start is where the object is on this slide, which is a
+   * thing you can see and drag, so storing a copy of it would only create
+   * something to fall out of step with. The end is `toX`/`toY`, which belongs to
+   * the animation because that is the whole point — a move is a complete
+   * statement of a journey, not a difference between two slides.
    *
    * Centres rather than top-lefts because that is what a drawn route means; the
    * conversion to the document's top-left `x`/`y` happens at playback, using the
@@ -288,11 +314,11 @@ export type StepOverride = z.infer<typeof StepOverrideSchema>;
 /**
  * One object's **complete** visual state on one slide.
  *
- * Dense on purpose: every field is required, and a slide holds one of these for
- * every object in the plan. That density is the whole point of the model — with
- * nothing inherited from a previous slide there is no cascade, so editing slide
- * 2 cannot move anything on slide 3. Structurally identical to
- * {@link ./resolve.js ObjectState}, which is what the renderers consume.
+ * Every field is required: an entry is whole or it is absent, never partial.
+ * That is the whole point of the model — with nothing inherited from a previous
+ * slide there is no cascade, so editing slide 2 cannot move anything on slide 3.
+ * Structurally identical to {@link ./resolve.js ObjectState}, which is what the
+ * renderers consume.
  */
 export const SlideStateSchema = z.object({
   x: z.number().finite(),
@@ -306,8 +332,8 @@ export const SlideStateSchema = z.object({
 export type SlideState = z.infer<typeof SlideStateSchema>;
 
 /**
- * One slide: a complete layout, plus the animations that morph the *previous*
- * slide's layout into it.
+ * One slide: its own cast, in a complete layout, plus the animations that morph
+ * the *previous* slide's layout into it.
  *
  * Slide 0 is the opening layout and has nothing before it, so it is static —
  * entrances and emphasis play, but a `move` has nowhere to move from (see
@@ -316,7 +342,12 @@ export type SlideState = z.infer<typeof SlideStateSchema>;
 export const StepSchema = z.object({
   id: z.string().min(1),
   name: z.string().optional(),
-  /** objectId → its complete state on this slide. */
+  /**
+   * objectId → its complete state on this slide, for the objects **on** this
+   * slide. This is the cast list as much as the layout: an object with no entry
+   * here is not in this scene, and putting one on slide 3 leaves slides 1 and 2
+   * alone. Ids refer into `plan.objects`, which says what each one *is*.
+   */
   states: z.record(z.string().min(1), SlideStateSchema),
   animations: z.array(AnimSchema),
   /** Optional autoplay dwell before advancing to the next slide. */
@@ -346,8 +377,13 @@ export const PlanSchema = z.object({
   encounterId: z.string().min(1).optional(),
   background: BackgroundSchema,
   /**
-   * The object set. Objects are plan-level and exist on every slide — a slide
-   * says where an object *is*, never whether it exists.
+   * The **registry** of objects the slides draw from: what each one is (icon,
+   * shape, tint, style, what it follows), under an id. Whether a given object
+   * appears in a given scene, and where, is the slide's business — see
+   * {@link StepSchema}'s `states`.
+   *
+   * Plan-level rather than per-slide because identity is what makes a `move`
+   * possible: the same id on two slides is what says "this token, then there".
    */
   objects: z.array(PlanObjectSchema),
   /**

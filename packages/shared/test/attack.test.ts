@@ -260,14 +260,22 @@ describe("expandPlan — stamping", () => {
       [inst()],
     );
     const out = expandPlan(plan, { atk: makeDef() });
-    expect(out.slides[0]!.states["i1::o1"]).toMatchObject({ visible: true });
+    // Every slide *opens* with the part hidden — a slide states where things
+    // start, and an attack starts un-fired. What makes it happen on s1 and not
+    // on s2 is that only s1 carries its animations.
+    expect(out.slides[0]!.states["i1::o1"]).toMatchObject({ visible: false });
     expect(out.slides[1]!.states["i1::o1"]).toMatchObject({ visible: false });
+    expect(out.slides[0]!.animations.map((a) => a.objectId)).toContain(
+      "i1::o1",
+    );
+    expect(out.slides[1]!.animations).toEqual([]);
   });
 
   it("is present on its own slide when that's the only slide there is", () => {
     const out = expandOne(makeDef(), inst());
     expect(out.slides).toHaveLength(1);
-    expect(out.slides[0]!.states["i1::o1"]).toMatchObject({ visible: true });
+    expect(out.slides[0]!.states["i1::o1"]).toBeDefined();
+    expect(out.slides[0]!.animations.length).toBeGreaterThan(0);
   });
 
   it("skips an instance whose def is missing, leaving the rest renderable", () => {
@@ -347,21 +355,21 @@ describe("expandPlan — stamping", () => {
 });
 
 describe("expandPlan — end-state overrides", () => {
-  it("places the def's end state onto the instance's slide, made present", () => {
+  it("hands the def's end state to the animation meant to reach it", () => {
     // A half-width part that slides across: its life spans unit space, so the
     // rectangle covers the whole sweep.
     const def = makeDef({
       objects: [defObj("c", { x: -1, y: -1, w: 1, h: 2 })],
       overrides: { c: { x: 0 } },
+      animations: [defAnim({ id: "m", objectId: "c", effect: "move" })],
     });
     const out = expandOne(def, inst());
-    // Ends at the middle of the rectangle; the y it never changed comes along,
-    // because a rotated placement can't express one axis alone.
-    expect(out.slides[0]!.states["i1::c"]).toMatchObject({
-      x: 100,
-      y: 0,
-      visible: true,
-    });
+    // A def is authored as two states; a plan's animations state their own
+    // targets. `expandInstance` is the seam that converts one into the other,
+    // so the move now carries the destination the override described.
+    expect(animById(out, "i1::m").params).toMatchObject({ toX: 100, toY: 0 });
+    // And the slide opens where the part starts, not where it ends up.
+    expect(out.slides[0]!.states["i1::c"]).toMatchObject({ x: 0, y: 0 });
   });
 
   it("honours a def end state that hides the object (a disappear)", () => {
@@ -468,7 +476,8 @@ describe("expandPlan — an attack shows itself", () => {
       trigger: "onEnter",
       delayMs: 300,
     });
-    expect(out.slides[0]!.states["i1::cone"]).toMatchObject({ visible: true });
+    // The `appear` is what reveals it: the slide opens with it hidden.
+    expect(out.slides[0]!.states["i1::cone"]).toMatchObject({ visible: false });
   });
 
   it("leaves a part that has its own entrance alone", () => {
@@ -511,7 +520,9 @@ describe("expandPlan — an attack shows itself", () => {
       ],
     });
     const out = expandOne(def, inst());
-    expect(out.slides[0]!.states["i1::orb"]).toMatchObject({ visible: true });
+    // Hidden at the slide's start; the def's own entrance brings it on.
+    expect(out.slides[0]!.states["i1::orb"]).toMatchObject({ visible: false });
+    expect(animById(out, "i1::in")).toMatchObject({ effect: "appear" });
   });
 });
 

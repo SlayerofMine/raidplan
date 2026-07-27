@@ -1,4 +1,4 @@
-import type { Plan, PlanObject, Slide, SlideState } from "./plan.js";
+import type { Anim, Plan, PlanObject, Slide, SlideState } from "./plan.js";
 
 /**
  * State resolution (plan §5 "State resolution" / §7 playback).
@@ -9,22 +9,37 @@ import type { Plan, PlanObject, Slide, SlideState } from "./plan.js";
  * and shared identically by the editor (which edits a slide's layout) and the
  * viewer (which animates *previous → this*).
  *
- * Terminology:
- *  - **slide state(n)** — where objects sit once slide `n` has settled. Read
- *    straight off the slide; nothing is inherited, folded or accumulated.
- *  - **start state(n)** — where objects sit when the slide is *entered*
- *    = slide state(n-1), except on slide 0.
- *  - **end state(n)**   — slide state(n).
+ * A slide's `states` is **where it opens**: every object in the scene, in the
+ * position it holds when the slide begins. The slide's animations then play from
+ * there, each stating its own target (see {@link ./plan.js AnimParamsSchema}).
+ * Nothing is inherited, folded or accumulated, and nothing is read from a
+ * neighbouring slide — so every slide, including the first, plays the same way,
+ * and there is no slide whose animations mean something different.
  *
- * **Slide 0 is static**: it is the opening layout and has nothing before it, so
- * `start(0) === end(0)`. Entrances and emphasis play there; a `move` has nowhere
- * to move from, and authoring one means adding a slide before it.
+ * This is deliberately *not* PowerPoint's Morph. Under a morph a `move` is the
+ * difference between two slides' layouts, which means it can only exist where
+ * there is a slide before it to differ from, and the same drag edits both a
+ * layout and an animation. Here a move is a journey the author draws: it has a
+ * start (where the object is), corners, and an end, and it says all three
+ * itself.
+ *
+ * **A slide owns its cast.** `slide.states` is the membership list as well as
+ * the layout: an object is *on* a slide precisely when it has an entry there.
+ * Adding a token while writing slide 3 puts it on slide 3 and nowhere else, and
+ * an object can leave a slide without leaving the plan. `plan.objects` is only
+ * the registry the slides draw from — it says what a thing *is* (icon, tint,
+ * style, what it follows), never where or whether it appears.
+ *
+ * That identity has to stay plan-level, because a `move` is one object seen on
+ * two slides: give each slide its own copy of the definition and there is
+ * nothing left to say "this is the same token" with, so nothing could animate
+ * between slides at all.
  *
  * This replaced a `base` transform plus *sparse, cascading* step overrides.
  * Under that model an absent field carried the previous step's value forward,
  * which meant editing step 2 silently moved the object on steps 3..n — the
- * confusion slides exist to remove. Nothing inherits any more, which is why
- * slides are dense (see {@link normalizeSlides} for how they are kept that way).
+ * confusion slides exist to remove. Nothing inherits any more, and an entry is
+ * either complete or not there at all (see {@link normalizeSlides}).
  */
 
 /** The fully-resolved visual state of one object at a point in the plan. */
@@ -45,18 +60,42 @@ export type ResolvedStates = Record<string, ObjectState>;
  * The state a *new* slide entry for this object is minted from — its creation
  * transform, off `object.base`.
  *
- * Only for minting and repair ({@link normalizeSlides}). Never call it to find
- * out where something is: that is what the slide says, and `object.base`'s
- * transform fields go stale the moment the object is first moved.
+ * Only for minting a slide entry, and as the last-resort stand-in for an object
+ * no slide has. Never call it to find out where something is: that is what the
+ * slide says, and `object.base`'s transform fields go stale the moment the
+ * object is first moved.
  */
 export function seedState(object: PlanObject): ObjectState {
   const { x, y, w, h, rotation, opacity, visible } = object.base;
   return { x, y, w, h, rotation, opacity, visible };
 }
 
+/** Is `objectId` part of slide `slideIndex`'s cast? */
+export function isOnSlide(
+  slides: readonly Slide[],
+  slideIndex: number,
+  objectId: string,
+): boolean {
+  return slides[slideIndex]?.states[objectId] !== undefined;
+}
+
 /**
- * Resolve **one** object's state on slide `slideIndex` — a plain lookup, since
- * slides are dense.
+ * Of `objectIds`, the ones on slide `slideIndex` — in the order given, so the
+ * caller's z-order survives.
+ */
+export function objectsOnSlide(
+  objectIds: readonly string[],
+  slides: readonly Slide[],
+  slideIndex: number,
+): string[] {
+  const states = slides[slideIndex]?.states;
+  if (!states) return [];
+  return objectIds.filter((id) => states[id] !== undefined);
+}
+
+/**
+ * Resolve **one** object's state on slide `slideIndex` — a plain lookup when the
+ * object is on that slide.
  *
  * Takes the slides array rather than a `Plan` so callers holding objects in a
  * normalized map (the editor store) can resolve a single object without
@@ -64,20 +103,44 @@ export function seedState(object: PlanObject): ObjectState {
  * subscriptions cheap (plan §8.2). `slideIndex` is clamped, so asking for "the
  * final state" with a large index is safe.
  *
- * Falls back to the object's seed if the slide has no entry for it. That should
- * not happen — {@link normalizeSlides} runs on load and the store maintains the
- * invariant on every structural edit — but a missing entry must degrade to a
- * visible object in a plausible place, never to a crash during playback.
+ * An object that is **not on the slide** resolves to `visible: false` — which is
+ * what "not in this scene" means to every renderer, none of which needs to learn
+ * a second way of saying it. Its geometry is borrowed from the nearest slide
+ * that *does* have it (looking back first, then forward), so a token that
+ * appears on slide 3 fades in where it belongs rather than sliding in from
+ * wherever it happened to be created.
  */
 export function resolveObjectState(
   object: PlanObject,
   slides: readonly Slide[],
   slideIndex: number,
 ): ObjectState {
-  if (slides.length === 0) return seedState(object);
+  if (slides.length === 0) return { ...seedState(object), visible: false };
   const index = Math.min(Math.max(slideIndex, 0), slides.length - 1);
   const state = slides[index]?.states[object.id];
-  return state ? { ...state } : seedState(object);
+  if (state) return { ...state };
+  return { ...nearestState(object, slides, index), visible: false };
+}
+
+/**
+ * The geometry to stand in with while an object is off-slide: the closest slide
+ * that has it, preferring the past — an object usually leaves a scene where it
+ * last stood — and falling back to its creation seed if no slide has it at all.
+ */
+function nearestState(
+  object: PlanObject,
+  slides: readonly Slide[],
+  index: number,
+): ObjectState {
+  for (let i = index - 1; i >= 0; i--) {
+    const state = slides[i]?.states[object.id];
+    if (state) return state;
+  }
+  for (let i = index + 1; i < slides.length; i++) {
+    const state = slides[i]?.states[object.id];
+    if (state) return state;
+  }
+  return seedState(object);
 }
 
 /** Resolve the state of every object on slide `slideIndex`. */
@@ -92,76 +155,130 @@ export function resolveSlideStates(
   return states;
 }
 
-/** The start and end states the viewer animates between for a given slide. */
-export interface SlideStates {
-  /** Where objects sit when the slide is entered (the previous slide's layout). */
-  start: ResolvedStates;
-  /** Where objects settle when the slide finishes. */
-  end: ResolvedStates;
+/**
+ * Where one object is left standing once a slide has finished playing — its
+ * opening state, with the slide's animations applied in order.
+ *
+ * A cheap paper evaluation of the timeline, not the timeline itself: playback
+ * runs real GSAP tweens and this only needs their *result*. Two things want that
+ * result and neither can afford a renderer — the editor, answering "and then?"
+ * when a slide is continued (it would otherwise carry forward a layout the slide
+ * had already animated away from), and a still image of a slide, which should
+ * show the slide as it ends rather than frozen before anything happens.
+ *
+ * Deferred animations are skipped: a click or a collision may never happen, so
+ * folding one in would state an outcome the slide does not promise.
+ */
+export function settledState(
+  state: ObjectState,
+  animations: readonly Anim[],
+  objectId: string,
+): ObjectState {
+  let out = state;
+  for (const anim of animations) {
+    if (anim.objectId !== objectId) continue;
+    if (anim.trigger === "onClick" || anim.trigger === "onCollision") continue;
+    out = { ...out, ...effectResult(anim, out) };
+  }
+  return out;
+}
+
+/** What one animation leaves behind, given where the object stood before it. */
+function effectResult(anim: Anim, from: ObjectState): Partial<ObjectState> {
+  const params = anim.params ?? {};
+  switch (anim.effect) {
+    case "move":
+      return { x: params.toX ?? from.x, y: params.toY ?? from.y };
+    case "fly":
+      // Flies *in* to where it already is; the journey is the only difference.
+      return { visible: true, opacity: from.opacity };
+    case "appear":
+      return { visible: true };
+    case "disappear":
+      return { visible: false, opacity: 0 };
+    case "fade":
+      return anim.kind === "exit"
+        ? { opacity: 0 }
+        : { visible: true, opacity: params.toOpacity ?? from.opacity };
+    case "scale": {
+      const factor = params.scale ?? 1;
+      const w = from.w * factor;
+      const h = from.h * factor;
+      return {
+        w,
+        h,
+        x: from.x - (w - from.w) / 2,
+        y: from.y - (h - from.h) / 2,
+      };
+    }
+    // Pulse and blink return to exactly where they started.
+    default:
+      return {};
+  }
+}
+
+/** Every object's state once `slide` has played out. */
+export function settledStates(slide: Slide): Record<string, SlideState> {
+  const out: Record<string, SlideState> = {};
+  for (const [id, state] of Object.entries(slide.states)) {
+    out[id] = settledState(state, slide.animations, id);
+  }
+  return out;
 }
 
 /**
- * Resolve the `{ start, end }` states for a single slide, by index.
- *
- * On slide 0 `start` and `end` are the same layout — there is no earlier slide
- * to come from. That is what makes the opening slide static.
- *
- * Unlike {@link resolveSlideStates} this is *strict*: `slideIndex` must be a
- * valid integer index into `plan.slides`, because animating an out-of-range
- * slide is a programming error, not a recoverable data quirk.
- *
- * @throws {RangeError} if `slideIndex` is not an integer in `[0, slides.length)`.
+ * Every object's state at the *end* of slide `slideIndex` — what a still image
+ * of that slide should show. See {@link settledState}.
  */
-export function resolveSlideTransition(
+export function resolveSettledStates(
   plan: Plan,
   slideIndex: number,
-): SlideStates {
-  if (!Number.isInteger(slideIndex)) {
-    throw new RangeError(`slide index must be an integer, got ${slideIndex}`);
+): ResolvedStates {
+  const index = Math.min(Math.max(slideIndex, 0), plan.slides.length - 1);
+  const slide = plan.slides[index];
+  const states = resolveSlideStates(plan, index);
+  if (!slide) return states;
+  for (const [id, state] of Object.entries(states)) {
+    states[id] = settledState(state, slide.animations, id);
   }
-  if (slideIndex < 0 || slideIndex >= plan.slides.length) {
-    throw new RangeError(
-      `slide index ${slideIndex} out of range [0, ${plan.slides.length})`,
-    );
-  }
-  return {
-    start: resolveSlideStates(plan, slideIndex === 0 ? 0 : slideIndex - 1),
-    end: resolveSlideStates(plan, slideIndex),
-  };
+  return states;
 }
 
 /**
- * Restore the density invariant: every slide carries a state for every object,
- * and for nothing else.
+ * Drop slide entries and animations for objects the plan no longer has.
  *
- * Dense slides are what make the model cascade-free, but density is an invariant
- * the *writer* has to maintain — and imported JSON, a hand-edited document or a
- * bug in a store action can all break it. This repairs rather than rejects: a
- * missing entry is filled from the previous slide (or the object's seed on the
- * first slide), because "it was wherever it was before" is the only answer that
- * can't teleport something; entries for objects that no longer exist are
- * dropped, exactly as a stale override used to be ignored.
+ * A slide's `states` is its cast list, so a *missing* entry is not damage —
+ * it means the object isn't in that scene, and filling it in would put things
+ * back on slides the author took them off. Only the other direction is repaired:
+ * an entry naming an object that isn't in `objects` can't be drawn, would
+ * resurrect on undo, and bloats every save. Animations on a vanished object go
+ * with it, for the same reason.
  *
  * Pure and idempotent — running it twice changes nothing — so it is safe to call
- * on every load. Returns new slides only where a repair was needed, so an
- * already-valid document keeps its references (and the store's
+ * on every load. Returns new slides only where something was actually dropped,
+ * so an already-clean document keeps its references (and the store's
  * `sameDocument` reference check stays honest).
  */
 export function normalizeSlides(
   objects: readonly PlanObject[],
   slides: readonly Slide[],
 ): Slide[] {
-  let previous: Record<string, SlideState> | undefined;
+  const known = new Set(objects.map((object) => object.id));
   return slides.map((slide) => {
-    const states: Record<string, SlideState> = {};
-    let changed = Object.keys(slide.states).length !== objects.length;
-    for (const object of objects) {
-      const state =
-        slide.states[object.id] ?? previous?.[object.id] ?? seedState(object);
-      if (state !== slide.states[object.id]) changed = true;
-      states[object.id] = { ...state };
+    const entries = Object.entries(slide.states).filter(([id]) =>
+      known.has(id),
+    );
+    const animations = slide.animations.filter((a) => known.has(a.objectId));
+    if (
+      entries.length === Object.keys(slide.states).length &&
+      animations.length === slide.animations.length
+    ) {
+      return slide;
     }
-    previous = states;
-    return changed ? { ...slide, states } : slide;
+    return {
+      ...slide,
+      states: Object.fromEntries(entries) as Record<string, SlideState>,
+      animations,
+    };
   });
 }

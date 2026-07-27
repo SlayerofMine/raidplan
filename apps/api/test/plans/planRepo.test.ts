@@ -57,6 +57,56 @@ describe("createPlan", () => {
     expect(slugs.size).toBe(25);
   });
 
+  /**
+   * Regression: an encounter preset's `slides` defaults to `[]` — every bundled
+   * encounter is a background and nothing else — and `[]` is truthy, so it was
+   * assigned straight over the opening slide `makeEmptyPlan` provides. The
+   * stored document then had no slides, `PlanSchema` refused to parse it, and
+   * `getPlanWithDoc` answered "no such plan" for a plan created seconds ago.
+   */
+  it("stores a document that parses, when seeded from a preset with no slides", () => {
+    const created = createPlan(db, {
+      ownerId: "u1",
+      background: BACKGROUND,
+      objects: [],
+      slides: [],
+      encounterId: "enc_1",
+    });
+
+    expect(created.doc.slides).toHaveLength(1);
+    // The real check: what comes back out of the database, through the schema.
+    const loaded = getPlanWithDoc(db, created.id);
+    expect(loaded?.doc.slides).toHaveLength(1);
+    expect(loaded?.doc.encounterId).toBe("enc_1");
+  });
+
+  it("puts a preset's pre-placed objects on the opening slide", () => {
+    const boss: Plan["objects"][number] = {
+      id: "boss",
+      type: "token",
+      base: {
+        x: 40,
+        y: 50,
+        w: 64,
+        h: 64,
+        rotation: 0,
+        opacity: 1,
+        z: 0,
+        visible: true,
+      },
+    };
+    const created = createPlan(db, {
+      ownerId: "u1",
+      background: BACKGROUND,
+      objects: [boss],
+      slides: [],
+    });
+
+    // A slide's `states` is its cast list, so an object with no entry there is
+    // in the document but in no scene — invisible on a board it was seeded onto.
+    expect(created.doc.slides[0]!.states["boss"]).toMatchObject({ x: 40 });
+  });
+
   it("refuses to create a plan for a user who doesn't exist", () => {
     // Foreign keys are only enforced if the pragma is on — this is the guard.
     expect(() =>

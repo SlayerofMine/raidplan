@@ -47,8 +47,7 @@ function plan(): Plan {
       },
     ],
     attacks: [],
-    // A plan always has at least one slide, and slides are dense — every object
-    // has a state on every one of them.
+    // A plan always has at least one slide; this one holds both objects.
     slides: [
       {
         id: "s1",
@@ -117,16 +116,41 @@ describe("plan serialization", () => {
     expect(toPlan(fromPlan(p)).slides).toEqual(p.slides);
   });
 
-  it("normalises slides on the way in, so a sparse document loads dense", () => {
+  it("normalises slides on the way in, dropping entries nothing backs", () => {
     // `fromPlan` is where a document from outside the store — a load, an
-    // import, a stale autosave — becomes one the density invariant holds for.
-    const sparse = plan();
-    sparse.slides = [{ id: "s1", states: {}, animations: [] }];
-    const doc = fromPlan(sparse);
-    // Filled from each object's creation transform, since there's no slide
-    // before this one to inherit from.
-    expect(doc.slides[0]!.states["a"]).toMatchObject({ x: 1, y: 2 });
-    expect(doc.slides[0]!.states["b"]).toMatchObject({ x: 3, y: 4 });
+    // import, a stale autosave — is made one the store's invariants hold for.
+    // A *missing* entry is left missing: that is the object not being in the
+    // scene, and filling it in would put things on slides they were taken off.
+    const stale = plan();
+    stale.slides = [
+      {
+        id: "s1",
+        states: {
+          a: {
+            x: 1,
+            y: 2,
+            w: 64,
+            h: 64,
+            rotation: 0,
+            opacity: 1,
+            visible: true,
+          },
+          ghost: {
+            x: 9,
+            y: 9,
+            w: 10,
+            h: 10,
+            rotation: 0,
+            opacity: 1,
+            visible: true,
+          },
+        },
+        animations: [],
+      },
+    ];
+    const doc = fromPlan(stale);
+    expect(Object.keys(doc.slides[0]!.states)).toEqual(["a"]);
+    expect(doc.slides[0]!.states["b"]).toBeUndefined();
   });
 });
 

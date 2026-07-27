@@ -4,6 +4,7 @@ import {
   BACKGROUNDS,
   expandPlan,
   isUploadedAsset,
+  objectsOnSlide,
   toBackground,
 } from "@raidplan/shared";
 import { clearHistory, useEditorStore } from "../store/editorStore";
@@ -43,9 +44,13 @@ export function Toolbar({
   /** Where "Play" goes, or null while a server plan's slug is still loading. */
   viewHref?: string | null;
 }) {
-  // A placed attack is a thing on the board like any other, so it counts.
+  // What's on the board *now*: the current slide's cast, plus placed attacks,
+  // which are things on the board like any other. Counting every object the
+  // plan knows about would report tokens from scenes you aren't looking at.
   const objectCount = useEditorStore(
-    (s) => s.objectIds.length + s.attacks.length,
+    (s) =>
+      objectsOnSlide(s.objectIds, s.slides, s.currentSlideIndex).length +
+      s.attacks.length,
   );
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const hasSelection = selectedIds.length > 0;

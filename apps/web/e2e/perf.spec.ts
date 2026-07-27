@@ -39,7 +39,7 @@ function makePlan(objectCount: number, slideCount: number) {
   const slides = Array.from({ length: slideCount }, (_, s) => ({
     id: `s${s}`,
     name: `Slide ${s + 1}`,
-    // Slides are dense: a complete state for every object on every one of them.
+    // Every object is in every scene here — the worst case for playback.
     states: Object.fromEntries(
       objects.map((o, i) => [
         o.id,

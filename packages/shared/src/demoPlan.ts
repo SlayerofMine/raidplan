@@ -37,12 +37,16 @@ interface AuthoredSlide {
 }
 
 /**
- * Expand authored slides into the dense states the document actually stores.
+ * Expand authored slides into the complete layouts the document actually stores.
  *
- * Slides are dense so that nothing cascades, but a *fixture* is far easier to
- * read — and to keep correct as objects are added — when each slide says only
- * what it changes. So the cascade lives here, at authoring time, and what comes
- * out the other side is a plain list of complete layouts.
+ * A stored slide states everything about everything in it, so that nothing
+ * cascades — but a *fixture* is far easier to read, and to keep correct as
+ * objects are added, when each slide says only what it changes. So the cascade
+ * lives here, at authoring time, and what comes out the other side is a plain
+ * list of complete layouts.
+ *
+ * Every object is in every scene in the demo, which is the point of it: it is a
+ * tour of what animates, not of slides coming and going.
  *
  * The opening layout comes first and animates nothing: slide 0 has no slide
  * before it to move from, so every demo transition starts on slide 1.

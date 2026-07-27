@@ -10,6 +10,7 @@ import {
   type EncounterSummary,
 } from "@raidplan/shared";
 import { LOCAL_PLAN_ID } from "../editor/planScope";
+import { clearPlan, loadPlan } from "../store/persistence";
 import { filterPlans, planRaids, relativeTime } from "./planFilters";
 
 /** One row of `plan.list`, with every field the server sends. */
@@ -113,19 +114,72 @@ export function HomePage() {
         </p>
       ) : null}
 
-      <section className="border-t border-panelborder pt-4">
-        <h2 className="text-sm font-semibold text-neutral-300">Offline plan</h2>
-        <p className="mb-2 text-sm text-neutral-500">
-          Kept in this browser only — no account needed.
-        </p>
+      <OfflinePlanSection />
+    </main>
+  );
+}
+
+/**
+ * The offline plan's own card. Deleting it is the one destructive action here
+ * with no undo — localStorage is the only copy, and there's no soft-delete to
+ * recover from — so it asks first, and only offers at all once something is
+ * actually saved.
+ */
+function OfflinePlanSection() {
+  const [saved, setSaved] = useState(() => loadPlan() !== null);
+  const [confirming, setConfirming] = useState(false);
+
+  const remove = () => {
+    clearPlan();
+    setSaved(false);
+    setConfirming(false);
+  };
+
+  return (
+    <section className="border-t border-panelborder pt-4">
+      <h2 className="text-sm font-semibold text-neutral-300">Offline plan</h2>
+      <p className="mb-2 text-sm text-neutral-500">
+        Kept in this browser only — no account needed.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
         <Link
           to={`/plan/${LOCAL_PLAN_ID}/edit`}
           className="text-sm text-accent hover:underline"
         >
           Open the offline editor →
         </Link>
-      </section>
-    </main>
+        {saved &&
+          (confirming ? (
+            <span className="flex items-center gap-2 text-xs text-neutral-400">
+              Delete it? This can&apos;t be undone.
+              <button
+                type="button"
+                onClick={remove}
+                data-testid="offline-delete-confirm"
+                className="rounded border border-amber-400 px-1.5 py-0.5 text-amber-400 hover:bg-amber-400/10"
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                className="rounded border border-panelborder px-1.5 py-0.5 hover:border-accent"
+              >
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              data-testid="offline-delete"
+              className="rounded border border-panelborder px-1.5 py-0.5 text-xs text-neutral-400 hover:border-amber-400 hover:text-amber-400"
+            >
+              Delete offline plan
+            </button>
+          ))}
+      </div>
+    </section>
   );
 }
 
@@ -159,6 +213,8 @@ function PlanList() {
   const [raid, setRaid] = useState("");
   const [encounters, setEncounters] = useState<EncounterSummary[] | null>(null);
   const [startChoice, setStartChoice] = useState("");
+  /** The plan whose Delete button has been armed, if any. */
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api.plan.list
@@ -217,6 +273,19 @@ function PlanList() {
       load(); // the copy appears without a page refresh
     } catch {
       setError("Could not duplicate that plan.");
+    }
+  };
+
+  // Two-step rather than a modal: the card itself asks, so the plan you're
+  // about to delete stays in front of you. The server soft-deletes, so this is
+  // recoverable from the database — but not from here.
+  const remove = async (id: string) => {
+    setConfirmingId(null);
+    try {
+      await api.plan.softDelete.mutate({ id });
+      load();
+    } catch {
+      setError("Could not delete that plan.");
     }
   };
 
@@ -352,14 +421,46 @@ function PlanList() {
               )}
               <span className="capitalize">{plan.visibility}</span>
               <span>· {relativeTime(plan.updatedAt)}</span>
-              <button
-                type="button"
-                onClick={() => duplicate(plan.id)}
-                aria-label={`Duplicate ${plan.title}`}
-                className="ml-auto rounded border border-panelborder px-1.5 py-0.5 hover:border-accent"
-              >
-                Duplicate
-              </button>
+              {confirmingId === plan.id ? (
+                <span className="ml-auto flex items-center gap-2">
+                  Delete?
+                  <button
+                    type="button"
+                    onClick={() => remove(plan.id)}
+                    aria-label={`Confirm deleting ${plan.title}`}
+                    className="rounded border border-amber-400 px-1.5 py-0.5 text-amber-400 hover:bg-amber-400/10"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingId(null)}
+                    aria-label={`Keep ${plan.title}`}
+                    className="rounded border border-panelborder px-1.5 py-0.5 hover:border-accent"
+                  >
+                    Cancel
+                  </button>
+                </span>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => duplicate(plan.id)}
+                    aria-label={`Duplicate ${plan.title}`}
+                    className="ml-auto rounded border border-panelborder px-1.5 py-0.5 hover:border-accent"
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingId(plan.id)}
+                    aria-label={`Delete ${plan.title}`}
+                    className="rounded border border-panelborder px-1.5 py-0.5 hover:border-amber-400 hover:text-amber-400"
+                  >
+                    Delete
+                  </button>
+                </>
+              )}
             </div>
           </li>
         ))}

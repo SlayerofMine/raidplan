@@ -23,12 +23,10 @@ import { useEditorStore } from "../../store/editorStore";
  * curve comes from the same `buildMotionPath` the player walks, so what is drawn
  * is what will happen.
  *
- * The endpoints are **not** editable here, on purpose. A route starts where the
- * previous slide left the object and ends where this slide puts it, so its ends
- * are views of the slides rather than data of their own — you move them by
- * dragging the object, which is the gesture that already means "it ends up
- * here". Only the interior waypoints belong to the animation, and only those get
- * handles. That is what makes a route incapable of disagreeing with its slides.
+ * A route starts where the object stands on **this** slide and ends where the
+ * animation says — so the start is not editable here (drag the object; that is
+ * already the gesture for "it starts here") while the destination and every
+ * corner are the animation's own data and get handles.
  */
 
 const ROUTE = "#f2c744";
@@ -44,6 +42,8 @@ interface Route {
   /** The full route in centre coordinates: start, interior waypoints, end. */
   points: Point[];
   curve: number;
+  /** The object's half-size where the move starts — centres <-> top-left. */
+  half: Point;
   selected: boolean;
   /** A followed object is placed every frame *after* its tween, so its route is a lie. */
   followed: boolean;
@@ -65,24 +65,19 @@ export function MotionPathLayer() {
       const object = objects[anim.objectId];
       if (!object) continue;
 
-      // Slide 0 has no slide before it, so `from` and `to` are the same layout
-      // and the move covers no ground (see `resolveSlideTransition`).
-      const from = resolveObjectState(
-        object,
-        slides,
-        Math.max(slideIndex - 1, 0),
-      );
-      const to = resolveObjectState(object, slides, slideIndex);
+      // The journey begins where the object stands on this slide.
+      const from = resolveObjectState(object, slides, slideIndex);
       const waypoints = anim.params?.path ?? [];
       // Half-size from the *start* state, matching how `compileStep` converts
       // the route's centres back to the document's top-left coordinates.
       const half = { x: from.w / 2, y: from.h / 2 };
       const start = { x: from.x + half.x, y: from.y + half.y };
       const end = {
-        x: (anim.params?.toX ?? to.x) + half.x,
-        y: (anim.params?.toY ?? to.y) + half.y,
+        x: (anim.params?.toX ?? from.x) + half.x,
+        y: (anim.params?.toY ?? from.y) + half.y,
       };
-      // A move that goes nowhere and bends nowhere is a dot, not a route.
+      // A move that goes nowhere and bends nowhere is a dot, not a route — an
+      // undrawn one, which the panel prompts for rather than the board.
       if (waypoints.length === 0 && start.x === end.x && start.y === end.y) {
         continue;
       }
@@ -90,6 +85,7 @@ export function MotionPathLayer() {
         anim,
         points: [start, ...waypoints, end],
         curve: anim.params?.curve ?? 0,
+        half,
         selected: selectedIds.includes(anim.objectId),
         followed: isFollowing(object.follow),
       });
@@ -110,6 +106,16 @@ export function MotionPathLayer() {
               params: { ...route.anim.params, path },
             })
           }
+          onDestination={(at) =>
+            updateAnimation(slideIndex, route.anim.id, {
+              params: {
+                ...route.anim.params,
+                // Handles are dragged as centres; the document stores top-left.
+                toX: at.x - route.half.x,
+                toY: at.y - route.half.y,
+              },
+            })
+          }
         />
       ))}
     </Group>
@@ -119,9 +125,11 @@ export function MotionPathLayer() {
 function RouteShape({
   route,
   onWaypoints,
+  onDestination,
 }: {
   route: Route;
   onWaypoints: (path: Point[]) => void;
+  onDestination: (at: Point) => void;
 }) {
   const { points, curve, selected, followed } = route;
   const path = useMemo(() => buildMotionPath(points, curve), [points, curve]);
@@ -130,9 +138,10 @@ function RouteShape({
   const editable = selected && !followed;
   const colour = editable ? ROUTE : DIMMED;
 
-  // Interior waypoints only — `points` has the slide-derived ends bracketing
-  // them, and those are moved by dragging the object itself.
+  // The corners between the two ends. The start is the object's own position
+  // (drag the object to move it); the destination gets its own handle below.
   const waypoints = points.slice(1, -1);
+  const destination = points[points.length - 1];
 
   return (
     <Group>
@@ -181,6 +190,28 @@ function RouteShape({
             }
           />
         ))}
+
+      {/* The destination belongs to the animation now, not to a slide, so it is
+          dragged here rather than by moving the object. Filled, to read as the
+          end of the journey rather than as another corner. */}
+      {editable && destination && (
+        <Circle
+          x={destination.x}
+          y={destination.y}
+          radius={HANDLE}
+          fill={ROUTE}
+          stroke="#0b0b0d"
+          strokeWidth={2}
+          strokeScaleEnabled={false}
+          draggable
+          onDragMove={(e: KonvaEventObject<DragEvent>) =>
+            onDestination(e.target.position())
+          }
+          onDragEnd={(e: KonvaEventObject<DragEvent>) =>
+            onDestination(e.target.position())
+          }
+        />
+      )}
     </Group>
   );
 }

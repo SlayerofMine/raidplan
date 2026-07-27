@@ -99,13 +99,20 @@ export function createShareRoutes({
   return app;
 }
 
-/** Content types we store, keyed by the extension the upload route assigned. */
+/**
+ * Content types we store, keyed by the extension the upload route assigned.
+ *
+ * `webp` is absent deliberately — resvg doesn't decode it (see
+ * {@link inlineUploadedBackground}), so it never reaches the SVG as-is.
+ */
 const UPLOAD_MIME: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",
-  webp: "image/webp",
   gif: "image/gif",
 };
+
+/** Extensions resvg can't decode, so we transcode them to PNG first. */
+const TRANSCODE_TO_PNG = new Set(["webp"]);
 
 /**
  * Inline an uploaded background as a data URI, or `undefined` for anything else.
@@ -114,6 +121,11 @@ const UPLOAD_MIME: Record<string, string> = {
  * is a URL path — and resvg reads no network, so it would silently draw nothing
  * and the preview would show tokens on an empty floor. Reading the file is the
  * only way it can appear.
+ *
+ * **WebP is transcoded to PNG**, the same tax `inlineSyncedIconsForOg` pays:
+ * the upload route accepts WebP (browsers export it by default), but resvg
+ * decodes only PNG/JPEG/GIF and drops an embedded WebP *without erroring* — an
+ * uploaded map would inline perfectly and still render as an empty floor.
  *
  * `basename` is belt-and-braces: the id comes from our own upload route, but a
  * path assembled from a stored string should never be able to leave the
@@ -125,13 +137,20 @@ export async function inlineUploadedBackground(
 ): Promise<string | undefined> {
   if (!isUploadedAsset(assetId)) return undefined;
   const filename = basename(assetId);
-  const mime = UPLOAD_MIME[filename.split(".").pop() ?? ""];
-  if (!mime) return undefined;
+  const extension = filename.split(".").pop() ?? "";
+  const mime = UPLOAD_MIME[extension];
+  if (!mime && !TRANSCODE_TO_PNG.has(extension)) return undefined;
   try {
     const bytes = await readFile(join(uploadDir, filename));
+    if (!mime) {
+      const { default: sharp } = await import("sharp");
+      const png = await sharp(bytes).png().toBuffer();
+      return `data:image/png;base64,${png.toString("base64")}`;
+    }
     return `data:${mime};base64,${bytes.toString("base64")}`;
   } catch {
-    // A missing file shouldn't 500 the preview — draw the plan without it.
+    // A missing, unreadable or undecodable file shouldn't 500 the preview —
+    // draw the plan without it.
     return undefined;
   }
 }

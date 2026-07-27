@@ -4,6 +4,7 @@ import {
   ICON_VIEWBOX,
   mechanicOps,
   resolveObjectState,
+  resolveSettledStates,
   tetherOps,
   type MechOp,
   type ObjectState,
@@ -236,10 +237,16 @@ export function renderPlanSvg(
 
   // Resolve every object once up front, so a tether can look up its endpoints'
   // states (not just its own) when it draws.
+  //
+  // The *settled* state: a slide opens before anything has played, and a still
+  // frozen there would show an attack that hasn't gone off and a token that
+  // hasn't set out. A preview is a picture of the slide, so it shows the slide
+  // as it ends.
+  const settled = resolveSettledStates(plan, slideIndex);
   const states = new Map<string, ObjectState>(
     plan.objects.map((object) => [
       object.id,
-      resolveObjectState(object, plan.slides, slideIndex),
+      settled[object.id] ?? resolveObjectState(object, plan.slides, slideIndex),
     ]),
   );
 

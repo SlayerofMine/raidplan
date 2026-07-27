@@ -36,13 +36,12 @@ const slide = (animations: Anim[]): Slide => ({
   animations,
 });
 
-function harness(a: Anim, start: ObjectState, end: ObjectState) {
+function harness(a: Anim, at: ObjectState) {
   const applied: Record<string, Partial<ObjectState>> = {};
   const { timeline } = compileOneShot({
     anim: a,
     slide: slide([a]),
-    start: { a: start },
-    end: { a: end },
+    states: { a: at },
     apply: (id, props) => {
       applied[id] = { ...applied[id], ...props };
     },
@@ -54,9 +53,8 @@ describe("compileOneShot", () => {
   it("plays a deferred animation despite its trigger", () => {
     // The trigger already fired — the compiled timeline must actually run.
     const { timeline, applied } = harness(
-      anim({ trigger: "onCollision" }),
+      anim({ trigger: "onCollision", params: { toX: 400 } }),
       state({ x: 0 }),
-      state({ x: 400 }),
     );
     expect(timeline.duration()).toBeCloseTo(0.5);
     timeline.progress(1);
@@ -67,18 +65,16 @@ describe("compileOneShot", () => {
     const { timeline } = harness(
       anim({ delayMs: 2000, durationMs: 500 }),
       state(),
-      state(),
     );
     expect(timeline.duration()).toBeCloseTo(0.5);
   });
 
-  it("starts from the state it's given, not the slide's start", () => {
+  it("starts from the state it's given, not the slide's layout", () => {
     // Playback passes the object's *live* position so a triggered animation
     // continues from where the object actually is.
     const { timeline, applied } = harness(
-      anim({ effect: "move" }),
+      anim({ effect: "move", params: { toX: 300 } }),
       state({ x: 250 }),
-      state({ x: 300 }),
     );
     timeline.progress(0.5);
     expect(applied.a!.x).toBeGreaterThan(250);
@@ -88,7 +84,6 @@ describe("compileOneShot", () => {
   it("runs an exit effect to its end", () => {
     const { timeline, applied } = harness(
       anim({ kind: "exit", effect: "disappear" }),
-      state(),
       state(),
     );
     timeline.progress(1);

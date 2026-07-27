@@ -118,7 +118,7 @@ describe("addAttack — placeholders", () => {
   it("fills the hole from the selection", () => {
     const attackId = withSlot();
     const tank = state().addPrimitive("shape", "circle");
-    state().addSlide();
+    state().continueSlide(0);
     state().select([tank]);
 
     const id = state().addAttack(attackId, { x: 0, y: 0 })!;
@@ -142,7 +142,7 @@ describe("addAttack — placeholders", () => {
     state().setAttackDefs({});
     const attackId = withSlot();
     const first = state().addPrimitive("shape", "circle");
-    state().addSlide();
+    state().continueSlide(0);
     state().select([first]);
     state().toggleSelect(first);
     state().select([first]);
