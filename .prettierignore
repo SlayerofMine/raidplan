@@ -9,3 +9,7 @@ test-results/
 
 # The implementation plan is the source-of-truth spec — keep it verbatim.
 IMPLEMENTATION_PLAN.md
+
+# Rewritten wholesale by `repowise update`; formatting it here only means the
+# next update reverts us and the commit after re-applies it, forever.
+.claude/CLAUDE.md
