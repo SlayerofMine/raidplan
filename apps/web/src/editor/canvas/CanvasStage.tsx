@@ -14,6 +14,7 @@ import type { PlanObject, ShapeKind } from "@raidplan/shared";
 import { getBackgroundSrc } from "@raidplan/shared";
 import { useFollowing } from "../../anim/useFollowing";
 import { boardStack, useEditorStore } from "../../store/editorStore";
+import { selectSelectionSizes } from "../../store/selectors";
 import { isEditableTarget } from "../isEditableTarget";
 import {
   ATTACK_DATA_TYPE,
@@ -73,6 +74,9 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
   // See the note on that component.
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const selectedAttackIds = useEditorStore((s) => s.selectedAttackIds);
+  // A resize the transformer has no way of hearing about — read here for the
+  // same reason the selection is, so the refresh lands after the nodes resize.
+  const selectionSizes = useEditorStore(selectSelectionSizes);
   const view = useEditorStore((s) => s.view);
   const snapEnabled = useEditorStore((s) => s.snapEnabled);
   const gridSize = useEditorStore((s) => s.gridSize);
@@ -312,6 +316,7 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
             selectedAttackIds={selectedAttackIds}
             attacks={attacks}
             objectIds={objectIds}
+            selectionSizes={selectionSizes}
           />
           <OriginHandle />
         </Layer>

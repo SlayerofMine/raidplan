@@ -35,12 +35,15 @@ export function SelectionTransformer({
   selectedAttackIds,
   attacks,
   objectIds,
+  selectionSizes,
 }: {
   selectedIds: readonly string[];
   selectedAttackIds: readonly string[];
   attacks: readonly AttackInstance[];
   /** Not read — a dependency, so added or removed nodes force a re-attach. */
   objectIds: readonly string[];
+  /** Not read — a dependency; see `selectSelectionSizes` and the effect below. */
+  selectionSizes: string;
 }) {
   const ref = useRef<TransformerNode>(null);
 
@@ -78,6 +81,23 @@ export function SelectionTransformer({
     // `objectIds` participates so the transformer re-attaches when nodes are
     // added/removed underneath a stable selection.
   }, [selectedIds, selectedAttackIds, attacks, objectIds]);
+
+  /**
+   * Re-measure when a selected object changes size, because nothing else will:
+   * the size lives on the children of its `Group`, and Konva only watches the
+   * attached node's own `width`/`height` (see `selectSelectionSizes`).
+   *
+   * An effect, so it runs after the commit that resized those children — doing
+   * it inside `onTransformEnd` would measure them at their old size, which is
+   * the bug. Second, so a selection change has already attached the nodes this
+   * refreshes.
+   */
+  useEffect(() => {
+    const transformer = ref.current;
+    if (!transformer || transformer.nodes().length === 0) return;
+    transformer.forceUpdate();
+    transformer.getLayer()?.batchDraw();
+  }, [selectionSizes]);
 
   return (
     <Transformer

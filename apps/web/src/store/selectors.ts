@@ -20,3 +20,34 @@ export function selectObjectState(
   if (!object) return undefined;
   return resolveObjectState(object, s.steps, s.currentStepIndex);
 }
+
+/**
+ * The sizes of the current selection, as a value the canvas can compare — the
+ * one thing Konva's `Transformer` cannot notice for itself.
+ *
+ * The Transformer re-measures when a node it is attached to changes `width` or
+ * `height`, and an object's node is a `Group` whose size lives on the *children*
+ * `ObjectContent` draws. So a committed resize never reaches it. Worse, it
+ * actively re-measures at the wrong moment: `onTransformEnd` folds the gesture's
+ * scale back to 1, which fires `scaleXChange` while the children are still their
+ * old size, and the re-render that finally resizes them fires nothing at all.
+ * The handles snap back to the size the object started at and stay there until
+ * the selection is rebuilt — which is why unselecting and reselecting fixed it.
+ *
+ * A placed attack needs none of this: its grab frame is a real `Rect` carrying
+ * `width`/`height`, which the Transformer does watch.
+ *
+ * Sizes only, and resolved for the current step so a step change counts too.
+ * Position and rotation are attributes of the `Group` itself, so those it hears.
+ *
+ * A string rather than an array because it is read through a store subscription:
+ * a fresh array every call would never settle, and this compares by value.
+ */
+export function selectSelectionSizes(s: EditorState): string {
+  return s.selectedIds
+    .map((id) => {
+      const state = selectObjectState(s, id);
+      return state ? `${id}:${state.w}x${state.h}` : id;
+    })
+    .join(" ");
+}
