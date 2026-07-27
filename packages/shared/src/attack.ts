@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type Point, type Transform } from "./transform.js";
+import { type Pivoted, type Point, type Transform } from "./transform.js";
 import {
   FollowSchema,
   isFollowing,
@@ -321,6 +321,119 @@ function cornersOf(t: {
   }));
 }
 
+/** The centre of a placed rectangle — the point a pin lands a follower's origin on. */
+function rectCentre(t: Pivoted): Point {
+  const [topLeft, , bottomRight] = cornersOf(t);
+  return {
+    x: (topLeft!.x + bottomRight!.x) / 2,
+    y: (topLeft!.y + bottomRight!.y) / 2,
+  };
+}
+
+/**
+ * Every transform one object passes through, before anything it follows is
+ * accounted for: where it starts, where the step leaves it, and everywhere a
+ * motion carries it.
+ */
+function authoredPlacements(
+  o: PlanObject,
+  content: { overrides: Record<string, StepOverride>; animations: Anim[] },
+): Pivoted[] {
+  const base = o.base;
+  const placements: Pivoted[] = [base, { ...base, ...content.overrides[o.id] }];
+
+  for (const anim of content.animations) {
+    if (anim.objectId !== o.id || !anim.params) continue;
+    const { toX, toY, path } = anim.params;
+    // A motion target is a *position* for the object, so the whole footprint
+    // travels there.
+    if (toX !== undefined && toY !== undefined) {
+      placements.push({ ...base, x: toX, y: toY });
+    }
+    for (const point of path ?? []) {
+      placements.push({ ...base, x: point.x, y: point.y });
+    }
+  }
+  return placements;
+}
+
+/** A follower crossed with everything it follows stays small in practice; cap it anyway. */
+const MAX_PLACEMENTS = 4096;
+
+/**
+ * The same placements with the object's {@link Follow} solved — which for a
+ * pinned part is the whole story, not a correction to it.
+ *
+ * `useFollowing` re-places a follower every frame, *after* the tween engine has
+ * written that frame's positions. So where a pinned part was authored, and
+ * everywhere its own motion would otherwise have carried it, is overruled by
+ * wherever the pin is — and reading `base` here, as this used to, measured a
+ * rectangle nothing is ever drawn in. Dragging the origin handle of a pinned
+ * object made that visible: `slidePinnedOrigin` walks the box out from under a
+ * fixed pin on purpose, so the stored `x/y` slide away while the artwork holds
+ * still, and the bounds drifted off with them.
+ *
+ * Crossed with *every* placement of the target, because a pin rides whatever it
+ * hangs off: pin a part to something that flies 500px right and the part goes
+ * with it, so the attack's footprint has to cover the trip.
+ *
+ * Ids resolve inside this content, which is where a definition's parts follow
+ * each other. A follow pointing outside it — at one of the plan's own objects,
+ * through a placeholder — has no answer here, and {@link solveFollow} already
+ * means "leave the placement alone" in exactly that case.
+ */
+function solvedPlacements(
+  o: PlanObject,
+  authored: Map<string, Pivoted[]>,
+  byId: Map<string, PlanObject>,
+  solved: Map<string, Pivoted[]>,
+  resolving: Set<string>,
+): Pivoted[] {
+  const done = solved.get(o.id);
+  if (done) return done;
+
+  const own = authored.get(o.id) ?? [o.base];
+  // A ring of follows has no fixed point to settle on; leave it as authored
+  // rather than picking an arbitrary member to break it at.
+  if (!isFollowing(o.follow) || resolving.has(o.id)) return own;
+
+  resolving.add(o.id);
+  const centresOf = (id: string): (Point | null)[] => {
+    const target = byId.get(id);
+    // A tether's own transform is degenerate — it has no centre to offer.
+    if (!target || target.type === "tether") return [null];
+    const centres = solvedPlacements(
+      target,
+      authored,
+      byId,
+      solved,
+      resolving,
+    ).map(rectCentre);
+    return centres.length > 0 ? centres : [null];
+  };
+  const pins = o.follow?.pin ? centresOf(o.follow.pin) : [null];
+  const aims = o.follow?.aim ? centresOf(o.follow.aim) : [null];
+  resolving.delete(o.id);
+
+  const placed: Pivoted[] = [];
+  for (const t of own) {
+    for (const pin of pins) {
+      for (const aim of aims) {
+        if (placed.length >= MAX_PLACEMENTS) break;
+        // Pin and aim are asked for by id, so a follow that names the same
+        // object for both gets the one centre — which is what that means.
+        const at = solveFollow(t, o.follow, (id) =>
+          id === o.follow?.pin ? pin : aim,
+        );
+        placed.push(at ? { ...t, ...at } : t);
+      }
+    }
+  }
+
+  solved.set(o.id, placed);
+  return placed;
+}
+
 /**
  * Everything an attack covers **over its whole life**: where its parts start,
  * where they settle, and everywhere a motion carries them in between.
@@ -328,6 +441,9 @@ function cornersOf(t: {
  * This box *is* the attack, and it's what an instance's rectangle is mapped onto
  * — so the frame a planner grabs hugs the artwork instead of floating around it.
  * Returns `null` for an attack with nothing in it.
+ *
+ * Parts that follow other parts are measured where the follow puts them, not
+ * where they were authored — see {@link solvedPlacements}.
  *
  * Tethers are skipped: their geometry comes from their endpoints, so their own
  * transform is degenerate and would drag the box to the origin.
@@ -348,29 +464,21 @@ export function attackContentBox(content: {
     maxY = Math.max(maxY, p.y);
   };
 
+  // Every object can be *followed*, including the ones with no extent of their
+  // own: a placeholder is a real rectangle on the designer's canvas, and it is
+  // the natural thing to pin a part to.
+  const byId = new Map(content.objects.map((o) => [o.id, o]));
+  const authored = new Map(
+    content.objects.map((o) => [o.id, authoredPlacements(o, content)]),
+  );
+  const solved = new Map<string, Pivoted[]>();
+
   for (const o of content.objects) {
     // A tether is drawn from its endpoints, and a placeholder stands for an
     // object that could be anywhere — neither has an extent of its own.
     if (o.type === "tether" || o.type === "placeholder") continue;
-    const base = o.base;
-    const end = { ...base, ...content.overrides[o.id] };
-    for (const corner of cornersOf(base)) add(corner);
-    for (const corner of cornersOf(end)) add(corner);
-
-    for (const anim of content.animations) {
-      if (anim.objectId !== o.id || !anim.params) continue;
-      const { toX, toY, path } = anim.params;
-      // A motion target is a *position* for the object, so the whole footprint
-      // travels there.
-      if (toX !== undefined && toY !== undefined) {
-        for (const corner of cornersOf({ ...base, x: toX, y: toY }))
-          add(corner);
-      }
-      for (const point of path ?? []) {
-        for (const corner of cornersOf({ ...base, x: point.x, y: point.y })) {
-          add(corner);
-        }
-      }
+    for (const t of solvedPlacements(o, authored, byId, solved, new Set())) {
+      for (const corner of cornersOf(t)) add(corner);
     }
   }
 

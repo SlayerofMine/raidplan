@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ATTACK_AUTHORING_SIZE,
   ATTACK_BOX_ASSET,
+  attackContentBox,
   attackFollow,
   attackNaturalMs,
   attackPlacement,
@@ -24,6 +25,7 @@ import {
   type Plan,
   type PlanObject,
   type Step,
+  type StepOverride,
 } from "../src/plan.js";
 
 /**
@@ -1078,6 +1080,115 @@ describe("expandPlan — parameters", () => {
     const out = expandOne(def, inst());
     expect(lastObject(out).base.tint).toBe("#123456");
     expect(animById(out, "i1::a1").durationMs).toBe(500);
+  });
+});
+
+describe("attackContentBox — parts that follow other parts", () => {
+  /** An anchor filling (0,0)‥(100,100), so its centre is (50,50). */
+  const anchor = (over: Partial<ObjectBase> = {}): PlanObject => ({
+    ...defObj("anchor"),
+    base: base({ x: 0, y: 0, w: 100, h: 100, ...over }),
+  });
+
+  /** A 20² part authored far away, so a stale reading is unmissable. */
+  const follower = (over: Partial<ObjectBase> = {}): PlanObject => ({
+    ...defObj("part"),
+    base: base({ x: 1000, y: 1000, w: 20, h: 20, ...over }),
+    follow: { pin: "anchor" },
+  });
+
+  const boxOf = (
+    objects: PlanObject[],
+    over: Partial<{
+      overrides: Record<string, StepOverride>;
+      animations: Anim[];
+    }> = {},
+  ) =>
+    attackContentBox({
+      objects,
+      overrides: over.overrides ?? {},
+      animations: over.animations ?? [],
+    });
+
+  it("measures a pinned part where the pin puts it, not where it was drawn", () => {
+    // Centred origin, so the pin lands the part's middle on (50,50): 40‥60.
+    // Read from `base` instead and the box would run out to 1020.
+    expect(boxOf([anchor(), follower()])).toEqual({
+      cx: 50,
+      cy: 50,
+      hx: 50,
+      hy: 50,
+    });
+  });
+
+  it("follows the origin the part hangs from, not its top-left", () => {
+    // ox/oy of 3 puts the origin 60px past the corner, so pinning it to (50,50)
+    // swings the body back to -10‥10 and the attack grows on that side.
+    expect(boxOf([anchor(), follower({ ox: 3, oy: 3 })])).toEqual({
+      cx: 45,
+      cy: 45,
+      hx: 55,
+      hy: 55,
+    });
+  });
+
+  it("is unmoved by sliding the origin handle across a fixed pin", () => {
+    // `slidePinnedOrigin` walks the box one way and the fraction the other,
+    // leaving the origin exactly where it was — so the artwork doesn't move and
+    // neither may the bounds. This is the pair of readings it produces.
+    const before = boxOf([anchor(), follower({ ox: 0.5, oy: 0.5 })]);
+    const after = boxOf([anchor(), follower({ x: 990, y: 990, ox: 1, oy: 1 })]);
+    expect(after).toEqual(before);
+  });
+
+  it("carries a pinned part along everywhere its anchor goes", () => {
+    // The anchor flies 500 right; whatever is pinned to it makes the trip too,
+    // so the footprint has to cover the whole journey.
+    expect(
+      boxOf([anchor(), follower()], {
+        animations: [
+          defAnim({ objectId: "anchor", params: { toX: 500, toY: 0 } }),
+        ],
+      }),
+    ).toEqual({ cx: 300, cy: 50, hx: 300, hy: 50 });
+  });
+
+  it("turns a part that aims, and covers where that swings it", () => {
+    const target: PlanObject = {
+      ...defObj("target"),
+      base: base({ x: -5, y: 195, w: 10, h: 10 }),
+    };
+    // A 100×10 bar hanging from its left edge, aimed at something 200 below:
+    // it turns a quarter turn and sweeps down to y=100.
+    const bar: PlanObject = {
+      ...defObj("bar"),
+      base: base({ x: 0, y: -5, w: 100, h: 10, ox: 0, oy: 0.5 }),
+      follow: { aim: "target" },
+    };
+    const box = boxOf([bar, target])!;
+    // A quarter turn goes through a sine, so compare to within rounding.
+    expect(box.cx).toBeCloseTo(0);
+    expect(box.cy).toBeCloseTo(102.5);
+    expect(box.hx).toBeCloseTo(5);
+    expect(box.hy).toBeCloseTo(102.5);
+  });
+
+  it("leaves a part alone when what it follows isn't in the attack", () => {
+    // A definition can follow one of the *plan's* objects through a
+    // placeholder; there's no answer here, so the stored placement stands.
+    const stray = { ...follower(), follow: { pin: "somewhere-else" } };
+    expect(boxOf([anchor(), stray])).toEqual({
+      cx: 510,
+      cy: 510,
+      hx: 510,
+      hy: 510,
+    });
+  });
+
+  it("settles a ring of follows instead of chasing it", () => {
+    const a: PlanObject = { ...anchor(), follow: { pin: "part" } };
+    const b = follower();
+    expect(boxOf([a, b])).not.toBeNull();
   });
 });
 
