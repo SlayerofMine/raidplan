@@ -16,7 +16,7 @@ import {
   type Pivoted,
 } from "@raidplan/shared";
 import { temporalStore, useEditorStore } from "../../store/editorStore";
-import { selectObjectState } from "../../store/selectors";
+import { useSoleSelection } from "../../store/useSoleSelection";
 import { carryToNode } from "./coords";
 
 /** How far the direction arrow reaches, in plan pixels. */
@@ -48,15 +48,7 @@ const snap = (deg: number): number => {
  * one origin to move, and on a locked object nothing may be moved at all.
  */
 export function OriginHandle() {
-  const selectedIds = useEditorStore((s) => s.selectedIds);
-  const object = useEditorStore((s) =>
-    s.selectedIds.length === 1 ? s.objects[s.selectedIds[0]!] : undefined,
-  );
-  const state = useEditorStore((s) =>
-    s.selectedIds.length === 1
-      ? selectObjectState(s, s.selectedIds[0]!)
-      : undefined,
-  );
+  const { object, state } = useSoleSelection();
   const updateObject = useEditorStore((s) => s.updateObject);
 
   /**
@@ -131,7 +123,7 @@ export function OriginHandle() {
     return () => gsap.ticker.remove(sync);
   }, [followed, followId]);
 
-  if (selectedIds.length !== 1 || !object || !state) return null;
+  if (!object || !state) return null;
   // A tether is drawn from its endpoints and has no box to take a fraction of.
   if (object.locked || object.type === "tether") return null;
 

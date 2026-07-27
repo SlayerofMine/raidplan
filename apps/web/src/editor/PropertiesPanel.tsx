@@ -1,8 +1,7 @@
-import { useShallow } from "zustand/react/shallow";
 import { attackFollow } from "@raidplan/shared";
 import type { MechFillStyle, ObjectStyle, PlanObject } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
-import { selectObjectState } from "../store/selectors";
+import { useSoleSelection } from "../store/useSoleSelection";
 import { FollowFields } from "./FollowFields";
 import { useFollowChoices } from "./useFollowChoices";
 
@@ -23,21 +22,10 @@ const round = (n: number) => Math.round(n * 100) / 100;
 export function PropertiesPanel() {
   const selectedAttackIds = useEditorStore((s) => s.selectedAttackIds);
   const selectedIds = useEditorStore((s) => s.selectedIds);
-  const object = useEditorStore((s) =>
-    s.selectedIds.length === 1 ? s.objects[s.selectedIds[0]!] : undefined,
-  );
-  /**
-   * Show what's on the canvas — the base with the current step's overrides
-   * applied — not the raw base. Editing a value writes it back to whichever of
-   * the two the current step implies (see `writeOverridable`).
-   */
-  const state = useEditorStore(
-    useShallow((s) =>
-      s.selectedIds.length === 1
-        ? selectObjectState(s, s.selectedIds[0]!)
-        : undefined,
-    ),
-  );
+  // `state` is what's on the canvas — the base with the current step's
+  // overrides applied — not the raw base. Editing a value writes it back to
+  // whichever of the two the current step implies (see `writeOverridable`).
+  const { object, state } = useSoleSelection();
   const updateObject = useEditorStore((s) => s.updateObject);
   const updateStyle = useEditorStore((s) => s.updateStyle);
   const setLocked = useEditorStore((s) => s.setLocked);
