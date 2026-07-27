@@ -1,5 +1,5 @@
 import { Group, Rect, Text } from "react-konva";
-import { attackContentBox, type PlanObject } from "@raidplan/shared";
+import { attackContentBox, attackContentOf } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 
 /**
@@ -10,24 +10,24 @@ import { useEditorStore } from "../../store/editorStore";
  * measured, never typed — which is why the designer shows it rather than asking
  * for numbers.
  *
- * It covers the attack's whole life: where its parts start, where the step
- * leaves them, and everywhere a motion carries them. So an author who sends
+ * It covers the attack's whole life: where its parts start, where the End
+ * slide leaves them, and everywhere a motion carries them. So an author who sends
  * something flying off to one side can see the footprint grow to include it.
  */
 const OUTLINE = "#f2c744";
 
 export function AttackBoundsOverlay() {
-  const objects = useEditorStore((s) => s.objects);
-  const objectIds = useEditorStore((s) => s.objectIds);
-  const step = useEditorStore((s) => s.steps[0]);
+  const getPlan = useEditorStore((s) => s.getPlan);
+  // Subscribed rather than read once: the outline has to follow every edit, and
+  // these are the slices `attackContentOf` actually reads.
+  useEditorStore((s) => s.objects);
+  useEditorStore((s) => s.objectIds);
+  useEditorStore((s) => s.slides);
 
-  const box = attackContentBox({
-    objects: objectIds
-      .map((id) => objects[id])
-      .filter((o): o is PlanObject => o !== undefined),
-    overrides: step?.overrides ?? {},
-    animations: step?.animations ?? [],
-  });
+  // Measure the *saved* body, not the canvas: `attackContentOf` is what
+  // `planToAttackContent` runs on save, so the dashed frame and the stored
+  // `defaultSize` can't disagree.
+  const box = attackContentBox(attackContentOf(getPlan()));
   if (!box) return null;
 
   const w = box.hx * 2;

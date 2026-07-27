@@ -7,17 +7,17 @@ import { TimelineChart } from "../../../src/editor/timeline/TimelineChart";
 const state = () => useEditorStore.getState();
 const iconId = ICONS[0]!.id;
 
-/** A one-object, one-step plan with a single move animation on step 0. */
+/** A one-object, one-slide plan with a single move animation on slide 0. */
 function seedOneAnimation() {
   const objectId = state().addIcon(iconId);
   state().updateObject(objectId, { label: "Tank" });
-  state().addStep();
+  state().addSlide();
   const animId = state().addAnimation(0, objectId)!;
   return { objectId, animId };
 }
 
 const anim = (animId: string) =>
-  state().steps[0]!.animations.find((a) => a.id === animId)!;
+  state().slides[0]!.animations.find((a) => a.id === animId)!;
 
 beforeEach(() => {
   state().reset();
@@ -25,15 +25,15 @@ beforeEach(() => {
 });
 
 describe("TimelineChart", () => {
-  it("shows an empty hint for a step with no animations", () => {
-    state().addStep();
-    render(<TimelineChart stepIndex={0} />);
+  it("shows an empty hint for a slide with no animations", () => {
+    state().addSlide();
+    render(<TimelineChart slideIndex={0} />);
     expect(screen.getByTestId("timeline-empty-0")).toBeInTheDocument();
   });
 
-  it("keeps the measured track mounted with no animations, so it is sized before the first bar exists (regression: fresh step → 0-width, undraggable bars until reload)", () => {
-    state().addStep();
-    render(<TimelineChart stepIndex={0} />);
+  it("keeps the measured track mounted with no animations, so it is sized before the first bar exists (regression: fresh slide → 0-width, undraggable bars until reload)", () => {
+    state().addSlide();
+    render(<TimelineChart slideIndex={0} />);
     // The width-measuring wrapper must be present in the empty state; if it only
     // appeared alongside the first row it would never get observed.
     expect(screen.getByTestId("timeline-track-0")).toBeInTheDocument();
@@ -41,7 +41,7 @@ describe("TimelineChart", () => {
 
   it("renders one row per animated object, labelled by the object", () => {
     const { objectId } = seedOneAnimation();
-    render(<TimelineChart stepIndex={0} />);
+    render(<TimelineChart slideIndex={0} />);
     const row = screen.getByTestId(`timeline-row-${objectId}`);
     expect(row).toHaveTextContent("Tank");
   });
@@ -49,9 +49,9 @@ describe("TimelineChart", () => {
   it("labels the row by the object's Name, not its internal id", () => {
     const objectId = state().addIcon(iconId);
     state().updateObject(objectId, { name: "Off-tank" });
-    state().addStep();
+    state().addSlide();
     state().addAnimation(0, objectId);
-    render(<TimelineChart stepIndex={0} />);
+    render(<TimelineChart slideIndex={0} />);
     const row = screen.getByTestId(`timeline-row-${objectId}`);
     expect(row).toHaveTextContent("Off-tank");
     expect(row).not.toHaveTextContent(objectId);
@@ -59,7 +59,7 @@ describe("TimelineChart", () => {
 
   it("renders a bar whose label reports effect, delay and duration", () => {
     const { animId } = seedOneAnimation();
-    render(<TimelineChart stepIndex={0} />);
+    render(<TimelineChart slideIndex={0} />);
     const bar = screen.getByTestId(`timeline-bar-${animId}`);
     // Defaults from addAnimation: move, delay 0, duration 500.
     expect(bar).toHaveAttribute("aria-label", expect.stringContaining("move"));
@@ -69,14 +69,14 @@ describe("TimelineChart", () => {
   it("selects the object when a bar is clicked", () => {
     const { objectId, animId } = seedOneAnimation();
     state().clearSelection();
-    render(<TimelineChart stepIndex={0} />);
+    render(<TimelineChart slideIndex={0} />);
     fireEvent.click(screen.getByTestId(`timeline-bar-${animId}`));
     expect(state().selectedIds).toEqual([objectId]);
   });
 
   it("nudges delay with the keyboard on the bar body (a11y, no pixels)", () => {
     const { animId } = seedOneAnimation();
-    render(<TimelineChart stepIndex={0} />);
+    render(<TimelineChart slideIndex={0} />);
     const bar = screen.getByTestId(`timeline-bar-${animId}`);
 
     expect(anim(animId).delayMs).toBe(0);
@@ -92,7 +92,7 @@ describe("TimelineChart", () => {
 
   it("nudges duration with the keyboard on the resize handle", () => {
     const { animId } = seedOneAnimation();
-    render(<TimelineChart stepIndex={0} />);
+    render(<TimelineChart slideIndex={0} />);
     const handle = screen.getByTestId(`timeline-handle-${animId}`);
 
     expect(anim(animId).durationMs).toBe(500);
@@ -108,12 +108,12 @@ describe("TimelineChart", () => {
 
   it("gives concurrent animations on one object their own lane", () => {
     const objectId = state().addIcon(iconId);
-    state().addStep();
+    state().addSlide();
     state().addAnimation(0, objectId);
     const secondId = state().addAnimation(0, objectId)!;
     state().updateAnimation(0, secondId, { trigger: "withPrevious" });
 
-    render(<TimelineChart stepIndex={0} />);
+    render(<TimelineChart slideIndex={0} />);
     // Still one object row, but both bars are present (stacked in lanes).
     expect(screen.getAllByTestId(`timeline-row-${objectId}`)).toHaveLength(1);
     expect(screen.getByTestId(`timeline-bar-${secondId}`)).toBeInTheDocument();

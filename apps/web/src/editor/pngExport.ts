@@ -3,7 +3,7 @@ import type { View } from "./canvas/coords";
 import { slugify } from "./planFile";
 
 /**
- * PNG export of a plan step (plan §5.1).
+ * PNG export of a plan slide (plan §5.1).
  *
  * The board is drawn with a live zoom/pan transform, but an exported file should
  * be the map's own native pixels regardless of how the editor is framed. We ask
@@ -27,10 +27,12 @@ export interface CapturableStage {
   }): string;
 }
 
-/** File name for a step's export: `raid-night-step-2.png`, `…-base.png`. */
-export function exportStepFileName(title: string, stepIndex: number): string {
-  const step = stepIndex < 0 ? "base" : `step-${stepIndex + 1}`;
-  return `${slugify(title)}-${step}.png`;
+/**
+ * File name for a slide's export: `raid-night-slide-2.png`. Numbered from one,
+ * matching what the slide strip and the viewer both count.
+ */
+export function exportSlideFileName(title: string, slideIndex: number): string {
+  return `${slugify(title)}-slide-${slideIndex + 1}.png`;
 }
 
 /**

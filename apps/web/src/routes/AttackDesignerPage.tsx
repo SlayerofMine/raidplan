@@ -22,20 +22,16 @@ import { PropertiesPanel } from "../editor/PropertiesPanel";
 import { SyncedIconResolver } from "../editor/SyncedIconResolver";
 import { TimelineDock } from "../editor/timeline/TimelineDock";
 import { useEditorHotkeys } from "../editor/useEditorHotkeys";
-import {
-  BASE_STEP_INDEX,
-  clearHistory,
-  useEditorStore,
-} from "../store/editorStore";
+import { clearHistory, useEditorStore } from "../store/editorStore";
 import { Centered, RequireAdmin } from "./RequireAdmin";
 
 /**
  * The attack designer (plan §17, stage 4).
  *
- * An {@link AttackDef} is a one-step mini-plan, so the designer *is* the editor:
+ * An {@link AttackDef} is a one-slide mini-plan, so the designer *is* the editor:
  * `defToPlan` loads the def onto the shared store and the same canvas, palette
  * and panels author it. **Layout** edits the base placement (where the attack's
- * objects sit); **Animate** edits the single step — its end state (drag to set a
+ * objects sit); **Animate** edits the single slide — its end state (drag to set a
  * move/scale target) and its animations. `planToAttackContent` reads it back on
  * save. Unlike the plan editor, nothing here auto-persists as a plan.
  */
@@ -80,8 +76,11 @@ function AttackDesigner({
 }) {
   useEditorHotkeys();
   const navigate = useNavigate();
-  const selectStep = useEditorStore((s) => s.selectStep);
-  const onBase = useEditorStore((s) => s.currentStepIndex === BASE_STEP_INDEX);
+  const selectSlide = useEditorStore((s) => s.selectSlide);
+  // `defToPlan` lays a definition out as exactly two slides: slide 0 is the
+  // shape the attack starts as, slide 1 what its animations turn it into. So
+  // "Layout" and "Animate" are simply which of the two you are editing.
+  const onStart = useEditorStore((s) => s.currentSlideIndex === 0);
   // The holes this definition leaves, for the follow panel to name.
   const objects = useEditorStore((s) => s.objects);
   const objectIds = useEditorStore((s) => s.objectIds);
@@ -130,7 +129,7 @@ function AttackDesigner({
       setOrigin({ ox: d.ox, oy: d.oy, dir: d.dir });
       useEditorStore.getState().loadPlan(defToPlan(d));
       clearHistory();
-      useEditorStore.getState().selectStep(BASE_STEP_INDEX);
+      useEditorStore.getState().selectSlide(0);
     };
     if (attackId) {
       api.attack.get
@@ -212,16 +211,16 @@ function AttackDesigner({
           <button
             type="button"
             data-testid="mode-layout"
-            onClick={() => selectStep(BASE_STEP_INDEX)}
-            className={`px-2 py-1 ${onBase ? "bg-accent text-neutral-950" : "hover:bg-neutral-800"}`}
+            onClick={() => selectSlide(0)}
+            className={`px-2 py-1 ${onStart ? "bg-accent text-neutral-950" : "hover:bg-neutral-800"}`}
           >
             Layout
           </button>
           <button
             type="button"
             data-testid="mode-animate"
-            onClick={() => selectStep(0)}
-            className={`px-2 py-1 ${onBase ? "hover:bg-neutral-800" : "bg-accent text-neutral-950"}`}
+            onClick={() => selectSlide(1)}
+            className={`px-2 py-1 ${onStart ? "hover:bg-neutral-800" : "bg-accent text-neutral-950"}`}
           >
             Animate
           </button>

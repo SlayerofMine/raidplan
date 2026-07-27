@@ -11,18 +11,20 @@ import { objectDisplayName } from "./objectName";
  * The attacks placed on this plan (plan §18.3).
  *
  * Each job has one home: the **palette** places, the **canvas** positions and
- * sizes, the **timeline** says when within a step. So this is an inspector plus
- * the two things with nowhere else to live — which step an attack fires on, and
+ * sizes, the **timeline** says when within a slide. So this is an inspector plus
+ * the two things with nowhere else to live — which slide an attack fires on, and
  * the arguments its definition asked the plan for. No number boxes at all.
  *
  * Attacks belong to the board rather than to a slide, so the list is the same
- * from the base layout as from any step; the one firing *here* is marked.
+ * from the base layout as from any slide; the one firing *here* is marked.
  */
 export function AttacksPanel() {
   const encounterId = useEditorStore((s) => s.encounterId);
   const attacks = useEditorStore((s) => s.attacks);
-  const steps = useEditorStore((s) => s.steps);
-  const currentStepId = useEditorStore((s) => s.steps[s.currentStepIndex]?.id);
+  const slides = useEditorStore((s) => s.slides);
+  const currentStepId = useEditorStore(
+    (s) => s.slides[s.currentSlideIndex]?.id,
+  );
   const selectedAttackIds = useEditorStore((s) => s.selectedAttackIds);
   const selectAttack = useEditorStore((s) => s.selectAttack);
   const updateAttack = useEditorStore((s) => s.updateAttack);
@@ -54,7 +56,7 @@ export function AttacksPanel() {
             defsById[instance.attackId]?.name ||
             "Attack";
           const isSelected = selectedAttackIds.includes(instance.id);
-          const firesHere = instance.stepId === currentStepId;
+          const firesHere = instance.slideId === currentStepId;
           return (
             <li
               key={instance.id}
@@ -89,15 +91,15 @@ export function AttacksPanel() {
                 fires on
                 <select
                   aria-label={`${name} fires on`}
-                  value={instance.stepId}
+                  value={instance.slideId}
                   onChange={(e) =>
-                    updateAttack(instance.id, { stepId: e.target.value })
+                    updateAttack(instance.id, { slideId: e.target.value })
                   }
                   className="flex-1 rounded border border-panelborder bg-neutral-900 px-1 py-0.5 text-xs"
                 >
-                  {steps.map((step, index) => (
-                    <option key={step.id} value={step.id}>
-                      {step.name ?? `Step ${index + 1}`}
+                  {slides.map((slide, index) => (
+                    <option key={slide.id} value={slide.id}>
+                      {slide.name ?? `Slide ${index + 1}`}
                     </option>
                   ))}
                 </select>

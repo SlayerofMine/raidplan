@@ -11,7 +11,7 @@ function nextId(prefix: string): string {
 }
 
 export const nextObjectId = (): string => nextId("obj");
-export const nextStepId = (): string => nextId("step");
+export const nextSlideId = (): string => nextId("slide");
 export const nextAnimId = (): string => nextId("anim");
 /** A placed attack instance (plan §17); namespaces its expanded objects. */
 export const nextAttackId = (): string => nextId("atk");

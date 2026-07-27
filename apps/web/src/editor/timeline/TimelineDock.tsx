@@ -1,25 +1,24 @@
 import { useState } from "react";
-import { BASE_STEP_INDEX, useEditorStore } from "../../store/editorStore";
+import { useEditorStore } from "../../store/editorStore";
 import { TimelineChart } from "./TimelineChart";
 
 /**
- * The Timeline dock (plan §3.4) — a collapsible tray under the step strip that
- * shows a Gantt chart for the **current step only**, mirroring the Animation
- * panel in the properties sidebar (both are scoped to the step you're editing).
- * Showing every step at once ate too much vertical space; switch steps in the
+ * The Timeline dock (plan §3.4) — a collapsible tray under the slide strip that
+ * shows a Gantt chart for the **current slide only**, mirroring the Animation
+ * panel in the properties sidebar (both are scoped to the slide you're editing).
+ * Showing every slide at once ate too much vertical space; switch slides in the
  * strip to move the timeline. Collapsed by default so it never steals canvas
  * space until asked for.
  */
 export function TimelineDock() {
   const [open, setOpen] = useState(false);
-  const currentStepIndex = useEditorStore((s) => s.currentStepIndex);
-  const stepName = useEditorStore((s) =>
-    s.currentStepIndex >= 0
-      ? (s.steps[s.currentStepIndex]?.name ?? `Step ${s.currentStepIndex + 1}`)
-      : null,
+  const currentSlideIndex = useEditorStore((s) => s.currentSlideIndex);
+  // There is always a slide to be on, so the dock has no empty state left to
+  // guard: the "Select a slide" placeholder existed only for the Base layout.
+  const slideName = useEditorStore(
+    (s) =>
+      s.slides[s.currentSlideIndex]?.name ?? `Slide ${s.currentSlideIndex + 1}`,
   );
-
-  const onStep = currentStepIndex !== BASE_STEP_INDEX && stepName !== null;
 
   return (
     <div
@@ -37,22 +36,14 @@ export function TimelineDock() {
           {open ? "▾" : "▸"}
         </span>
         Timeline
-        {onStep && <span className="text-neutral-500">· {stepName}</span>}
+        <span className="text-neutral-500">· {slideName}</span>
       </button>
 
-      {open &&
-        (onStep ? (
-          <div className="max-h-72 overflow-y-auto px-3 pb-2">
-            <TimelineChart stepIndex={currentStepIndex} />
-          </div>
-        ) : (
-          <p
-            data-testid="timeline-no-step"
-            className="px-3 pb-2 text-xs text-neutral-600"
-          >
-            Select a step to see its timeline.
-          </p>
-        ))}
+      {open && (
+        <div className="max-h-72 overflow-y-auto px-3 pb-2">
+          <TimelineChart slideIndex={currentSlideIndex} />
+        </div>
+      )}
     </div>
   );
 }

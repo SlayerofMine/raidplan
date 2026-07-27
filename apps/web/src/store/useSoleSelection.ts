@@ -9,7 +9,7 @@ import { selectObjectState } from "./selectors";
  * Both `undefined` unless the selection is exactly one object: the panels and
  * handles that ask this are the ones with nothing sensible to show for a
  * multi-selection — there is no single origin to drag, and no one value to type
- * a width into. `state` is the base with the current step's overrides applied
+ * a width into. `state` is the base with the current slide's overrides applied
  * (plan §5), because what you edit is what's on the canvas, not the raw base.
  *
  * **`useShallow` is load-bearing, not tidiness.** `selectObjectState` builds a

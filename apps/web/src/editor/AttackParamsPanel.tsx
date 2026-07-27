@@ -83,7 +83,7 @@ export function AttackParamsPanel({
   onBindingsChange: (next: AttackBindings) => void;
 }) {
   const animations =
-    useEditorStore((s) => s.steps[0]?.animations) ?? NO_ANIMATIONS;
+    useEditorStore((s) => s.slides[0]?.animations) ?? NO_ANIMATIONS;
   const objectIds = useEditorStore((s) => s.objectIds);
   const objects = useEditorStore((s) => s.objects);
 
@@ -151,7 +151,7 @@ export function AttackParamsPanel({
   /**
    * "2. move · Cone" — an effect alone is unreadable once an attack has three
    * moves, and two moves on one object need the position to tell them apart.
-   * The number is the animation's place in the step, as the timeline shows it.
+   * The number is the animation's place in the slide, as the timeline shows it.
    */
   const animLabel = (a: { effect: string; objectId: string }, index: number) =>
     `${index + 1}. ${a.effect} · ${nameOf(a.objectId)}`;

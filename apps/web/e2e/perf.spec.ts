@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * The performance gate (plan §3.7 acceptance / §13: "scripted 50-object/4-step
+ * The performance gate (plan §3.7 acceptance / §13: "scripted 50-object/4-slide
  * scene with an FPS assertion in CI (allow a threshold)").
  *
  * The plan is seeded straight into localStorage rather than clicked together:
@@ -19,7 +19,7 @@ const STEPS = 4;
  */
 const MIN_FPS = 24;
 
-function makePlan(objectCount: number, stepCount: number) {
+function makePlan(objectCount: number, slideCount: number) {
   const objects = Array.from({ length: objectCount }, (_, i) => ({
     id: `o${i}`,
     type: "token" as const,
@@ -36,31 +36,40 @@ function makePlan(objectCount: number, stepCount: number) {
     },
   }));
 
-  const steps = Array.from({ length: stepCount }, (_, s) => ({
+  const slides = Array.from({ length: slideCount }, (_, s) => ({
     id: `s${s}`,
-    name: `Step ${s + 1}`,
-    // Every object moves on every step, and every move is animated: 50
-    // concurrent tweens per step is the worst case the plan asks us to hold.
-    overrides: Object.fromEntries(
+    name: `Slide ${s + 1}`,
+    // Slides are dense: a complete state for every object on every one of them.
+    states: Object.fromEntries(
       objects.map((o, i) => [
         o.id,
         {
           x: 60 + ((i + s * 3) % 10) * 145,
           y: 60 + ((Math.floor(i / 10) + s) % 5) * 155,
+          w: 64,
+          h: 64,
           rotation: s * 15,
+          opacity: 1,
+          visible: true,
         },
       ]),
     ),
-    animations: objects.map((o, i) => ({
-      id: `a${s}_${i}`,
-      objectId: o.id,
-      kind: "motion" as const,
-      effect: "move" as const,
-      trigger: "onEnter" as const,
-      delayMs: 0,
-      durationMs: 1500,
-      easing: "power2.inOut",
-    })),
+    // Every object moves on every slide but the first, and every move is
+    // animated: 50 concurrent tweens is the worst case the plan asks us to
+    // hold. Slide 1 is the opening layout and has nothing to move from.
+    animations:
+      s === 0
+        ? []
+        : objects.map((o, i) => ({
+            id: `a${s}_${i}`,
+            objectId: o.id,
+            kind: "motion" as const,
+            effect: "move" as const,
+            trigger: "onEnter" as const,
+            delayMs: 0,
+            durationMs: 1500,
+            easing: "power2.inOut",
+          })),
   }));
 
   return {
@@ -69,8 +78,8 @@ function makePlan(objectCount: number, stepCount: number) {
     raid: "",
     background: { assetId: "arena", width: 1600, height: 900 },
     objects,
-    steps,
-    schemaVersion: 1,
+    slides,
+    schemaVersion: 4,
   };
 }
 
@@ -82,13 +91,17 @@ async function seed(page: Page) {
   );
 }
 
-test(`a ${STEPS}-step, ${OBJECTS}-object plan plays smoothly`, async ({
+test(`a ${STEPS}-slide, ${OBJECTS}-object plan plays smoothly`, async ({
   page,
 }) => {
   await seed(page);
   await page.goto("/view/local");
 
-  await expect(page.getByTestId("viewer-step")).toContainText(`1 / ${STEPS}`);
+  await expect(page.getByTestId("viewer-slide")).toContainText(`1 / ${STEPS}`);
+
+  // Measure an animated slide — the opening one is static by design.
+  await page.getByRole("button", { name: "Next slide" }).click();
+  await expect(page.getByTestId("viewer-slide")).toContainText(`2 / ${STEPS}`);
 
   await page.getByTestId("play-toggle").click();
   // Let the meter settle over a few sample windows.
@@ -97,22 +110,22 @@ test(`a ${STEPS}-step, ${OBJECTS}-object plan plays smoothly`, async ({
   const fps = Number(
     (await page.getByTestId("fps").textContent())?.split(" ")[0],
   );
-  console.log(`${OBJECTS}-object / ${STEPS}-step playback: ${fps} fps`);
+  console.log(`${OBJECTS}-object / ${STEPS}-slide playback: ${fps} fps`);
 
   expect(fps).toBeGreaterThanOrEqual(MIN_FPS);
 });
 
-test(`every step of the ${OBJECTS}-object plan is navigable`, async ({
+test(`every slide of the ${OBJECTS}-object plan is navigable`, async ({
   page,
 }) => {
   await seed(page);
   await page.goto("/view/local");
 
   for (let s = 2; s <= STEPS; s++) {
-    await page.getByRole("button", { name: "Next step" }).click();
-    await expect(page.getByTestId("viewer-step")).toContainText(
+    await page.getByRole("button", { name: "Next slide" }).click();
+    await expect(page.getByTestId("viewer-slide")).toContainText(
       `${s} / ${STEPS}`,
     );
   }
-  await expect(page.getByRole("button", { name: "Next step" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Next slide" })).toBeDisabled();
 });

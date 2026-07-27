@@ -5,7 +5,7 @@ import { signIn } from "../support/auth";
  * An attack that follows the board (plan §18.17): a frontal whose **origin** is
  * pinned to one of the plan's objects and whose **direction** is aimed at
  * another, re-solved **per frame** — so dragging the target swings the cone
- * round as you drag, with no step change and no re-render in the loop.
+ * round as you drag, with no slide change and no re-render in the loop.
  */
 test("a pinned frontal follows the board as its target is dragged", async ({
   page,

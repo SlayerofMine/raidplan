@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ICONS,
   SCHEMA_VERSION,
+  seedState,
   type Plan,
   type PlanObject,
 } from "@raidplan/shared";
@@ -46,6 +47,9 @@ const shape = (
   },
 });
 
+// Slides are dense, so the fixture's single slide carries a state for every
+// object — seeded from the object's own creation transform, which is what the
+// store does when an object is added.
 const plan = (objects: PlanObject[]): Plan => ({
   id: "p",
   title: "T",
@@ -53,7 +57,13 @@ const plan = (objects: PlanObject[]): Plan => ({
   background: { assetId: "no-such-bg", width: 400, height: 300 },
   objects,
   attacks: [],
-  steps: [],
+  slides: [
+    {
+      id: "s0",
+      states: Object.fromEntries(objects.map((o) => [o.id, seedState(o)])),
+      animations: [],
+    },
+  ],
   schemaVersion: SCHEMA_VERSION,
 });
 
@@ -169,10 +179,10 @@ describe("renderPlanSvg — tethers", () => {
     expect(svg).toContain("M42 52");
   });
 
-  it("follows its endpoints across steps", () => {
+  it("follows its endpoints across slides", () => {
     const p = plan([at("a", 10, 20), at("b", 200, 20), tether]);
-    p.steps = [{ id: "s", overrides: { a: { x: 210 } }, animations: [] }];
-    // On step 0, `a` has moved to x=210 → centre x=242.
+    p.slides[0]!.states["a"] = { ...p.slides[0]!.states["a"]!, x: 210 };
+    // On slide 0, `a` has moved to x=210 → centre x=242.
     const svg = renderPlanSvg(p, 0);
     expect(svg).toContain("M242 52");
   });

@@ -11,7 +11,7 @@ import { buildDemoPlan } from "../src/demoPlan.js";
 
 const plan = buildDemoPlan();
 const objects = plan.objects;
-const animations = plan.steps.flatMap((s) => s.animations);
+const animations = plan.slides.flatMap((s) => s.animations);
 const ids = new Set(objects.map((o) => o.id));
 
 describe("demo plan — validity", () => {
@@ -31,8 +31,8 @@ describe("demo plan — validity", () => {
 
   it("has no dangling references", () => {
     for (const a of animations) expect(ids).toContain(a.objectId);
-    for (const step of plan.steps) {
-      for (const id of Object.keys(step.overrides)) expect(ids).toContain(id);
+    for (const slide of plan.slides) {
+      for (const id of Object.keys(slide.states)) expect(ids).toContain(id);
     }
     for (const o of objects) {
       if (o.fromId) expect(ids).toContain(o.fromId);
@@ -97,16 +97,16 @@ describe("demo plan — feature coverage", () => {
 describe("demo plan — the collision demo actually collides", () => {
   const runner = objects.find((o) => o.id === "tok-runner")!;
   const orb = objects.find((o) => o.id === "orb")!;
-  const step = plan.steps.find((s) => s.id === "step-collision")!;
+  const slide = plan.slides.find((s) => s.id === "slide-collision")!;
 
   it("arms the orb against the runner", () => {
-    const armed = step.animations.find((a) => a.trigger === "onCollision")!;
+    const armed = slide.animations.find((a) => a.trigger === "onCollision")!;
     expect(armed.objectId).toBe(orb.id);
     expect(armed.collideWith).toEqual([runner.id]);
   });
 
   it("routes the runner across the orb, on the same row", () => {
-    const endX = step.overrides[runner.id]?.x;
+    const endX = slide.states[runner.id]?.x;
     expect(endX).toBeDefined();
     // The orb sits between the runner's start and end...
     expect(orb.base.x).toBeGreaterThan(runner.base.x);

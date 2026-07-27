@@ -10,10 +10,10 @@ import { PlanSchema } from "../src/plan.js";
 const background = { assetId: "arena", width: 1600, height: 900 };
 
 describe("EncounterPresetSchema", () => {
-  it("defaults objects and steps to empty, so a bare preset is just a map", () => {
+  it("defaults objects and slides to empty, so a bare preset is just a map", () => {
     const preset = EncounterPresetSchema.parse({ background });
     expect(preset.objects).toEqual([]);
-    expect(preset.steps).toEqual([]);
+    expect(preset.slides).toEqual([]);
   });
 
   it("rejects a preset without a background", () => {
@@ -22,7 +22,7 @@ describe("EncounterPresetSchema", () => {
 });
 
 describe("makePlanFromPreset", () => {
-  it("stamps a valid Plan carrying the preset's background, objects and steps", () => {
+  it("stamps a valid Plan carrying the preset's background, objects and slides", () => {
     const object = {
       id: "boss",
       type: "token" as const,
@@ -41,7 +41,7 @@ describe("makePlanFromPreset", () => {
       id: "plan-1",
       title: "Pull 1",
       raid: "Sandbox",
-      preset: { background, objects: [object], steps: [] },
+      preset: { background, objects: [object], slides: [] },
     });
 
     // A round-trip through the document schema proves it's a real, valid plan.
@@ -56,7 +56,7 @@ describe("makePlanFromPreset", () => {
   it("falls back to the empty-plan defaults when title/raid are omitted", () => {
     const plan = makePlanFromPreset({
       id: "plan-2",
-      preset: { background, objects: [], steps: [] },
+      preset: { background, objects: [], slides: [] },
     });
     expect(plan.title).toBe("Untitled plan");
     expect(plan.raid).toBe("");

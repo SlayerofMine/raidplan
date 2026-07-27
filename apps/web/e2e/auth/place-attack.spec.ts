@@ -4,7 +4,7 @@ import { signIn } from "../support/auth";
 /**
  * The whole epic end-to-end (plan §17): an admin authors an attack for an
  * encounter, a planner starts a plan from that encounter, and places the attack
- * on a step. Requires the signed-in config (`test:e2e:auth`).
+ * on a slide. Requires the signed-in config (`test:e2e:auth`).
  */
 test("author an attack, then place it in a plan seeded from its encounter", async ({
   page,
@@ -40,11 +40,10 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
   await page.getByTestId("new-plan").click();
   await expect(page).toHaveURL(/\/plan\/.+\/edit/);
 
-  // The library lives in the palette, beside tokens and shapes. Placing works
-  // from the base layout — where you lay the board out — and the attack fires
-  // on step 1, which is created for it.
+  // The library lives in the palette, beside tokens and shapes. A fresh plan
+  // opens on slide 1, and that is the slide the attack fires on.
   await page.getByRole("tab", { name: "Attacks" }).click();
-  await expect(page.getByTestId("step-base")).toHaveAttribute(
+  await expect(page.getByTestId("slide-0")).toHaveAttribute(
     "aria-pressed",
     "true",
   );
@@ -59,7 +58,7 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
   await page.getByRole("button", { name: "Place Sweeping Flame" }).click();
 
   // It's on the board. Every value has one home now, so the panel itself
-  // carries no number boxes at all (§18.3/§18.6) — only which step fires it.
+  // carries no number boxes at all (§18.3/§18.6) — only which slide fires it.
   await expect(
     page.getByRole("button", { name: "Remove Sweeping Flame" }),
   ).toBeVisible();
@@ -74,18 +73,18 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
     page.getByRole("checkbox", { name: /^Caught by: / }),
   ).toHaveCount(1);
 
-  // When within that step is a draggable bar on the timeline.
-  await page.getByTestId("step-0").click();
+  // When within that slide is a draggable bar on the timeline.
+  await page.getByTestId("slide-0").click();
   await page.getByTestId("timeline-toggle").click();
   await expect(
     page.getByRole("button", { name: /Sweeping Flame · starts 0ms/ }),
   ).toBeVisible();
 
-  // --- and it is actually on screen while its step plays (§17's whole point) ---
+  // --- and it is actually on screen while its slide plays (§17's whole point) ---
   const planUrl = page.url();
   await attackSaved;
   await page.getByTestId("open-viewer").click();
-  await expect(page.getByTestId("viewer-step")).toContainText("1 / 1");
+  await expect(page.getByTestId("viewer-slide")).toContainText("1 / 1");
 
   // Nothing else on this plan moves, so the board changing *is* the attack
   // arriving. Asserted on real pixels rather than on the scene graph: an attack

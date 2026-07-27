@@ -2,18 +2,18 @@ import type { AnimEffect, AnimKind, AnimTrigger } from "./effects.js";
 import type { Anim } from "./plan.js";
 
 /**
- * The **pure timing model** of a step (plan §7 "Playback engine").
+ * The **pure timing model** of a slide (plan §7 "Playback engine").
  *
  * This is the single source of truth for *when* each animation starts and how
- * long it occupies a step's timeline. The playback engine, the interactive
+ * long it occupies a slide's timeline. The playback engine, the interactive
  * Timeline/Gantt view and `expandPlan` (which flattens an attack's internal
- * chain onto its host step) all consume it, so a bar drawn in the Gantt is
+ * chain onto its host slide) all consume it, so a bar drawn in the Gantt is
  * guaranteed to line up with the frame the player produces — there is no second
  * implementation of the trigger rules to drift out of sync (the web suite's
  * `stepTimeline.test.ts` golden cross-check pins this against real GSAP).
  *
  * It lives here rather than beside the player because it is a property of the
- * *document*: given a step's animations, the answer is the same everywhere, with
+ * *document*: given a slide's animations, the answer is the same everywhere, with
  * no GSAP, DOM or canvas involved. Everything is in **milliseconds** — the
  * document's native unit (`Anim.delayMs` / `Anim.durationMs`).
  */
@@ -42,16 +42,16 @@ export function occupiedMs(effect: AnimEffect, durationMs: number): number {
 }
 
 /**
- * **Deferred** triggers sit outside the step's auto-playing timeline and are
+ * **Deferred** triggers sit outside the slide's auto-playing timeline and are
  * fired on demand during playback: `onClick` when the object is clicked,
  * `onCollision` when it overlaps one of its `collideWith` objects. They take no
- * position in the chain and don't extend the step's length.
+ * position in the chain and don't extend the slide's length.
  */
 export function isDeferredTrigger(trigger: AnimTrigger): boolean {
   return trigger === "onClick" || trigger === "onCollision";
 }
 
-/** One animation placed on a step's timeline. All fields are milliseconds. */
+/** One animation placed on a slide's timeline. All fields are milliseconds. */
 export interface AnimSpan {
   animId: string;
   objectId: string;
@@ -79,7 +79,7 @@ export interface AnimSpan {
   /** `startMs + spanMs` — the visual end of the bar. */
   endMs: number;
   /**
-   * Fired on demand rather than by the step's timeline (`onClick` /
+   * Fired on demand rather than by the slide's timeline (`onClick` /
    * `onCollision`) — see {@link isDeferredTrigger}.
    */
   deferred: boolean;
@@ -88,7 +88,7 @@ export interface AnimSpan {
 export interface StepTimeline {
   /** Spans in document order (the order the player chains them in). */
   spans: AnimSpan[];
-  /** Total auto-playing length of the step — the max end of non-click spans. */
+  /** Total auto-playing length of the slide — the max end of non-click spans. */
   totalMs: number;
 }
 
@@ -111,7 +111,7 @@ function triggerMs(
 }
 
 /**
- * Lay out a step's animations on its timeline.
+ * Lay out a slide's animations on its timeline.
  *
  * Mirrors `compileStep.ts` exactly: animations chain in document order, each
  * `delayMs` stacks on top of the trigger anchor, and deferred animations are
@@ -159,7 +159,7 @@ export function layoutStepTimeline(animations: readonly Anim[]): StepTimeline {
   return { spans, totalMs };
 }
 
-/** The playing length of a step, in seconds (what a GSAP timeline reports). */
+/** The playing length of a slide, in seconds (what a GSAP timeline reports). */
 export function stepDurationSeconds(animations: readonly Anim[]): number {
   return layoutStepTimeline(animations).totalMs / MS;
 }

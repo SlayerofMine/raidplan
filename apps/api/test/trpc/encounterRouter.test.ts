@@ -78,7 +78,7 @@ describe("plan.create from an encounter", () => {
             },
           },
         ],
-        steps: [],
+        slides: [],
       },
     });
 
@@ -182,7 +182,7 @@ describe("encounter authoring (admin only)", () => {
             },
           },
         ],
-        steps: [],
+        slides: [],
       },
     });
 

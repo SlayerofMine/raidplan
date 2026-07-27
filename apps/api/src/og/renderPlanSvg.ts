@@ -12,13 +12,13 @@ import {
 } from "@raidplan/shared";
 
 /**
- * Render a plan step to an SVG string, for the Discord link preview (plan §4.7).
+ * Render a plan slide to an SVG string, for the Discord link preview (plan §4.7).
  *
  * This is a **second renderer**: the editor and viewer draw with Konva in a
  * browser, but a crawler's preview has to be produced server-side with no DOM
  * and no canvas. What keeps the two honest is that both resolve their state
  * with the *same* `resolveObjectState` from `shared` — the maths that decides
- * where a token sits on step N isn't duplicated, only the drawing is.
+ * where a token sits on slide N isn't duplicated, only the drawing is.
  *
  * SVG rather than satori: our icons and maps already *are* SVG data URIs, so
  * composing them is string work. satori is for laying out text and flexbox,
@@ -197,11 +197,11 @@ function renderObject(
 }
 
 /**
- * Compose the plan's step into one SVG document.
+ * Compose the plan's slide into one SVG document.
  *
- * `stepIndex` follows the same convention as the editor: -1 is the base layout,
- * 0..n a step. The plan calls for a render of "step 1" (§9), i.e. index 0 when
- * the plan has steps.
+ * `slideIndex` follows the same convention as the editor: -1 is the base layout,
+ * 0..n a slide. The plan calls for a render of "slide 1" (§9), i.e. index 0 when
+ * the plan has slides.
  */
 export interface RenderOptions {
   /**
@@ -226,7 +226,7 @@ export interface RenderOptions {
 
 export function renderPlanSvg(
   plan: Plan,
-  stepIndex = 0,
+  slideIndex = 0,
   options: RenderOptions = {},
 ): string {
   const { width, height } = plan.background;
@@ -239,7 +239,7 @@ export function renderPlanSvg(
   const states = new Map<string, ObjectState>(
     plan.objects.map((object) => [
       object.id,
-      resolveObjectState(object, plan.steps, stepIndex),
+      resolveObjectState(object, plan.slides, slideIndex),
     ]),
   );
 

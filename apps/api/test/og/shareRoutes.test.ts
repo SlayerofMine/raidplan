@@ -71,7 +71,7 @@ function planDoc(over: Partial<Plan> = {}): Plan {
     background: BACKGROUND,
     objects: [],
     attacks: [],
-    steps: [],
+    slides: [],
     schemaVersion: SCHEMA_VERSION,
     ...over,
   };
@@ -253,15 +253,21 @@ describe("renderPlanSvg", () => {
     expect(svg).toContain("data:image/svg+xml"); // the icon + map
   });
 
-  it("renders the step's resolved state, not the base layout", () => {
+  it("renders the named slide's layout", () => {
     // The same maths the viewer uses (`resolveObjectState`), so the preview
     // matches what someone sees when they open the link.
+    const at = (x: number) => ({
+      a: { x, y: 0, w: 64, h: 64, rotation: 0, opacity: 1, visible: true },
+    });
     const plan = planDoc({
       objects: [token("a", { x: 0 })],
-      steps: [{ id: "s1", overrides: { a: { x: 900 } }, animations: [] }],
+      slides: [
+        { id: "s1", states: at(0), animations: [] },
+        { id: "s2", states: at(900), animations: [] },
+      ],
     });
-    expect(renderPlanSvg(plan, 0)).toContain("translate(900");
-    expect(renderPlanSvg(plan, -1)).toContain("translate(0");
+    expect(renderPlanSvg(plan, 1)).toContain("translate(900");
+    expect(renderPlanSvg(plan, 0)).toContain("translate(0");
   });
 
   it("skips hidden objects", () => {
@@ -342,15 +348,15 @@ describe("planDescription", () => {
       planDescription(
         planDoc({
           objects: [token("a")],
-          steps: [{ id: "s", overrides: {}, animations: [] }],
+          slides: [{ id: "s", states: {}, animations: [] }],
         }),
       ),
-    ).toBe("1 step · 1 object");
+    ).toBe("1 slide · 1 object");
   });
 
   it("pluralises, and leads with the raid when set", () => {
     expect(planDescription(planDoc({ raid: "Aberrus" }))).toBe(
-      "Aberrus · 0 steps · 0 objects",
+      "Aberrus · 0 slides · 0 objects",
     );
   });
 
@@ -358,12 +364,12 @@ describe("planDescription", () => {
     expect(
       planDescription(
         planDoc({
-          steps: [{ id: "s", overrides: {}, animations: [] }],
+          slides: [{ id: "s", states: {}, animations: [] }],
           attacks: [
             {
               id: "i1",
               attackId: "atk",
-              stepId: "s",
+              slideId: "s",
               x: 0,
               y: 0,
               w: 100,
@@ -376,7 +382,7 @@ describe("planDescription", () => {
           ],
         }),
       ),
-    ).toBe("1 step · 1 object");
+    ).toBe("1 slide · 1 object");
   });
 });
 

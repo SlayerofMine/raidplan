@@ -78,9 +78,9 @@ function fakeNode(): FakeNode {
 /**
  * A stage that has a node for every object in the loaded plan.
  *
- * The ref is created once and kept: `usePlayback` rebuilds the step whenever it
+ * The ref is created once and kept: `usePlayback` rebuilds the slide whenever it
  * changes, so a fresh ref object per render would re-snap every object to the
- * step's start on every render — including the one that follows the collision.
+ * slide's start on every render — including the one that follows the collision.
  */
 function fakeStage(ids: string[]) {
   const nodes = new Map(ids.map((id) => [id, fakeNode()]));
@@ -173,7 +173,7 @@ const plan: Plan = {
     {
       id: "i1",
       attackId: "atk",
-      stepId: "s0",
+      slideId: "s0",
       x: 0,
       y: 0,
       w: 400,
@@ -184,7 +184,7 @@ const plan: Plan = {
       args: { victims: ["tank"] },
     },
   ],
-  steps: [{ id: "s0", overrides: {}, animations: [] }],
+  slides: [{ id: "s0", states: {}, animations: [] }],
   schemaVersion: SCHEMA_VERSION,
 };
 
@@ -216,7 +216,7 @@ describe("an attack colliding with a plan object", () => {
     expect(nodes.get(CONE)!.visible()).toBe(false);
   });
 
-  it("still watches after the step's own animations have finished", async () => {
+  it("still watches after the slide's own animations have finished", async () => {
     // The victim is nowhere near the cone's path, so the slide ends with no
     // contact...
     const late = structuredClone(plan);
@@ -231,7 +231,7 @@ describe("an attack colliding with a plan object", () => {
     expect(nodes.get(CONE)!.visible()).toBe(true);
 
     // ...and then something moves the victim onto it — a click-triggered
-    // animation, a later tween. The watch has to outlive the step's timeline,
+    // animation, a later tween. The watch has to outlive the slide's timeline,
     // or a collision is only possible during the first few hundred ms.
     act(() => nodes.get("tank")!.setAttrs({ x: 300 }));
     await settle(200);
@@ -239,7 +239,7 @@ describe("an attack colliding with a plan object", () => {
     expect(nodes.get(CONE)!.visible()).toBe(false);
   });
 
-  it("re-arms when the step is played again", async () => {
+  it("re-arms when the slide is played again", async () => {
     const { ref, nodes } = fakeStage(useEditorStore.getState().objectIds);
     const { result } = renderHook(() => usePlayback(ref));
     const cone = nodes.get(CONE)!;
@@ -249,14 +249,14 @@ describe("an attack colliding with a plan object", () => {
     expect(cone.visible()).toBe(false);
 
     // NB: no rewind press in between — just play again.
-    // Watching the step again has to look like watching it the first time:
-    // pressing play on a finished step starts it over rather than resuming a
+    // Watching the slide again has to look like watching it the first time:
+    // pressing play on a finished slide starts it over rather than resuming a
     // spent one, so the cone comes back and is caught again.
     act(() => result.current.play());
     await settle(400);
 
     expect(cone.visible()).toBe(false);
-    // Hidden by the step's opening snap, shown by the attack's entrance, taken
+    // Hidden by the slide's opening snap, shown by the attack's entrance, taken
     // away by the collision — then all of it again. A spent playthrough would
     // stop after the first `false`.
     expect(cone.visibilityWrites).toEqual([false, true, false, true, false]);

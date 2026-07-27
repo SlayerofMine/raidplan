@@ -20,6 +20,6 @@ const out = new URL("../../../docs/demo-plan.json", import.meta.url);
 writeFileSync(out, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
 console.log(
   `demo plan → ${out.pathname} (${plan.objects.length} objects, ` +
-    `${plan.steps.length} steps, ` +
-    `${plan.steps.reduce((n, s) => n + s.animations.length, 0)} animations)`,
+    `${plan.slides.length} slides, ` +
+    `${plan.slides.reduce((n, s) => n + s.animations.length, 0)} animations)`,
 );

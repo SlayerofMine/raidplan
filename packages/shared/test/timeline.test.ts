@@ -66,7 +66,7 @@ describe("layoutStepTimeline — trigger chaining", () => {
     expect(t.totalMs).toBe(750);
   });
 
-  it("is empty for a step with no animations", () => {
+  it("is empty for a slide with no animations", () => {
     expect(layoutStepTimeline([])).toEqual({ spans: [], totalMs: 0 });
     expect(stepDurationSeconds([])).toBe(0);
   });
@@ -110,7 +110,7 @@ describe("layoutStepTimeline — deferred triggers", () => {
     ]);
     expect(byId(t, "2").deferred).toBe(true);
     // A collision animation fires on contact, so it neither takes a slot in the
-    // chain (#3 still follows #1) nor extends the step.
+    // chain (#3 still follows #1) nor extends the slide.
     expect(byId(t, "3").startMs).toBe(500);
     expect(t.totalMs).toBe(1000);
   });

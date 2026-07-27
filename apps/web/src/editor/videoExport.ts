@@ -1,12 +1,12 @@
 import { Muxer, ArrayBufferTarget } from "webm-muxer";
-import { layoutStepTimeline, occupiedMs, type Step } from "@raidplan/shared";
+import { layoutStepTimeline, occupiedMs, type Slide } from "@raidplan/shared";
 import { slugify } from "./planFile";
 
 /**
  * One-click WebM export of a whole plan (plan §5.1's "nice-to-have").
  *
  * **Not a screen recording.** Each frame is rendered deterministically: the
- * step's GSAP timeline is *seeked* to an exact time, the resulting state is
+ * slide's GSAP timeline is *seeked* to an exact time, the resulting state is
  * pushed onto the Konva nodes, and the stage is captured at the plan's native
  * resolution. Every frame then carries an explicit timestamp into
  * `VideoEncoder`, so the clip's timing is exact however slowly it renders —
@@ -24,33 +24,33 @@ export const VP8_CODEC = "vp8";
 export const DEFAULT_FPS = 30;
 /** Keyframe cadence — roughly every 2s, so seeking in a player stays snappy. */
 export const KEYFRAME_INTERVAL = 60;
-/** How long a step with no animations is held on screen, so it's watchable. */
+/** How long a slide with no animations is held on screen, so it's watchable. */
 export const DEFAULT_HOLD_MS = 800;
 /** Bits per second. Generous: these are flat-colour boards, they compress well. */
 export const DEFAULT_BITRATE = 6_000_000;
 
-/** One frame of the export: which step, and how far into it. */
+/** One frame of the export: which slide, and how far into it. */
 export interface Frame {
-  stepIndex: number;
+  slideIndex: number;
   timeMs: number;
 }
 
 export interface PlanFramesOptions {
   fps?: number;
-  /** Minimum time on screen for a step, whether or not it animates. */
+  /** Minimum time on screen for a slide, whether or not it animates. */
   holdMs?: number;
 }
 
 /**
- * Extra time a step needs beyond its own timeline so a collision that fires at
+ * Extra time a slide needs beyond its own timeline so a collision that fires at
  * the very last moment still plays out on screen instead of being cut off.
  *
  * `onClick` is excluded: nobody is clicking during an export, so those never
  * fire and would only pad the clip.
  */
-export function collisionTailMs(step: Step): number {
+export function collisionTailMs(slide: Slide): number {
   let tail = 0;
-  for (const anim of step.animations) {
+  for (const anim of slide.animations) {
     if (anim.trigger !== "onCollision") continue;
     // A one-shot drops the authored delay — the collision decided when.
     tail = Math.max(tail, occupiedMs(anim.effect, anim.durationMs));
@@ -61,28 +61,28 @@ export function collisionTailMs(step: Step): number {
 /**
  * The complete script of the export: every frame to render, in order.
  *
- * Step lengths come from {@link layoutStepTimeline}, the same source playback
+ * Slide lengths come from {@link layoutStepTimeline}, the same source playback
  * and the Gantt use, so the video runs for exactly as long as the plan plays.
- * A step with no animations still gets `holdMs` of frames — otherwise a mostly
- * static plan would export as a zero-length file — and a step with collision
+ * A slide with no animations still gets `holdMs` of frames — otherwise a mostly
+ * static plan would export as a zero-length file — and a slide with collision
  * triggers gets {@link collisionTailMs} on the end.
  *
  * Pure, so the whole shape of an export is testable without a canvas.
  */
 export function planFrames(
-  steps: readonly Step[],
+  slides: readonly Slide[],
   { fps = DEFAULT_FPS, holdMs = DEFAULT_HOLD_MS }: PlanFramesOptions = {},
 ): Frame[] {
   const frameMs = 1000 / fps;
   const frames: Frame[] = [];
 
-  steps.forEach((step, stepIndex) => {
-    const playMs = layoutStepTimeline(step.animations).totalMs;
-    const durationMs = Math.max(playMs, holdMs) + collisionTailMs(step);
-    // `<=` so the settled end state is the last frame of every step.
+  slides.forEach((slide, slideIndex) => {
+    const playMs = layoutStepTimeline(slide.animations).totalMs;
+    const durationMs = Math.max(playMs, holdMs) + collisionTailMs(slide);
+    // `<=` so the settled end state is the last frame of every slide.
     const count = Math.max(1, Math.round(durationMs / frameMs));
     for (let i = 0; i <= count; i++) {
-      frames.push({ stepIndex, timeMs: Math.min(i * frameMs, durationMs) });
+      frames.push({ slideIndex, timeMs: Math.min(i * frameMs, durationMs) });
     }
   });
 

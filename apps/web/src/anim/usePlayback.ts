@@ -19,22 +19,22 @@ import { compileOneShot, deferredAnimsFor } from "./oneShot";
  * The golden rule: **React owns the document while editing; GSAP owns the
  * pixels while playing.** During playback this never calls `setState` per
  * frame — it writes straight to Konva nodes and calls `batchDraw()`. The only
- * React state here is coarse transport status (playing/paused, which step),
+ * React state here is coarse transport status (playing/paused, which slide),
  * which changes a handful of times per plan, not 60 times a second.
  */
 export interface PlaybackApi {
-  stepIndex: number;
+  slideIndex: number;
   isPlaying: boolean;
-  /** 0..1 within the current step. */
+  /** 0..1 within the current slide. */
   progress: number;
-  stepCount: number;
+  slideCount: number;
   play: () => void;
   pause: () => void;
   toggle: () => void;
   restart: () => void;
   next: () => void;
   previous: () => void;
-  goTo: (stepIndex: number) => void;
+  goTo: (slideIndex: number) => void;
   seek: (progress: number) => void;
   /**
    * Fire this object's `onClick` animations, if it has any. The viewer calls it
@@ -42,7 +42,7 @@ export interface PlaybackApi {
    */
   triggerClick: (objectId: string) => void;
   /**
-   * Objects on the current step with an `onClick` animation. The viewer only
+   * Objects on the current slide with an `onClick` animation. The viewer only
    * turns on hit-testing when this is non-empty, so the usual case keeps the
    * `listening={false}` fast path (plan §8.4).
    */
@@ -50,15 +50,15 @@ export interface PlaybackApi {
 }
 
 export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
-  const steps = useEditorStore((s) => s.steps);
+  const slides = useEditorStore((s) => s.slides);
   const objects = useEditorStore((s) => s.objects);
   const objectIds = useEditorStore((s) => s.objectIds);
 
-  const [stepIndex, setStepIndex] = useState(0);
+  const [slideIndex, setStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   /**
-   * The step is *in play*: the transport was started and hasn't been stopped or
-   * moved. Distinct from `isPlaying`, which the step's own timeline clears when
+   * The slide is *in play*: the transport was started and hasn't been stopped or
+   * moved. Distinct from `isPlaying`, which the slide's own timeline clears when
    * it completes — a triggered animation can still be running (or about to be
    * triggered) long after that, so the collision watch keys off this instead.
    */
@@ -67,8 +67,8 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
   const timeline = useRef<gsap.core.Timeline | null>(null);
   /**
    * Deferred animations already fired this playthrough. A pickup is *consumed*:
-   * it fires on first contact and stays spent until the step is rebuilt
-   * (restart or a step change), which is where this is cleared.
+   * it fires on first contact and stays spent until the slide is rebuilt
+   * (restart or a slide change), which is where this is cleared.
    */
   const fired = useRef<Set<string>>(new Set());
   /** Timelines started by a trigger, so transport controls can govern them too. */
@@ -101,11 +101,11 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
       const states: ResolvedStates = {};
       for (const id of objectIds) {
         const object = objects[id];
-        if (object) states[id] = resolveObjectState(object, steps, index);
+        if (object) states[id] = resolveObjectState(object, slides, index);
       }
       return states;
     },
-    [objects, objectIds, steps],
+    [objects, objectIds, slides],
   );
 
   const liveStateOf = useCallback(
@@ -117,15 +117,15 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
   /** Run a single deferred animation now (see `oneShot.ts`). */
   const fireAnim = useCallback(
     (anim: Anim) => {
-      const step = steps[stepIndex];
-      if (!step) return;
-      const end = resolveAll(stepIndex);
+      const slide = slides[slideIndex];
+      if (!slide) return;
+      const end = resolveAll(slideIndex);
       const target = end[anim.objectId];
       if (!target) return;
 
       const { timeline: tl, initial } = compileOneShot({
         anim,
-        step,
+        slide,
         start: { [anim.objectId]: liveStateOf(anim.objectId, target) },
         end,
         apply: applyToNode,
@@ -137,8 +137,8 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
       tl.play();
     },
     [
-      steps,
-      stepIndex,
+      slides,
+      slideIndex,
       resolveAll,
       liveStateOf,
       applyToNode,
@@ -148,24 +148,24 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
   );
 
   /**
-   * Build the timeline for a step. Entering a step always snaps to its start
+   * Build the timeline for a slide. Entering a slide always snaps to its start
    * state first, so jumping in from anywhere lands in the same place (plan §7).
    */
-  const buildStep = useCallback(
+  const buildSlide = useCallback(
     (index: number) => {
       timeline.current?.kill();
       timeline.current = null;
-      // Rebuilding a step re-arms every pickup and drops anything a trigger
+      // Rebuilding a slide re-arms every pickup and drops anything a trigger
       // started, so a replay is identical to the first run.
       for (const shot of oneShots.current) shot.kill();
       oneShots.current = [];
       fired.current.clear();
 
-      const step = steps[index];
-      if (!step) return null;
+      const slide = slides[index];
+      if (!slide) return null;
 
       const { timeline: tl, initial } = compileStep({
-        step,
+        slide,
         start: resolveAll(index - 1),
         end: resolveAll(index),
         apply: applyToNode,
@@ -185,45 +185,45 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
       timeline.current = tl;
       return tl;
     },
-    [steps, resolveAll, applyToNode, redraw, applyStates],
+    [slides, resolveAll, applyToNode, redraw, applyStates],
   );
 
   const goTo = useCallback(
     (index: number) => {
-      const clamped = Math.max(0, Math.min(index, steps.length - 1));
+      const clamped = Math.max(0, Math.min(index, slides.length - 1));
       setStepIndex(clamped);
       setIsPlaying(false);
       setArmed(false);
       setProgress(0);
-      buildStep(clamped);
+      buildSlide(clamped);
     },
-    [steps.length, buildStep],
+    [slides.length, buildSlide],
   );
 
-  // Rebuild whenever the step or the document changes underneath us.
+  // Rebuild whenever the slide or the document changes underneath us.
   useEffect(() => {
-    buildStep(stepIndex);
+    buildSlide(slideIndex);
     return () => {
       timeline.current?.kill();
       timeline.current = null;
     };
-  }, [buildStep, stepIndex]);
+  }, [buildSlide, slideIndex]);
 
   /**
-   * Collision watch — while the step is **in play** (plan §7).
+   * Collision watch — while the slide is **in play** (plan §7).
    *
-   * Rides GSAP's global ticker rather than the step timeline's `onUpdate`, and
+   * Rides GSAP's global ticker rather than the slide timeline's `onUpdate`, and
    * keys off `armed` rather than `isPlaying`, so a collision caused *by* a
-   * triggered animation is still caught after the step's own timeline has
+   * triggered animation is still caught after the slide's own timeline has
    * finished. Keying off `isPlaying` quietly broke that: the timeline clears it
-   * on completion, so contact was only ever possible during the step's own
+   * on completion, so contact was only ever possible during the slide's own
    * animations. Boxes are read from the live Konva nodes, which is what makes
-   * this work mid-tween. No React state is touched per frame, and a step with
+   * this work mid-tween. No React state is touched per frame, and a slide with
    * no armed rules — nearly all of them — adds no ticker at all.
    */
   useEffect(() => {
     if (!armed) return;
-    const animations = steps[stepIndex]?.animations ?? [];
+    const animations = slides[slideIndex]?.animations ?? [];
     const rules = collisionRules(animations);
     if (rules.length === 0) return;
 
@@ -242,22 +242,22 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
 
     gsap.ticker.add(tick);
     return () => gsap.ticker.remove(tick);
-  }, [armed, steps, stepIndex, stageRef, fireAnim]);
+  }, [armed, slides, slideIndex, stageRef, fireAnim]);
 
   const restart = useCallback(() => {
-    const tl = buildStep(stepIndex);
+    const tl = buildSlide(slideIndex);
     tl?.play();
     setIsPlaying(Boolean(tl));
     setArmed(Boolean(tl));
-  }, [buildStep, stepIndex]);
+  }, [buildSlide, slideIndex]);
 
   const play = useCallback(() => {
     const tl = timeline.current;
     if (!tl) return;
-    // Playing a step that has run to the end starts it over *properly* —
+    // Playing a slide that has run to the end starts it over *properly* —
     // rebuilt, not rewound. Rewinding the timeline alone would replay the
     // tweens while every pickup stayed spent and whatever a trigger did stayed
-    // done, so the second watch of a step wouldn't match the first.
+    // done, so the second watch of a slide wouldn't match the first.
     if (tl.progress() >= 1) {
       restart();
       return;
@@ -295,7 +295,7 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
   const triggerClick = useCallback(
     (objectId: string) => {
       for (const anim of deferredAnimsFor(
-        steps[stepIndex],
+        slides[slideIndex],
         objectId,
         "onClick",
       )) {
@@ -304,28 +304,28 @@ export function usePlayback(stageRef: { current: Stage | null }): PlaybackApi {
         fireAnim(anim);
       }
     },
-    [steps, stepIndex, fireAnim],
+    [slides, slideIndex, fireAnim],
   );
 
   const clickableObjectIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const anim of steps[stepIndex]?.animations ?? []) {
+    for (const anim of slides[slideIndex]?.animations ?? []) {
       if (anim.trigger === "onClick") ids.add(anim.objectId);
     }
     return [...ids];
-  }, [steps, stepIndex]);
+  }, [slides, slideIndex]);
 
   return {
-    stepIndex,
+    slideIndex,
     isPlaying,
     progress,
-    stepCount: steps.length,
+    slideCount: slides.length,
     play,
     pause,
     toggle: () => (isPlaying ? pause() : play()),
     restart,
-    next: () => goTo(stepIndex + 1),
-    previous: () => goTo(stepIndex - 1),
+    next: () => goTo(slideIndex + 1),
+    previous: () => goTo(slideIndex - 1),
     goTo,
     seek,
     triggerClick,

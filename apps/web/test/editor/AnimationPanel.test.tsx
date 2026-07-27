@@ -10,9 +10,15 @@ import { AnimationPanel } from "../../src/editor/AnimationPanel";
 
 const state = () => useEditorStore.getState();
 const iconId = ICONS[0]!.id;
+/**
+ * The slide these tests animate on. Not the opening slide: that one has nothing
+ * before it to move from, so `seed()` adds a second and the panel — which is
+ * always scoped to the slide being edited — shows that one.
+ */
+const SLIDE = 1;
 
 /**
- * An orb with an animation on step 0, plus a token that could collide with it.
+ * An orb with an animation on slide 1, plus a token that could collide with it.
  * The orb is left selected: the panel inspects the selection, so an animation
  * only shows when its object is picked.
  */
@@ -21,14 +27,14 @@ function seed() {
   state().updateObject(orb, { name: "Orb" });
   const tank = state().addIcon(iconId);
   state().updateObject(tank, { name: "Tank" });
-  state().addStep();
-  const animId = state().addAnimation(0, orb)!;
+  state().addSlide();
+  const animId = state().addAnimation(SLIDE, orb)!;
   state().select([orb]);
   return { orb, tank, animId };
 }
 
 const anim = (animId: string) =>
-  state().steps[0]!.animations.find((a) => a.id === animId)!;
+  state().slides[SLIDE]!.animations.find((a) => a.id === animId)!;
 
 beforeEach(() => {
   state().reset();
@@ -44,7 +50,7 @@ describe("AnimationPanel — collision colliders", () => {
 
   it("shows the picker once the trigger is onCollision", () => {
     const { animId } = seed();
-    state().updateAnimation(0, animId, { trigger: "onCollision" });
+    state().updateAnimation(SLIDE, animId, { trigger: "onCollision" });
     render(<AnimationPanel />);
     expect(screen.getByTestId("anim-colliders")).toBeInTheDocument();
     // Nothing armed yet, so it warns that it can never fire.
@@ -53,7 +59,7 @@ describe("AnimationPanel — collision colliders", () => {
 
   it("writes the chosen colliders to the animation", () => {
     const { tank, animId } = seed();
-    state().updateAnimation(0, animId, { trigger: "onCollision" });
+    state().updateAnimation(SLIDE, animId, { trigger: "onCollision" });
     render(<AnimationPanel />);
 
     fireEvent.click(screen.getByTestId(`anim-collider-${tank}`));
@@ -65,7 +71,7 @@ describe("AnimationPanel — collision colliders", () => {
 
   it("never offers the animated object as its own collider", () => {
     const { orb, tank, animId } = seed();
-    state().updateAnimation(0, animId, { trigger: "onCollision" });
+    state().updateAnimation(SLIDE, animId, { trigger: "onCollision" });
     render(<AnimationPanel />);
     expect(
       screen.queryByTestId(`anim-collider-${orb}`),
@@ -75,7 +81,7 @@ describe("AnimationPanel — collision colliders", () => {
 
   it("labels colliders by name, not by internal id", () => {
     const { tank, animId } = seed();
-    state().updateAnimation(0, animId, { trigger: "onCollision" });
+    state().updateAnimation(SLIDE, animId, { trigger: "onCollision" });
     render(<AnimationPanel />);
     expect(screen.getByTestId("anim-colliders")).toHaveTextContent("Tank");
     expect(screen.getByTestId("anim-colliders")).not.toHaveTextContent(tank);
@@ -83,8 +89,8 @@ describe("AnimationPanel — collision colliders", () => {
 });
 
 /**
- * The Timeline is the step's overview; this column inspects what you picked.
- * Showing every animation here as well made a busy step unreadable.
+ * The Timeline is the slide's overview; this column inspects what you picked.
+ * Showing every animation here as well made a busy slide unreadable.
  */
 describe("AnimationPanel — scoped to the selection", () => {
   it("shows the selected object's animations", () => {
@@ -105,7 +111,7 @@ describe("AnimationPanel — scoped to the selection", () => {
     expect(screen.getByTestId("anim-elsewhere")).toHaveTextContent("1 more");
   });
 
-  it("asks for a selection rather than showing the whole step", () => {
+  it("asks for a selection rather than showing the whole slide", () => {
     seed();
     state().clearSelection();
     render(<AnimationPanel />);
@@ -116,7 +122,7 @@ describe("AnimationPanel — scoped to the selection", () => {
 
   it("animates every selected object at once, and says how many", async () => {
     const { orb, tank } = seed();
-    state().deleteAnimation(0, state().steps[0]!.animations[0]!.id);
+    state().deleteAnimation(SLIDE, state().slides[SLIDE]!.animations[0]!.id);
     state().select([orb, tank]);
     render(<AnimationPanel />);
 
@@ -126,7 +132,7 @@ describe("AnimationPanel — scoped to the selection", () => {
 
     // Two animations, but one row: they're the same thing, so they're edited
     // as one thing.
-    expect(state().steps[0]!.animations).toHaveLength(2);
+    expect(state().slides[SLIDE]!.animations).toHaveLength(2);
     const rows = screen.getAllByTestId("anim-row");
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveAttribute("data-objects", "2");
@@ -135,8 +141,8 @@ describe("AnimationPanel — scoped to the selection", () => {
 
   it("shows both objects' animations for a multi-object selection", () => {
     const { orb, tank, animId } = seed();
-    const other = state().addAnimation(0, tank)!;
-    state().updateAnimation(0, other, { effect: "fade" });
+    const other = state().addAnimation(SLIDE, tank)!;
+    state().updateAnimation(SLIDE, other, { effect: "fade" });
     state().select([orb, tank]);
     render(<AnimationPanel />);
 
@@ -158,9 +164,9 @@ describe("AnimationPanel — one row, many objects", () => {
     state().updateObject(orb, { name: "Orb" });
     const tank = state().addIcon(iconId);
     state().updateObject(tank, { name: "Tank" });
-    state().addStep();
+    state().addSlide();
     state().select([orb, tank]);
-    state().animateSelection(0);
+    state().animateSelection(SLIDE);
     return { orb, tank };
   };
 
@@ -172,7 +178,7 @@ describe("AnimationPanel — one row, many objects", () => {
       target: { value: "scale" },
     });
 
-    expect(state().steps[0]!.animations.map((a) => a.effect)).toEqual([
+    expect(state().slides[SLIDE]!.animations.map((a) => a.effect)).toEqual([
       "scale",
       "scale",
     ]);
@@ -188,12 +194,12 @@ describe("AnimationPanel — one row, many objects", () => {
     fireEvent.change(screen.getByTestId("anim-duration"), {
       target: { value: "900" },
     });
-    expect(state().steps[0]!.animations.map((a) => a.durationMs)).toEqual([
+    expect(state().slides[SLIDE]!.animations.map((a) => a.durationMs)).toEqual([
       900, 900,
     ]);
 
     temporalStore.getState().undo();
-    expect(state().steps[0]!.animations.map((a) => a.durationMs)).toEqual([
+    expect(state().slides[SLIDE]!.animations.map((a) => a.durationMs)).toEqual([
       500, 500,
     ]);
   });
@@ -204,8 +210,10 @@ describe("AnimationPanel — one row, many objects", () => {
     // Single out one object and change only its animation — the way you'd give
     // one member of a group its own delay.
     state().select([orb]);
-    const mine = state().steps[0]!.animations.find((a) => a.objectId === orb)!;
-    state().updateAnimation(0, mine.id, { delayMs: 250 });
+    const mine = state().slides[SLIDE]!.animations.find(
+      (a) => a.objectId === orb,
+    )!;
+    state().updateAnimation(SLIDE, mine.id, { delayMs: 250 });
 
     state().select(state().objectIds);
     render(<AnimationPanel />);
@@ -221,14 +229,14 @@ describe("AnimationPanel — one row, many objects", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Delete animation" }));
 
-    expect(state().steps[0]!.animations).toHaveLength(0);
+    expect(state().slides[SLIDE]!.animations).toHaveLength(0);
   });
 
   it("keeps two animations of one object apart, however alike", () => {
     const orb = state().addPrimitive("shape", "pickup");
-    state().addStep();
-    state().addAnimation(0, orb);
-    state().addAnimation(0, orb);
+    state().addSlide();
+    state().addAnimation(SLIDE, orb);
+    state().addAnimation(SLIDE, orb);
     state().select([orb]);
     render(<AnimationPanel />);
 
@@ -247,28 +255,31 @@ describe("AnimationPanel — one row, many objects", () => {
 describe("AnimationPanel — effects belong to a family", () => {
   const oneAnim = () => {
     const orb = state().addPrimitive("shape", "pickup");
-    state().addStep();
-    const animId = state().addAnimation(0, orb)!;
+    state().addSlide();
+    const animId = state().addAnimation(SLIDE, orb)!;
     state().select([orb]);
     return animId;
   };
 
   it("calls a fade what it does: out for an exit, in for an entrance", () => {
     const animId = oneAnim();
-    state().updateAnimation(0, animId, { kind: "exit" });
+    state().updateAnimation(SLIDE, animId, { kind: "exit" });
     const { rerender } = render(<AnimationPanel />);
     expect(
       screen.getByRole("option", { name: "fade out" }),
     ).toBeInTheDocument();
 
-    state().updateAnimation(0, animId, { kind: "entrance" });
+    state().updateAnimation(SLIDE, animId, { kind: "entrance" });
     rerender(<AnimationPanel />);
     expect(screen.getByRole("option", { name: "fade in" })).toBeInTheDocument();
   });
 
   it("only offers a family's own effects", () => {
     const animId = oneAnim();
-    state().updateAnimation(0, animId, { kind: "emphasis", effect: "pulse" });
+    state().updateAnimation(SLIDE, animId, {
+      kind: "emphasis",
+      effect: "pulse",
+    });
     render(<AnimationPanel />);
 
     const names = screen
@@ -287,14 +298,16 @@ describe("AnimationPanel — effects belong to a family", () => {
     });
 
     // "exit · move" would be a thing the engine has no meaning for.
-    const anim = state().steps[0]!.animations.find((a) => a.id === animId)!;
+    const anim = state().slides[SLIDE]!.animations.find(
+      (a) => a.id === animId,
+    )!;
     expect(anim).toMatchObject({ kind: "exit", effect: "fade" });
   });
 
   it("keeps an effect the family doesn't list rather than rewriting it", () => {
     const animId = oneAnim();
     // A combination from before the families existed.
-    state().updateAnimation(0, animId, { kind: "exit", effect: "fly" });
+    state().updateAnimation(SLIDE, animId, { kind: "exit", effect: "fly" });
     render(<AnimationPanel />);
 
     expect(screen.getByTestId("anim-effect")).toHaveValue("fly");
@@ -302,7 +315,10 @@ describe("AnimationPanel — effects belong to a family", () => {
 
   it("hides duration and easing for an effect that ignores them", () => {
     const animId = oneAnim();
-    state().updateAnimation(0, animId, { kind: "exit", effect: "disappear" });
+    state().updateAnimation(SLIDE, animId, {
+      kind: "exit",
+      effect: "disappear",
+    });
     render(<AnimationPanel />);
 
     // A control that does nothing is worse than no control.
@@ -315,7 +331,7 @@ describe("AnimationPanel — effects belong to a family", () => {
 
   it("offers them again for a timed effect", () => {
     const animId = oneAnim();
-    state().updateAnimation(0, animId, { kind: "exit", effect: "fade" });
+    state().updateAnimation(SLIDE, animId, { kind: "exit", effect: "fade" });
     render(<AnimationPanel />);
 
     expect(screen.getByTestId("anim-duration")).toBeInTheDocument();

@@ -1,74 +1,73 @@
 import { expect, test } from "@playwright/test";
 
-test.describe("steps", () => {
-  test("adds, duplicates, reorders and deletes steps", async ({ page }) => {
+test.describe("slides", () => {
+  test("adds, duplicates, reorders and deletes slides", async ({ page }) => {
     await page.goto("/plan/local/edit");
-    const editing = page.getByTestId("editing-step");
+    const editing = page.getByTestId("editing-slide");
 
-    // A fresh plan starts on the base layout.
-    await expect(editing).toContainText("Base");
+    // A fresh plan opens on its first slide — there is no Base layout.
+    await expect(editing).toContainText("Slide 1");
 
-    await page.getByTestId("add-step").click();
-    await expect(editing).toContainText("Step 1");
-    await page.getByTestId("add-step").click();
-    await expect(editing).toContainText("Step 2");
+    await page.getByTestId("add-slide").click();
+    await expect(editing).toContainText("Slide 2");
+    await page.getByTestId("add-slide").click();
+    await expect(editing).toContainText("Slide 3");
 
-    // Exact names: "Duplicate Step 1" would otherwise also match
-    // "Duplicate Step 1 copy" once the copy exists.
+    // Exact names: "Duplicate Slide 1" would otherwise also match
+    // "Duplicate Slide 1 copy" once the copy exists.
     await page
-      .getByRole("button", { name: "Duplicate Step 1", exact: true })
+      .getByRole("button", { name: "Duplicate Slide 1", exact: true })
       .click();
-    await expect(editing).toContainText("Step 1 copy");
-    await expect(page.getByTestId("step-2")).toBeVisible();
+    await expect(editing).toContainText("Slide 1 copy");
+    await expect(page.getByTestId("slide-3")).toBeVisible();
 
-    // Reordering moves a step along the strip.
+    // Reordering moves a slide along the strip.
     await page
-      .getByRole("button", { name: "Move Step 1 later", exact: true })
+      .getByRole("button", { name: "Move Slide 1 later", exact: true })
       .click();
-    await expect(page.getByTestId("step-1")).toContainText("Step 1");
-
-    // Back to base and around again.
-    await page.getByTestId("step-base").click();
-    await expect(editing).toContainText("Base");
+    await expect(page.getByTestId("slide-1")).toContainText("Slide 1");
 
     await page
-      .getByRole("button", { name: "Delete Step 1", exact: true })
+      .getByRole("button", { name: "Delete Slide 1", exact: true })
       .click();
-    await expect(page.getByTestId("step-2")).toHaveCount(0);
+    await expect(page.getByTestId("slide-3")).toHaveCount(0);
   });
 
-  test("editing on a step overrides it without moving the base layout", async ({
+  test("editing one slide leaves the others exactly where they were", async ({
     page,
   }) => {
     await page.goto("/plan/local/edit");
 
-    // Place a token on the base layout.
+    // Place a token on the opening slide.
     await page.getByRole("button", { name: "Add Marker 1" }).click();
     await page.getByTestId("prop-x").fill("100");
     await page.getByTestId("prop-y").fill("100");
 
-    // On a new step, move it: the step shows the new spot…
-    await page.getByTestId("add-step").click();
+    // Two more slides, both inheriting that layout as they're created.
+    await page.getByTestId("add-slide").click();
+    await page.getByTestId("add-slide").click();
+
+    // Move it on slide 2 only.
+    await page.getByTestId("slide-1").click();
     await page.getByTestId("prop-x").fill("600");
     await expect(page.getByTestId("prop-x")).toHaveValue("600");
 
-    // …but the base layout still has it where it started.
-    await page.getByTestId("step-base").click();
+    // Slide 1 and slide 3 are untouched — the edit did not cascade forward,
+    // which is the whole reason slides replaced base + steps.
+    await page.getByTestId("slide-0").click();
+    await expect(page.getByTestId("prop-x")).toHaveValue("100");
+    await page.getByTestId("slide-2").click();
     await expect(page.getByTestId("prop-x")).toHaveValue("100");
 
-    // And stepping forward shows the override again.
-    await page.getByTestId("step-0").click();
+    await page.getByTestId("slide-1").click();
     await expect(page.getByTestId("prop-x")).toHaveValue("600");
   });
 
-  test("animations are authored per step", async ({ page }) => {
+  test("animations are authored per slide", async ({ page }) => {
     await page.goto("/plan/local/edit");
     await page.getByRole("button", { name: "Add Marker 1" }).click();
 
-    // The base layout has no animations.
-    await expect(page.getByTestId("anim-base-hint")).toBeVisible();
-
-    await page.getByTestId("add-step").click();
+    await page.getByTestId("add-slide").click();
     await expect(page.getByTestId("anim-empty")).toBeVisible();
 
     await page.getByTestId("add-animation").click();
@@ -82,8 +81,8 @@ test.describe("steps", () => {
     await expect(page.getByTestId("anim-effect")).toHaveValue("fade");
     await expect(page.getByTestId("anim-duration")).toHaveValue("800");
 
-    // The step chip shows its animation count.
-    await expect(page.getByTestId("step-0")).toContainText("(1)");
+    // The slide chip shows its animation count.
+    await expect(page.getByTestId("slide-1")).toContainText("(1)");
 
     await page.getByRole("button", { name: "Delete animation" }).click();
     await expect(page.getByTestId("anim-row")).toHaveCount(0);
@@ -93,7 +92,7 @@ test.describe("steps", () => {
     await page.goto("/plan/local/edit");
     await page.getByRole("button", { name: "Add Marker 1" }).click();
     await page.getByRole("button", { name: "Add Marker 2" }).click();
-    await page.getByTestId("add-step").click();
+    await page.getByTestId("add-slide").click();
 
     await page.keyboard.press("Control+a");
     await expect(page.getByTestId("add-animation")).toHaveText(
@@ -101,7 +100,7 @@ test.describe("steps", () => {
     );
     await page.getByTestId("add-animation").click();
     // Two animations, one row: they're identical, so they're edited as one.
-    await expect(page.getByTestId("step-0")).toContainText("(2)");
+    await expect(page.getByTestId("slide-1")).toContainText("(2)");
     await expect(page.getByTestId("anim-row")).toHaveCount(1);
     await expect(page.getByTestId("anim-row")).toHaveAttribute(
       "data-objects",
@@ -122,7 +121,7 @@ test.describe("steps", () => {
       "data-objects",
       "2",
     );
-    await expect(page.getByTestId("step-0")).toContainText("(2)");
+    await expect(page.getByTestId("slide-1")).toContainText("(2)");
   });
 
   test("the panel inspects the selection; the timeline is the overview", async ({
@@ -130,7 +129,7 @@ test.describe("steps", () => {
   }) => {
     await page.goto("/plan/local/edit");
     await page.getByRole("button", { name: "Add Marker 1" }).click();
-    await page.getByTestId("add-step").click();
+    await page.getByTestId("add-slide").click();
     await page.getByTestId("add-animation").click();
     await expect(page.getByTestId("anim-row")).toHaveCount(1);
 
@@ -151,7 +150,7 @@ test.describe("steps", () => {
   test("deleting an object removes its animations", async ({ page }) => {
     await page.goto("/plan/local/edit");
     await page.getByRole("button", { name: "Add Marker 1" }).click();
-    await page.getByTestId("add-step").click();
+    await page.getByTestId("add-slide").click();
     await page.getByTestId("add-animation").click();
     await expect(page.getByTestId("anim-row")).toHaveCount(1);
 

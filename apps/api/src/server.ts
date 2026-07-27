@@ -22,7 +22,7 @@ if (config.DATABASE_PATH !== ":memory:") {
   mkdirSync(dirname(config.DATABASE_PATH), { recursive: true });
 }
 const { db } = openDb(config.DATABASE_PATH);
-// Migrate on boot so a deploy is "build & restart" with no step to forget.
+// Migrate on boot so a deploy is "build & restart" with no slide to forget.
 runMigrations(db);
 // Insert-if-absent, so the new-plan flow always has starter encounters without
 // clobbering anything the admin has authored (plan §17).

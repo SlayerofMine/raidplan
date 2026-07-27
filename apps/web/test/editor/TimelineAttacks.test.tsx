@@ -43,10 +43,9 @@ beforeEach(() => {
 });
 
 describe("attack bars", () => {
-  it("shows a bar for a placed attack, even with no animations on the step", async () => {
-    state().addStep();
+  it("shows a bar for a placed attack, even with no animations on the slide", async () => {
     state().addAttack("atk1", { x: 0, y: 0 });
-    render(<TimelineChart stepIndex={0} />);
+    render(<TimelineChart slideIndex={0} />);
 
     // An attack alone is enough content — the "no animations" state must go.
     expect(screen.queryByTestId("timeline-empty-0")).not.toBeInTheDocument();
@@ -60,9 +59,8 @@ describe("attack bars", () => {
 
   it("nudges when it fires with the arrow keys", async () => {
     const user = userEvent.setup();
-    state().addStep();
     const id = state().addAttack("atk1", { x: 0, y: 0 })!;
-    render(<TimelineChart stepIndex={0} />);
+    render(<TimelineChart slideIndex={0} />);
 
     const bar = screen.getByTestId(`timeline-attack-${id}`);
     bar.focus();
@@ -73,9 +71,8 @@ describe("attack bars", () => {
 
   it("stretches the whole attack from the bar's right edge", async () => {
     const user = userEvent.setup();
-    state().addStep();
     const id = state().addAttack("atk1", { x: 0, y: 0 })!;
-    render(<TimelineChart stepIndex={0} />);
+    render(<TimelineChart slideIndex={0} />);
 
     const handle = screen.getByTestId(`timeline-attack-handle-${id}`);
     handle.focus();
@@ -88,9 +85,8 @@ describe("attack bars", () => {
 
   it("says how much slower it now runs", async () => {
     const user = userEvent.setup();
-    state().addStep();
     const id = state().addAttack("atk1", { x: 0, y: 0 })!;
-    render(<TimelineChart stepIndex={0} />);
+    render(<TimelineChart slideIndex={0} />);
 
     state().updateAttack(id, { durationMs: 1600 });
     await user.click(screen.getByTestId(`timeline-attack-row-${id}`));
@@ -103,9 +99,8 @@ describe("attack bars", () => {
 
   it("selects the attack when its bar is clicked", async () => {
     const user = userEvent.setup();
-    state().addStep();
     const id = state().addAttack("atk1", { x: 0, y: 0 })!;
-    render(<TimelineChart stepIndex={0} />);
+    render(<TimelineChart slideIndex={0} />);
 
     await user.click(screen.getByTestId(`timeline-attack-row-${id}`));
     expect(state().selectedAttackIds).toEqual([id]);

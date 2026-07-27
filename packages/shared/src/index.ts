@@ -6,7 +6,10 @@ export * from "./follow.js";
 export * from "./effects.js";
 export * from "./plan.js";
 export * from "./resolve.js";
-// When each animation of a step runs (plan §7). Document-level, so the player,
+// The route a `move` follows (plan §7). Pure geometry, so the editor overlay,
+// the player, the frame exporter and the server-side SVG all draw one curve.
+export * from "./motionPath.js";
+// When each animation of a slide runs (plan §7). Document-level, so the player,
 // the Gantt and `expandPlan` can never disagree about where a bar sits.
 export * from "./timeline.js";
 // The mechanic-shape visual language (soaks/voidzones/frontals/tethers), shared

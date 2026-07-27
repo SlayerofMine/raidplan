@@ -93,7 +93,7 @@ export const planRouter = router({
           ...base,
           background: encounter.preset.background,
           objects: encounter.preset.objects,
-          steps: encounter.preset.steps,
+          slides: encounter.preset.slides,
           raid: encounter.raid,
           // Remembered so the editor can offer this encounter's attacks (§17).
           encounterId: encounter.id,

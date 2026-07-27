@@ -28,9 +28,9 @@ export const AnimEffectSchema = z.enum(ANIM_EFFECTS);
 export type AnimEffect = z.infer<typeof AnimEffectSchema>;
 
 /**
- * When an animation starts, relative to the step timeline (plan §7).
+ * When an animation starts, relative to the slide timeline (plan §7).
  *
- * The first three chain off the step's start and are compiled into its
+ * The first three chain off the slide's start and are compiled into its
  * timeline. `onClick` and `onCollision` are **deferred**: they sit outside that
  * timeline and are fired on demand during playback (see `anim/stepTimeline.ts`
  * `isDeferredTrigger`) — a click on the object, or it overlapping one of the

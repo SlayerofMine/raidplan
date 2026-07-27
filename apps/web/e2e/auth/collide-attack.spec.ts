@@ -79,7 +79,7 @@ test("an attack's onCollision fires against an object the plan nominated", async
 
   // --- play: the cone shows, meets the soak, and goes ---
   await page.getByTestId("open-viewer").click();
-  await expect(page.getByTestId("viewer-step")).toContainText("1 / 1");
+  await expect(page.getByTestId("viewer-slide")).toContainText("1 / 1");
 
   const board = page.getByTestId("viewer-canvas");
   await expect(board).toBeVisible();
@@ -101,7 +101,7 @@ test("an attack's onCollision fires against an object the plan nominated", async
     })
     .toBe(true);
 
-  // Watching it again looks the same: play on a finished step starts it over,
+  // Watching it again looks the same: play on a finished slide starts it over,
   // so the pickup is re-armed without touching rewind. (The cone vanishes
   // before the slide is over, so wait for the transport itself to finish —
   // clicking mid-run would pause, not replay.)

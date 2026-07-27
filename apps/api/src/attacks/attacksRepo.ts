@@ -46,7 +46,7 @@ export function getAttackDefsByIds(
 }
 
 /**
- * The definitions a plan needs to be expanded — exactly the attacks its steps
+ * The definitions a plan needs to be expanded — exactly the attacks its slides
  * reference (auto-follow: whatever version is current). Empty for a plan with no
  * attacks, so expanding it is a no-op.
  */

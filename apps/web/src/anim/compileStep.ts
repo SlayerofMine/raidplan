@@ -1,15 +1,17 @@
 import gsap from "gsap";
 import {
+  buildMotionPath,
   isDeferredTrigger,
+  samplePath,
   layoutStepTimeline,
   type Anim,
   type ObjectState,
   type ResolvedStates,
-  type Step,
+  type Slide,
 } from "@raidplan/shared";
 
 /**
- * Compile a step into a GSAP timeline (plan §3.5 / §7 "Playback engine").
+ * Compile a slide into a GSAP timeline (plan §3.5 / §7 "Playback engine").
  *
  * **Deliberately renderer-agnostic.** Konva exposes `x()`/`opacity()` as
  * methods, which GSAP can't tween directly, so animations tween a plain proxy
@@ -28,10 +30,10 @@ import {
  * Each animation's `delayMs` is added on top of its trigger position.
  */
 export interface CompileStepParams {
-  step: Step;
-  /** Object states when the step is entered (settled state of the step before). */
+  slide: Slide;
+  /** Object states when the slide is entered (settled state of the slide before). */
   start: ResolvedStates;
-  /** Object states when the step has finished (this step's settled state). */
+  /** Object states when the slide has finished (this slide's settled state). */
   end: ResolvedStates;
   /**
    * Push tweened values at a target. Called on every tick, with **only the
@@ -52,14 +54,14 @@ export interface CompiledStep {
    * fade-in begins at opacity 0, a fly-in begins at its origin. Snapping to
    * this (rather than to the plain resolved start) is what stops an entering
    * object from flashing at full opacity for one frame before the first tick,
-   * and it keeps jumping to a step consistent regardless of where you jump
+   * and it keeps jumping to a slide consistent regardless of where you jump
    * from (plan §7).
    */
   initial: ResolvedStates;
 }
 
 /**
- * Animations fired on demand (click / collision) rather than by the step
+ * Animations fired on demand (click / collision) rather than by the slide
  * timeline. They're excluded here and played individually — see `oneShot.ts`.
  */
 export function isDeferred(anim: Anim): boolean {
@@ -71,7 +73,7 @@ const MS = 1000;
 const PULSE_SCALE = 1.15;
 
 export function compileStep({
-  step,
+  slide,
   start,
   end,
   apply,
@@ -81,7 +83,7 @@ export function compileStep({
   if (onUpdate) timeline.eventCallback("onUpdate", onUpdate);
 
   // Stale animations (object deleted) must never break playback.
-  const animations = step.animations.filter(
+  const animations = slide.animations.filter(
     (a) => !isDeferred(a) && start[a.objectId] && end[a.objectId],
   );
 
@@ -185,7 +187,7 @@ const STATE_KEYS = [
  *
  * Every push carries **only the properties this animation drives**. Objects
  * share one proxy, and a triggered animation — a collision's disappear, say —
- * can be running on the same object as a step's move; if each pushed the whole
+ * can be running on the same object as a slide's move; if each pushed the whole
  * state, whichever ticked last that frame would silently undo the other. That
  * is not hypothetical: it made every `onCollision` on a moving object look dead,
  * because the move re-asserted `visible: true` a frame after the disappear.
@@ -248,12 +250,58 @@ function addTween({
       tweenTo({ x: end.x, y: end.y, opacity: end.opacity });
       return;
 
-    case "move":
-      tweenTo({
+    case "move": {
+      const destination = {
         x: anim.params?.toX ?? end.x,
         y: anim.params?.toY ?? end.y,
-      });
+      };
+      const waypoints = anim.params?.path ?? [];
+      // No waypoints is the overwhelmingly common case and stays a plain
+      // two-property tween — GSAP interpolates `x` and `y` directly, exactly as
+      // it did before routes existed.
+      if (waypoints.length === 0) {
+        tweenTo(destination);
+        return;
+      }
+
+      // A route's waypoints are *centres* (see `AnimParams.path`) and only the
+      // interior ones are stored, so the ends come from the states the slides
+      // already agree on. Half-size is taken once, from where the move starts:
+      // an object that is also being scaled has no single centre offset, and
+      // recomputing it per tick would make the drawn route and the travelled
+      // one disagree.
+      const half = { x: initial.w / 2, y: initial.h / 2 };
+      const path = buildMotionPath(
+        [
+          { x: initial.x + half.x, y: initial.y + half.y },
+          ...waypoints,
+          { x: destination.x + half.x, y: destination.y + half.y },
+        ],
+        anim.params?.curve ?? 0,
+      );
+
+      // GSAP tweens *progress along the route*, not x and y, so the easing
+      // applies to distance covered and the object holds the line between
+      // waypoints instead of cutting corners. `walker` is per-tween rather than
+      // the shared proxy: it is this animation's own clock.
+      const walker = { t: 0 };
+      timeline.to(
+        walker,
+        {
+          t: 1,
+          duration,
+          ease: anim.easing,
+          onUpdate: () => {
+            const point = samplePath(path, walker.t);
+            proxy.x = point.x - half.x;
+            proxy.y = point.y - half.y;
+            push(["x", "y"]);
+          },
+        },
+        at,
+      );
       return;
+    }
 
     case "scale":
       tweenTo({ w: end.w, h: end.h });

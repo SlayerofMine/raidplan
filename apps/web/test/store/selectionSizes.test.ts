@@ -52,29 +52,29 @@ describe("selectSelectionSizes", () => {
     expect(sizes()).toBe(before);
   });
 
-  it("sees a resize that lands in a step's overrides, not the base", () => {
+  it("sees a resize that lands in a slide's overrides, not the base", () => {
     const id = state().addPrimitive("shape", "rect");
-    const stepId = state().addStep();
-    state().selectStep(state().steps.findIndex((s) => s.id === stepId));
+    const slideId = state().addSlide();
+    state().selectSlide(state().slides.findIndex((s) => s.id === slideId));
     state().select([id]);
 
     const before = sizes();
-    // The editor edits the end state (plan §5), so this is written to the step —
+    // The editor edits the end state (plan §5), so this is written to the slide —
     // the drawn size still changes, and the handles still have to follow.
     state().updateObject(id, { w: 250, h: 90 });
     expect(sizes()).not.toBe(before);
   });
 
-  it("changes when stepping to a step that resizes the selection", () => {
+  it("changes when stepping to a slide that resizes the selection", () => {
     const id = state().addPrimitive("shape", "rect");
-    const stepId = state().addStep();
-    const stepIndex = state().steps.findIndex((s) => s.id === stepId);
-    state().selectStep(stepIndex);
+    const slideId = state().addSlide();
+    const slideIndex = state().slides.findIndex((s) => s.id === slideId);
+    state().selectSlide(slideIndex);
     state().updateObject(id, { w: 250, h: 90 });
     state().select([id]);
 
     const inStep = sizes();
-    state().selectStep(-1);
+    state().selectSlide(-1);
     // Nothing was edited, but the object is drawn at a different size — so the
     // handles have to move even though no object changed.
     expect(sizes()).not.toBe(inStep);

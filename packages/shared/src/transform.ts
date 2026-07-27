@@ -22,7 +22,7 @@ export const TransformSchema = z.object({
    * A fraction rather than a pixel offset because it has to survive resizing:
    * drag a Transformer handle, or map a definition out of unit space onto a
    * placed rectangle, and a fraction comes through unchanged while an offset
-   * would need rescaling at every step that touches the box.
+   * would need rescaling at every slide that touches the box.
    *
    * Deliberately **not** clamped to 0..1. A cone's apex is often off the drawn
    * shape and a beam starts behind itself, so an origin outside the box is a

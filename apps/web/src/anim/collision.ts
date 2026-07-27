@@ -25,7 +25,7 @@ export interface CollisionRule {
 export type RectLookup = (objectId: string) => Rect | null;
 
 /**
- * The armed rules in a step. Only `onCollision` animations that actually name a
+ * The armed rules in a slide. Only `onCollision` animations that actually name a
  * collider qualify — one with an empty `collideWith` can never fire, so it's
  * dropped here rather than checked 60 times a second.
  */

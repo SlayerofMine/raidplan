@@ -5,7 +5,7 @@ import {
   type ObjectState,
   type PlanObject,
   type ResolvedStates,
-  type Step,
+  type Slide,
 } from "@raidplan/shared";
 import {
   applyObjectState,
@@ -27,7 +27,7 @@ import { evenSize, type Frame } from "./videoExport";
  * Renders individual frames of a plan off the *live* editor stage, for
  * {@link ./videoExport.ts}.
  *
- * Each frame seeks a step's compiled GSAP timeline to an exact time and pushes
+ * Each frame seeks a slide's compiled GSAP timeline to an exact time and pushes
  * the result onto the Konva nodes — the same `compileStep` the viewer plays, so
  * an exported clip and playback can't diverge. Capture reuses the trick from
  * `pngExport.ts`: ask Konva for the plan's own rectangle and cancel the on-screen
@@ -35,7 +35,7 @@ import { evenSize, type Frame } from "./videoExport";
  * camera is doing.
  *
  * **Collisions are simulated too.** `onCollision` animations sit outside the
- * step timeline, so each frame re-tests the armed rules against the boxes the
+ * slide timeline, so each frame re-tests the armed rules against the boxes the
  * frame just produced and starts a one-shot the first time one connects — the
  * same detection and the same `compileOneShot` playback uses. Without this a
  * picked-up orb would never disappear in the exported video.
@@ -49,7 +49,7 @@ export interface FrameRenderer {
   size: { width: number; height: number };
   renderFrame: (frame: Frame) => HTMLCanvasElement | null;
   /** Put the board back the way we found it, and drop the timelines. */
-  restore: (stepIndex: number) => void;
+  restore: (slideIndex: number) => void;
 }
 
 /** A collision animation that has fired, and when, so it can be seeked. */
@@ -60,20 +60,20 @@ interface FiredShot {
 
 export function createFrameRenderer(params: {
   stage: Stage;
-  steps: readonly Step[];
+  slides: readonly Slide[];
   objects: Record<string, PlanObject>;
   objectIds: readonly string[];
   background: Background;
   view: View;
 }): FrameRenderer {
-  const { stage, steps, objects, objectIds, background, view } = params;
+  const { stage, slides, objects, objectIds, background, view } = params;
   const size = evenSize(background.width, background.height);
 
   const resolveAll = (index: number): ResolvedStates => {
     const states: ResolvedStates = {};
     for (const id of objectIds) {
       const object = objects[id];
-      if (object) states[id] = resolveObjectState(object, steps, index);
+      if (object) states[id] = resolveObjectState(object, slides, index);
     }
     return states;
   };
@@ -89,43 +89,47 @@ export function createFrameRenderer(params: {
   const rectOf: RectLookup = (objectId) => objectRect(stage, objectId);
 
   const compiled = new Map<number, CompiledStep>();
-  const timelineFor = (stepIndex: number): CompiledStep | null => {
-    const cached = compiled.get(stepIndex);
+  const timelineFor = (slideIndex: number): CompiledStep | null => {
+    const cached = compiled.get(slideIndex);
     if (cached) return cached;
-    const step = steps[stepIndex];
-    if (!step) return null;
+    const slide = slides[slideIndex];
+    if (!slide) return null;
     const built = compileStep({
-      step,
-      start: resolveAll(stepIndex - 1),
-      end: resolveAll(stepIndex),
+      slide,
+      start: resolveAll(slideIndex - 1),
+      end: resolveAll(slideIndex),
       apply,
     });
-    compiled.set(stepIndex, built);
+    compiled.set(slideIndex, built);
     return built;
   };
 
-  // Entering a step snaps to its start state, exactly as playback does — so a
-  // frame never inherits stale attributes from the previous step.
+  // Entering a slide snaps to its start state, exactly as playback does — so a
+  // frame never inherits stale attributes from the previous slide.
   let currentStep: number | null = null;
   let rules: CollisionRule[] = [];
   let fired = new Set<string>();
   let shots: FiredShot[] = [];
 
   /** Start any collision that has just connected, once each (a pickup is consumed). */
-  const fireNewCollisions = (step: Step, stepIndex: number, timeMs: number) => {
+  const fireNewCollisions = (
+    slide: Slide,
+    slideIndex: number,
+    timeMs: number,
+  ) => {
     for (const rule of rules) {
       if (fired.has(rule.animId)) continue;
       if (!isColliding(rule, rectOf)) continue;
 
-      const anim = step.animations.find((a) => a.id === rule.animId);
-      const end = resolveAll(stepIndex);
+      const anim = slide.animations.find((a) => a.id === rule.animId);
+      const end = resolveAll(slideIndex);
       const target = anim && end[anim.objectId];
       if (!anim || !target) continue;
 
       fired.add(rule.animId);
       const built = compileOneShot({
         anim,
-        step,
+        slide,
         start: {
           [anim.objectId]: readObjectState(stage, anim.objectId, target),
         },
@@ -144,16 +148,16 @@ export function createFrameRenderer(params: {
 
   return {
     size,
-    renderFrame: ({ stepIndex, timeMs }) => {
-      const built = timelineFor(stepIndex);
-      const step = steps[stepIndex];
-      if (!built || !step) return null;
+    renderFrame: ({ slideIndex, timeMs }) => {
+      const built = timelineFor(slideIndex);
+      const slide = slides[slideIndex];
+      if (!built || !slide) return null;
 
-      if (currentStep !== stepIndex) {
-        currentStep = stepIndex;
+      if (currentStep !== slideIndex) {
+        currentStep = slideIndex;
         killShots();
         fired = new Set();
-        rules = collisionRules(step.animations);
+        rules = collisionRules(slide.animations);
         applyStates(built.initial);
       }
 
@@ -161,8 +165,8 @@ export function createFrameRenderer(params: {
       built.timeline.seek(timeMs / 1000, false);
 
       // Test collisions against the positions this frame just produced...
-      fireNewCollisions(step, stepIndex, timeMs);
-      // ...then let anything already firing advance. Applied after the step
+      fireNewCollisions(slide, slideIndex, timeMs);
+      // ...then let anything already firing advance. Applied after the slide
       // timeline so a triggered effect wins over the motion underneath it.
       for (const shot of shots) {
         shot.timeline.seek(
@@ -181,14 +185,14 @@ export function createFrameRenderer(params: {
         pixelRatio: 1 / view.scale,
       });
     },
-    restore: (stepIndex) => {
+    restore: (slideIndex) => {
       killShots();
       for (const built of compiled.values()) built.timeline.kill();
       compiled.clear();
       currentStep = null;
       fired = new Set();
       rules = [];
-      applyStates(resolveAll(stepIndex));
+      applyStates(resolveAll(slideIndex));
       stage.batchDraw();
     },
   };

@@ -61,7 +61,7 @@ const planWith = (attackId: string): Plan => ({
     {
       id: "i1",
       attackId,
-      stepId: "s0",
+      slideId: "s0",
       x: 400,
       y: 400,
       w: 200,
@@ -72,7 +72,7 @@ const planWith = (attackId: string): Plan => ({
       args: {},
     },
   ],
-  steps: [{ id: "s0", overrides: {}, animations: [] }],
+  slides: [{ id: "s0", states: {}, animations: [] }],
   schemaVersion: SCHEMA_VERSION,
 });
 

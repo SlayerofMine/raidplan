@@ -7,7 +7,7 @@ import {
   type Plan,
 } from "../src/plan.js";
 
-/** A minimal, valid plan fixture with one object and one step. */
+/** A minimal, valid plan fixture with one object and one slide. */
 function validPlan(): Plan {
   return {
     id: "plan_1",
@@ -32,11 +32,21 @@ function validPlan(): Plan {
       },
     ],
     attacks: [],
-    steps: [
+    slides: [
       {
-        id: "step_1",
+        id: "slide_1",
         name: "Pull",
-        overrides: { obj_1: { x: 300 } },
+        states: {
+          obj_1: {
+            x: 300,
+            y: 200,
+            w: 48,
+            h: 48,
+            rotation: 0,
+            opacity: 1,
+            visible: true,
+          },
+        },
         animations: [
           {
             id: "anim_1",
@@ -69,17 +79,33 @@ describe("PlanSchema — valid documents parse", () => {
     expect(PlanSchema.safeParse(empty).success).toBe(true);
     expect(empty.schemaVersion).toBe(SCHEMA_VERSION);
     expect(empty.objects).toEqual([]);
-    expect(empty.steps).toEqual([]);
+    // Never empty: a plan is its slides, and one with none has no layout.
+    expect(empty.slides).toHaveLength(1);
+    expect(empty.slides[0]!.states).toEqual({});
+  });
+
+  it("rejects a plan with no slides at all", () => {
+    const plan = validPlan();
+    plan.slides = [];
+    expect(PlanSchema.safeParse(plan).success).toBe(false);
+  });
+
+  it("rejects a slide state missing a field — slides are dense", () => {
+    const plan = validPlan() as unknown as {
+      slides: { states: Record<string, unknown> }[];
+    };
+    plan.slides[0]!.states["obj_1"] = { x: 300 };
+    expect(PlanSchema.safeParse(plan).success).toBe(false);
   });
 
   it("preserves optional fields through a parse round-trip", () => {
     const plan = validPlan();
     plan.objects[0]!.base.tint = "#c69b6d";
     plan.objects[0]!.base.label = "MT";
-    plan.steps[0]!.autoAdvanceMs = 2000;
+    plan.slides[0]!.autoAdvanceMs = 2000;
     const parsed = PlanSchema.parse(plan);
     expect(parsed.objects[0]!.base.tint).toBe("#c69b6d");
-    expect(parsed.steps[0]!.autoAdvanceMs).toBe(2000);
+    expect(parsed.slides[0]!.autoAdvanceMs).toBe(2000);
   });
 });
 
@@ -121,9 +147,9 @@ describe("PlanSchema — malformed documents are rejected", () => {
   it("rejects an unknown animation trigger", () => {
     const plan = validPlan() as unknown as {
       attacks: [];
-      steps: { animations: { trigger: string }[] }[];
+      slides: { animations: { trigger: string }[] }[];
     };
-    plan.steps[0]!.animations[0]!.trigger = "someday";
+    plan.slides[0]!.animations[0]!.trigger = "someday";
     expect(PlanSchema.safeParse(plan).success).toBe(false);
   });
 
@@ -202,7 +228,7 @@ describe("PlanObjectSchema — shape primitives", () => {
 describe("AnimSchema — collision triggers", () => {
   it("accepts an onCollision animation and round-trips its collider group", () => {
     const plan = validPlan();
-    plan.steps[0]!.animations.push({
+    plan.slides[0]!.animations.push({
       id: "anim_hit",
       objectId: "obj_1",
       kind: "exit",
@@ -214,19 +240,19 @@ describe("AnimSchema — collision triggers", () => {
       easing: "none",
     });
     const parsed = PlanSchema.parse(plan);
-    const hit = parsed.steps[0]!.animations.find((a) => a.id === "anim_hit")!;
+    const hit = parsed.slides[0]!.animations.find((a) => a.id === "anim_hit")!;
     expect(hit.trigger).toBe("onCollision");
     expect(hit.collideWith).toEqual(["obj_2", "obj_3"]);
   });
 
   it("leaves collideWith optional, so ordinary animations are unchanged", () => {
     const parsed = PlanSchema.parse(validPlan());
-    expect(parsed.steps[0]!.animations[0]!.collideWith).toBeUndefined();
+    expect(parsed.slides[0]!.animations[0]!.collideWith).toBeUndefined();
   });
 
   it("rejects an empty collider id", () => {
     const plan = validPlan();
-    plan.steps[0]!.animations[0]!.collideWith = [""];
+    plan.slides[0]!.animations[0]!.collideWith = [""];
     expect(PlanSchema.safeParse(plan).success).toBe(false);
   });
 });
@@ -272,8 +298,10 @@ describe("PlanObjectSchema — tethers", () => {
   });
 });
 
+// Still the shape an *attack definition* uses for its single end state; plans
+// carry a complete `SlideState` per slide instead.
 describe("StepOverrideSchema", () => {
-  it("accepts an empty override (no-op step for an object)", () => {
+  it("accepts an empty override (no-op slide for an object)", () => {
     expect(StepOverrideSchema.safeParse({}).success).toBe(true);
   });
 

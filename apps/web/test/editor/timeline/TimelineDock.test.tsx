@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import {
-  BASE_STEP_INDEX,
-  useEditorStore,
-} from "../../../src/store/editorStore";
+import { useEditorStore } from "../../../src/store/editorStore";
 import { TimelineDock } from "../../../src/editor/timeline/TimelineDock";
 
 const state = () => useEditorStore.getState();
@@ -21,29 +18,27 @@ describe("TimelineDock", () => {
       "aria-expanded",
       "false",
     );
-    expect(screen.queryByTestId("timeline-no-step")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("timeline-slide-0")).not.toBeInTheDocument();
   });
 
-  it("prompts to pick a step while on the Base layout", () => {
-    state().addStep();
-    state().selectStep(BASE_STEP_INDEX);
+  it("charts the opening slide, which a plan always has", () => {
+    // There is no "no slide selected" state to prompt about any more: the Base
+    // layout was the only thing that wasn't a slide, and it's gone.
     render(<TimelineDock />);
     open();
-    expect(screen.getByTestId("timeline-no-step")).toBeInTheDocument();
+    expect(screen.getByTestId("timeline-slide-0")).toBeInTheDocument();
   });
 
-  it("shows only the current step's chart", () => {
-    state().addStep(); // step 0
-    state().addStep(); // step 1 — now current
+  it("shows only the current slide's chart", () => {
+    state().addSlide(); // slide 1 — now current
     render(<TimelineDock />);
     open();
-    expect(screen.getByTestId("timeline-step-1")).toBeInTheDocument();
-    expect(screen.queryByTestId("timeline-step-0")).not.toBeInTheDocument();
+    expect(screen.getByTestId("timeline-slide-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("timeline-slide-0")).not.toBeInTheDocument();
   });
 
-  it("names the current step in the toggle", () => {
-    state().addStep();
-    state().setStepName(0, "Pull");
+  it("names the current slide in the toggle", () => {
+    state().setSlideName(0, "Pull");
     render(<TimelineDock />);
     expect(screen.getByTestId("timeline-toggle")).toHaveTextContent("Pull");
   });

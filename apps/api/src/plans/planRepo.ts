@@ -82,7 +82,7 @@ export function createPlan(
     encounterId?: string;
     /** Pre-placed content when seeding from an encounter preset (plan §17). */
     objects?: Plan["objects"];
-    steps?: Plan["steps"];
+    slides?: Plan["slides"];
   },
 ): PlanWithDoc {
   const id = randomUUID();
@@ -97,7 +97,7 @@ export function createPlan(
     background: params.background,
   });
   if (params.objects) doc.objects = params.objects;
-  if (params.steps) doc.steps = params.steps;
+  if (params.slides) doc.slides = params.slides;
   const at = nowSeconds();
 
   db.transaction((tx) => {
@@ -220,7 +220,12 @@ export function saveDoc(
     tx.update(planData)
       .set({
         doc: JSON.stringify(params.doc),
-        schemaVersion: params.doc.schemaVersion,
+        // The version this server writes, not the one the client claimed. The
+        // document has just been validated against `PlanSchema`, so it *is* the
+        // current shape whatever number came in with it — and a stale number in
+        // this column is what a future migration would read to decide what to
+        // do with the blob.
+        schemaVersion: SCHEMA_VERSION,
         version,
         updatedAt: at,
       })

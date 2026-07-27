@@ -2,12 +2,12 @@ import { resolveObjectState, type ObjectState } from "@raidplan/shared";
 import type { EditorState } from "./editorStore";
 
 /**
- * The state an object should be *drawn* in right now: its base with the current
- * step's overrides applied (plan §5 "state resolution").
+ * The state an object should be *drawn* in right now: its layout on the current
+ * slide (plan §5 "state resolution").
  *
  * Resolving per object (rather than resolving the whole plan once) keeps each
  * node's store subscription independent, so moving one token doesn't re-render
- * the other 49 (plan §8.2). It's O(steps) per object — trivial at plan scale.
+ * the other 49 (plan §8.2).
  *
  * Pair with `useShallow`: this returns a fresh object each call, and an
  * unmemoized selector would otherwise never settle.
@@ -18,7 +18,7 @@ export function selectObjectState(
 ): ObjectState | undefined {
   const object = s.objects[objectId];
   if (!object) return undefined;
-  return resolveObjectState(object, s.steps, s.currentStepIndex);
+  return resolveObjectState(object, s.slides, s.currentSlideIndex);
 }
 
 /**
@@ -37,7 +37,7 @@ export function selectObjectState(
  * A placed attack needs none of this: its grab frame is a real `Rect` carrying
  * `width`/`height`, which the Transformer does watch.
  *
- * Sizes only, and resolved for the current step so a step change counts too.
+ * Sizes only, and resolved for the current slide so a slide change counts too.
  * Position and rotation are attributes of the `Group` itself, so those it hears.
  *
  * A string rather than an array because it is read through a store subscription:

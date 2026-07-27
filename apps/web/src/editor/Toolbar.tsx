@@ -14,7 +14,7 @@ import { downloadPlan, parsePlanJson } from "./planFile";
 import {
   capturePlanPng,
   downloadDataUrl,
-  exportStepFileName,
+  exportSlideFileName,
 } from "./pngExport";
 import { createFrameRenderer } from "./planFrameRenderer";
 import {
@@ -98,13 +98,13 @@ export function Toolbar({
     const stage = getStageNode();
     if (!stage) return;
     const s = useEditorStore.getState();
-    // Snapshot the *current* step; drop the selection so the transformer
+    // Snapshot the *current* slide; drop the selection so the transformer
     // handles aren't baked into the image.
     s.clearSelection();
     // One frame for Konva to redraw without the handles, then capture.
     requestAnimationFrame(() => {
       const url = capturePlanPng(stage, s.background, s.view);
-      const filename = exportStepFileName(s.title, s.currentStepIndex);
+      const filename = exportSlideFileName(s.title, s.currentSlideIndex);
       downloadDataUrl(url, filename);
       toast(`Exported ${filename}`, "success");
     });
@@ -119,8 +119,8 @@ export function Toolbar({
     const stage = getStageNode();
     if (!stage || exportingVideo) return;
     const s = useEditorStore.getState();
-    if (s.steps.length === 0) {
-      toast("Add a step before exporting a video.", "error");
+    if (s.slides.length === 0) {
+      toast("Add a slide before exporting a video.", "error");
       return;
     }
 
@@ -132,7 +132,7 @@ export function Toolbar({
     const expanded = expandPlan(s.getPlan(), s.attackDefs);
     const renderer = createFrameRenderer({
       stage,
-      steps: expanded.steps,
+      slides: expanded.slides,
       objects: Object.fromEntries(expanded.objects.map((o) => [o.id, o])),
       objectIds: expanded.objects.map((o) => o.id),
       background: s.background,
@@ -144,7 +144,7 @@ export function Toolbar({
       await new Promise(requestAnimationFrame);
       const filename = videoFileName(s.title);
       await encodePlanVideo({
-        frames: planFrames(expanded.steps),
+        frames: planFrames(expanded.slides),
         renderFrame: renderer.renderFrame,
         size: renderer.size,
         filename,
@@ -158,7 +158,7 @@ export function Toolbar({
         "error",
       );
     } finally {
-      renderer.restore(s.currentStepIndex);
+      renderer.restore(s.currentSlideIndex);
       setExportingVideo(false);
       setVideoProgress(0);
     }

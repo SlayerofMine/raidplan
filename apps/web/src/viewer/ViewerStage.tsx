@@ -17,9 +17,9 @@ import { useEditorStore } from "../store/editorStore";
  * Layers are `listening={false}` by default: nothing here is interactive, which
  * skips hit-graph work entirely (plan §8.4). Crucially, that also means React
  * never re-renders these nodes after mount, so the playback engine owns the
- * node attributes outright while a step plays (plan §8.1).
+ * node attributes outright while a slide plays (plan §8.1).
  *
- * The exception is a step containing `onClick` animations — then the object
+ * The exception is a slide containing `onClick` animations — then the object
  * layer listens so those clicks can be routed, and only then.
  */
 export function ViewerStage({
@@ -28,7 +28,7 @@ export function ViewerStage({
   onObjectClick,
 }: {
   stageRef: RefObject<StageNode>;
-  /** Objects with an `onClick` animation on the current step. */
+  /** Objects with an `onClick` animation on the current slide. */
   clickableObjectIds?: string[];
   onObjectClick?: (objectId: string) => void;
 }) {
@@ -38,7 +38,7 @@ export function ViewerStage({
   const objects = useEditorStore((s) => s.objects);
   const bgImage = useImageElement(getBackgroundSrc(background.assetId));
 
-  // Hit-testing costs real work, so only switch it on when this step actually
+  // Hit-testing costs real work, so only switch it on when this slide actually
   // has something clickable (plan §8.4).
   const clickable = new Set(clickableObjectIds);
   const interactive = clickable.size > 0;

@@ -69,8 +69,8 @@ export function createShareRoutes({
     // (plan §17). A no-attack plan passes straight through.
     const plan = expandPlan(raw, attackDefsForPlan(db, raw));
 
-    // "Step 1" is index 0; a plan with no steps previews its base layout.
-    const png = renderOgImage(plan, plan.steps.length > 0 ? 0 : -1, {
+    // "Slide 1" is index 0; a plan with no slides previews its base layout.
+    const png = renderOgImage(plan, plan.slides.length > 0 ? 0 : -1, {
       backgroundSrc: await inlineUploadedBackground(
         plan.background.assetId,
         config.UPLOAD_DIR,
@@ -138,12 +138,12 @@ export async function inlineUploadedBackground(
 
 /** A one-line summary for the unfurl card. */
 export function planDescription(plan: Plan): string {
-  const steps = plan.steps.length;
+  const slides = plan.slides.length;
   // Attacks are objects as far as a reader is concerned — a plan made of one
   // attack is not an empty plan.
   const objects = plan.objects.length + plan.attacks.length;
   const parts = [
-    `${steps} ${steps === 1 ? "step" : "steps"}`,
+    `${slides} ${slides === 1 ? "slide" : "slides"}`,
     `${objects} ${objects === 1 ? "object" : "objects"}`,
   ];
   if (plan.raid) parts.unshift(plan.raid);

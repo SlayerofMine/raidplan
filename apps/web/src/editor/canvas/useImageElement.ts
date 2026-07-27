@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
  * One `HTMLImageElement` per unique source, shared by every node that draws it
  * (plan §8.5: "One Image per icon, reused"). A 30-token board with 8 distinct
  * markers therefore decodes 8 images, not 30. A sprite atlas would be the next
- * step if the manifest ever grows past a few hundred icons.
+ * slide if the manifest ever grows past a few hundred icons.
  */
 const cache = new Map<string, HTMLImageElement>();
 

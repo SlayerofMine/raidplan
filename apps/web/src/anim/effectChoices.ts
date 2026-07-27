@@ -12,7 +12,7 @@ import type { AnimEffect, AnimKind } from "@raidplan/shared";
  * should offer them, and the name each one goes by in that family.
  *
  * This mirrors what `compileStep` actually does. `fly` is deliberately absent
- * from `exit`: it flies *to* the step's end state, which is an entrance's job —
+ * from `exit`: it flies *to* the slide's end state, which is an entrance's job —
  * offering it as an exit would be offering something that doesn't exist.
  */
 const BY_KIND: Record<AnimKind, AnimEffect[]> = {

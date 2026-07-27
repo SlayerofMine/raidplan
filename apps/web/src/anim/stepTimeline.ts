@@ -47,7 +47,7 @@ export function packLanes(spans: readonly AnimSpan[]): {
 
 // --- pixel <-> millisecond mapping (the Gantt's interactive geometry) --------
 
-/** Grid the Timeline snaps drags and nudges to (matches the panel's ms step). */
+/** Grid the Timeline snaps drags and nudges to (matches the panel's ms slide). */
 export const TIMELINE_SNAP_MS = 50;
 
 /** A horizontal scale for one chart: how many pixels a millisecond occupies. */
@@ -60,7 +60,7 @@ export interface TimelineScale {
 /**
  * Fit `totalMs` into `widthPx`, reserving `padRightPx` so the last bar's resize
  * handle stays grabbable, and never collapsing below `minSpanMs` so a short or
- * empty step still shows a sensible axis. Returns `pxPerMs = 0` before the
+ * empty slide still shows a sensible axis. Returns `pxPerMs = 0` before the
  * container has been measured (width 0), which harmlessly gives zero-width bars.
  */
 export function timelineScale(
@@ -103,16 +103,16 @@ export function dragValueMs(
 }
 
 /**
- * New millisecond value after a keyboard nudge of `steps` grid increments
+ * New millisecond value after a keyboard nudge of `slides` grid increments
  * (negative to shrink), floored at `min`. Keyboard editing needs no pixel scale,
  * which is what keeps the Timeline operable without a mouse — and testable in
  * jsdom, where nothing has a measured width.
  */
 export function nudgeValueMs(
   startMs: number,
-  steps: number,
+  slides: number,
   min = 0,
   snap: number = TIMELINE_SNAP_MS,
 ): number {
-  return Math.max(min, snapMs(startMs + steps * snap, snap));
+  return Math.max(min, snapMs(startMs + slides * snap, snap));
 }

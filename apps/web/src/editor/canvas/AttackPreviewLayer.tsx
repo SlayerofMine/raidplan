@@ -37,7 +37,7 @@ import { ObjectVisual } from "./ObjectVisual";
  *
  * Attacks are placed on the board, not inside a slide, so every one of them
  * draws on every view — including the base layout, which is where you lay the
- * board out. The ones that fire on some *other* step are dimmed, so the current
+ * board out. The ones that fire on some *other* slide are dimmed, so the current
  * moment reads clearly without hiding what else the encounter does.
  *
  * They are drawn *in the board's stacking order*, interleaved with the plan's
@@ -58,7 +58,9 @@ export function PlacedAttackNode({ instanceId }: { instanceId: string }) {
     instance ? s.attackDefs[instance.attackId] : undefined,
   );
   const background = useEditorStore((s) => s.background);
-  const currentStepId = useEditorStore((s) => s.steps[s.currentStepIndex]?.id);
+  const currentStepId = useEditorStore(
+    (s) => s.slides[s.currentSlideIndex]?.id,
+  );
 
   if (!instance || !def) return null;
   return (
@@ -66,7 +68,7 @@ export function PlacedAttackNode({ instanceId }: { instanceId: string }) {
       instance={instance}
       def={def}
       background={background}
-      dimmed={instance.stepId !== currentStepId}
+      dimmed={instance.slideId !== currentStepId}
     />
   );
 }
@@ -80,7 +82,7 @@ function PlacedAttack({
   instance: AttackInstance;
   def: AttackDef;
   background: Background;
-  /** It fires on another step: still placeable, just not this moment. */
+  /** It fires on another slide: still placeable, just not this moment. */
   dimmed: boolean;
 }) {
   const muted = instance.visible === false;
@@ -113,8 +115,11 @@ function PlacedAttack({
       // The plan's own objects come along so a tether into one of them expands
       // to a real id; they aren't drawn from here (their own nodes do that).
       objects: planObjects,
-      attacks: [{ ...instance, stepId: "s" }],
-      steps: [{ id: "s", overrides: {}, animations: [] }],
+      attacks: [{ ...instance, slideId: "s" }],
+      // `expandPlan` fills in the attack's own parts; the plan's objects are
+      // only here so a tether into one of them resolves, and are never drawn
+      // from this shell.
+      slides: [{ id: "s", states: {}, animations: [] }],
       schemaVersion: SCHEMA_VERSION,
     };
     const expanded = expandPlan(shell, { [instance.attackId]: def });
@@ -123,7 +128,7 @@ function PlacedAttack({
       .filter((object) => !own.has(object.id))
       .map((object) => ({
         object,
-        state: resolveObjectState(object, expanded.steps, 0),
+        state: resolveObjectState(object, expanded.slides, 0),
       }));
   }, [instance, def, background, planObjects]);
 

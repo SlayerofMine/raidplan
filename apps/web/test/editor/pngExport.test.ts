@@ -2,19 +2,22 @@ import { describe, expect, it, vi } from "vitest";
 import {
   capturePlanPng,
   downloadDataUrl,
-  exportStepFileName,
+  exportSlideFileName,
   type CapturableStage,
 } from "../../src/editor/pngExport";
 
-describe("exportStepFileName", () => {
-  it("names the base layout and numbered steps, slugified", () => {
-    expect(exportStepFileName("Raid Night!", -1)).toBe("raid-night-base.png");
-    expect(exportStepFileName("Raid Night!", 0)).toBe("raid-night-step-1.png");
-    expect(exportStepFileName("Raid Night!", 2)).toBe("raid-night-step-3.png");
+describe("exportSlideFileName", () => {
+  it("numbers slides from one, slugified", () => {
+    expect(exportSlideFileName("Raid Night!", 0)).toBe(
+      "raid-night-slide-1.png",
+    );
+    expect(exportSlideFileName("Raid Night!", 2)).toBe(
+      "raid-night-slide-3.png",
+    );
   });
 
   it("falls back to a default slug for an empty title", () => {
-    expect(exportStepFileName("   ", 0)).toBe("plan-step-1.png");
+    expect(exportSlideFileName("   ", 0)).toBe("plan-slide-1.png");
   });
 });
 

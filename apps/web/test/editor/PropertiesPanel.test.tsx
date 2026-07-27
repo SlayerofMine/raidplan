@@ -72,7 +72,7 @@ describe("PropertiesPanel — style controls", () => {
  */
 describe("PropertiesPanel — a placed attack", () => {
   const placed = () => {
-    state().addStep();
+    state().addSlide();
     return state().addAttack("atk1", { x: 400, y: 300 })!;
   };
 
@@ -139,7 +139,7 @@ describe("PropertiesPanel — a placed attack", () => {
 
   it("reorders it through the board's stack, objects included", () => {
     const object = state().addPrimitive("shape", "circle");
-    state().addStep();
+    state().addSlide();
     const first = state().addAttack("atk1", { x: 0, y: 0 })!;
     state().addAttack("atk2", { x: 0, y: 0 });
     state().selectAttack([first]);

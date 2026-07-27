@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { ICONS } from "@raidplan/shared";
+import { ICONS, resolveObjectState } from "@raidplan/shared";
 import {
   clearHistory,
   temporalStore,
@@ -8,6 +8,17 @@ import {
 
 const iconId = ICONS[0]!.id;
 const state = () => useEditorStore.getState();
+/**
+ * Where an object *is*, on the slide being edited. Transforms live on the slide
+ * now; `object.base` only holds the transform it was created with, plus the
+ * genuinely slide-independent properties (tint, label, z, origin).
+ */
+const at = (id: string) =>
+  resolveObjectState(
+    state().objects[id]!,
+    state().slides,
+    state().currentSlideIndex,
+  );
 
 beforeEach(() => {
   state().reset();
@@ -133,16 +144,16 @@ describe("editorStore — mutation", () => {
   it("updateObject patches only the given properties", () => {
     const id = state().addIcon(iconId);
     state().updateObject(id, { opacity: 0.5, label: "MT" });
-    const o = state().objects[id]!;
-    expect(o.base.opacity).toBe(0.5);
-    expect(o.base.label).toBe("MT");
-    expect(o.base.visible).toBe(true); // untouched
+    // Opacity is per-slide; the label is a property of the object itself.
+    expect(at(id).opacity).toBe(0.5);
+    expect(state().objects[id]!.base.label).toBe("MT");
+    expect(at(id).visible).toBe(true); // untouched
   });
 
   it("moveObject updates coordinates", () => {
     const id = state().addIcon(iconId);
     state().moveObject(id, 42, 84);
-    expect(state().objects[id]).toMatchObject({ base: { x: 42, y: 84 } });
+    expect(at(id)).toMatchObject({ x: 42, y: 84 });
   });
 
   it("moveObject snaps to the grid when snapping is enabled", () => {
@@ -150,7 +161,7 @@ describe("editorStore — mutation", () => {
     state().setSnapEnabled(true);
     state().moveObject(id, 47, 82);
     // default grid is 40 → nearest multiples are 40 and 80
-    expect(state().objects[id]).toMatchObject({ base: { x: 40, y: 80 } });
+    expect(at(id)).toMatchObject({ x: 40, y: 80 });
   });
 
   it("moveObject on a missing id is a no-op", () => {
@@ -162,10 +173,10 @@ describe("editorStore — mutation", () => {
 
   it("does not move a locked object", () => {
     const id = state().addIcon(iconId);
-    const { x, y } = state().objects[id]!.base;
+    const { x, y } = at(id);
     state().setLocked(id, true);
     state().moveObject(id, 999, 999);
-    expect(state().objects[id]).toMatchObject({ base: { x, y } });
+    expect(at(id)).toMatchObject({ x, y });
   });
 
   it("nudgeSelected offsets every selected object", () => {
@@ -173,8 +184,8 @@ describe("editorStore — mutation", () => {
     const b = state().addIcon(iconId, { x: 200, y: 100 });
     state().select([a, b]);
     state().nudgeSelected(1, 0);
-    expect(state().objects[a]!.base.x).toBe(68 + 1); // 100 - 64/2 = 68
-    expect(state().objects[b]!.base.x).toBe(168 + 1);
+    expect(at(a).x).toBe(68 + 1); // 100 - 64/2 = 68
+    expect(at(b).x).toBe(168 + 1);
   });
 
   it("duplicateSelected clones with new ids, offset and selected", () => {
@@ -185,11 +196,9 @@ describe("editorStore — mutation", () => {
     expect(cloneId).not.toBe(id);
     expect(state().objectIds).toHaveLength(2);
     expect(state().selectedIds).toEqual([cloneId]);
-    const original = state().objects[id]!;
-    const clone = state().objects[cloneId!]!;
-    expect(clone.base.x).toBe(original.base.x + 20);
-    expect(clone.base.opacity).toBe(0.4);
-    expect(clone.base.rotation).toBe(30);
+    expect(at(cloneId!).x).toBe(at(id).x + 20);
+    expect(at(cloneId!).opacity).toBe(0.4);
+    expect(at(cloneId!).rotation).toBe(30);
   });
 
   it("duplicateSelected with no selection is a no-op", () => {
@@ -288,7 +297,7 @@ describe("editorStore — deletion & selection", () => {
 });
 
 describe("editorStore — z-order", () => {
-  it("bringForward / sendBackward move one step and clamp at the ends", () => {
+  it("bringForward / sendBackward move one slide and clamp at the ends", () => {
     const a = state().addIcon(iconId);
     const b = state().addIcon(iconId);
     const c = state().addIcon(iconId);
@@ -334,10 +343,10 @@ describe("editorStore — undo/redo (zundo)", () => {
   it("undoes a property change", () => {
     const id = state().addIcon(iconId);
     state().updateObject(id, { opacity: 0.2 });
-    expect(state().objects[id]!.base.opacity).toBe(0.2);
+    expect(at(id).opacity).toBe(0.2);
 
     temporalStore.getState().undo();
-    expect(state().objects[id]!.base.opacity).toBe(1);
+    expect(at(id).opacity).toBe(1);
   });
 
   it("does not record selection or camera changes as history", () => {

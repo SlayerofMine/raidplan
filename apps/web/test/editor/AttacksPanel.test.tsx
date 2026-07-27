@@ -3,11 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SCHEMA_VERSION, type AttackDef, type Plan } from "@raidplan/shared";
 import { AttacksPanel } from "../../src/editor/AttacksPanel";
-import {
-  BASE_STEP_INDEX,
-  clearHistory,
-  useEditorStore,
-} from "../../src/store/editorStore";
+import { clearHistory, useEditorStore } from "../../src/store/editorStore";
 
 const state = () => useEditorStore.getState();
 
@@ -25,7 +21,7 @@ const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   ...over,
 });
 
-/** A plan seeded from an encounter, with one step. */
+/** A plan seeded from an encounter, with one slide. */
 const plan = (encounterId?: string): Plan => ({
   id: "p",
   title: "t",
@@ -34,7 +30,7 @@ const plan = (encounterId?: string): Plan => ({
   background: { assetId: "arena", width: 1600, height: 900 },
   objects: [],
   attacks: [],
-  steps: [{ id: "s0", overrides: {}, animations: [] }],
+  slides: [{ id: "s0", states: {}, animations: [] }],
   schemaVersion: SCHEMA_VERSION,
 });
 
@@ -53,35 +49,37 @@ describe("AttacksPanel", () => {
     expect(screen.queryByTestId("attacks-panel")).not.toBeInTheDocument();
   });
 
-  it("is there on the base layout too — attacks are placed on the board", () => {
+  it("is there on the opening slide too — attacks are placed on the board", () => {
     state().loadPlan(plan("enc1"));
-    state().selectStep(BASE_STEP_INDEX);
+    state().selectSlide(0);
     state().addAttack("atk1", { x: 0, y: 0 });
     render(<AttacksPanel />);
     expect(screen.getByTestId("attacks-panel")).toBeInTheDocument();
     expect(screen.getByTestId("placed-attack")).toBeInTheDocument();
   });
 
-  it("places from the base layout onto the first step, which is when it fires", () => {
+  it("places onto the slide being edited, which is when it fires", () => {
     state().loadPlan(plan("enc1"));
-    state().selectStep(BASE_STEP_INDEX);
+    state().selectSlide(0);
     const id = state().addAttack("atk1", { x: 0, y: 0 })!;
-    // "Add it to the board, have it go off in step 1" — no step-picking first.
-    expect(state().attacks.find((a) => a.id === id)!.stepId).toBe("s0");
+    // "Add it to the board, have it go off on slide 1" — no slide-picking first.
+    expect(state().attacks.find((a) => a.id === id)!.slideId).toBe("s0");
   });
 
-  it("makes a step for an attack when the plan has none, so it can fire at all", () => {
-    state().loadPlan({ ...plan("enc1"), steps: [] });
+  it("always has a slide to fire on — a plan can't have none", () => {
+    // `addAttack` used to create a slide when the plan had zero. `PlanSchema`
+    // now requires one, so there is no such state to recover from.
+    state().loadPlan(plan("enc1"));
     const id = state().addAttack("atk1", { x: 0, y: 0 })!;
-    expect(state().steps).toHaveLength(1);
-    expect(state().attacks.find((a) => a.id === id)!.stepId).toBe(
-      state().steps[0]!.id,
+    expect(state().slides).toHaveLength(1);
+    expect(state().attacks.find((a) => a.id === id)!.slideId).toBe(
+      state().slides[0]!.id,
     );
   });
 
   it("points at the palette when nothing is placed — it isn't a second library", async () => {
     state().loadPlan(plan("enc1"));
-    state().selectStep(0);
+    state().selectSlide(0);
     render(<AttacksPanel />);
 
     expect(await screen.findByTestId("no-placed")).toBeInTheDocument();
@@ -92,7 +90,7 @@ describe("AttacksPanel", () => {
 
   it("has no number boxes left — every value has its own home", async () => {
     state().loadPlan(plan("enc1"));
-    state().selectStep(0);
+    state().selectSlide(0);
     state().addAttack("atk1", { x: 0, y: 0 });
     render(<AttacksPanel />);
 
@@ -106,7 +104,7 @@ describe("AttacksPanel", () => {
   it("selects a placed attack, which clears any object selection", async () => {
     const user = userEvent.setup();
     state().loadPlan(plan("enc1"));
-    state().selectStep(0);
+    state().selectSlide(0);
     const id = state().addAttack("atk1", { x: 0, y: 0 })!;
     state().select([]);
     render(<AttacksPanel />);
@@ -121,7 +119,7 @@ describe("AttacksPanel", () => {
   it("removes a placed attack", async () => {
     const user = userEvent.setup();
     state().loadPlan(plan("enc1"));
-    state().selectStep(0);
+    state().selectSlide(0);
     state().addAttack("atk1", { x: 0, y: 0 });
     render(<AttacksPanel />);
 

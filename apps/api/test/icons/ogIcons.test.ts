@@ -35,7 +35,7 @@ const plan = (objects: PlanObject[]): Plan => ({
   background: { assetId: "no-such-bg", width: 400, height: 300 },
   objects,
   attacks: [],
-  steps: [],
+  slides: [],
   schemaVersion: SCHEMA_VERSION,
 });
 

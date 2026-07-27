@@ -6,7 +6,9 @@ import {
   attackSlots,
   attackZ,
   isFollowing,
+  makeFirstSlide,
   resolveObjectState,
+  seedState,
   type Anim,
   type AttackDef,
   type AttackInstance,
@@ -19,12 +21,12 @@ import {
   type Plan,
   type PlanObject,
   type ShapeKind,
-  type Step,
-  type StepOverride,
+  type Slide,
+  type SlideState,
 } from "@raidplan/shared";
 import { DEFAULT_BACKGROUND } from "@raidplan/shared";
 import { getIconById } from "@raidplan/shared";
-import { nextAnimId, nextAttackId, nextGroupId, nextStepId } from "./ids";
+import { nextAnimId, nextAttackId, nextGroupId, nextSlideId } from "./ids";
 import {
   fitView,
   screenToNative,
@@ -65,11 +67,12 @@ export interface EditorState extends PlanDoc {
   /** In-app clipboard for copy/paste — never persisted or undone. */
   clipboard: PlanObject[];
   /**
-   * Which "slide" is being edited: `BASE_STEP_INDEX` (-1) is the starting
-   * layout (writes land on `object.base`); `0..steps.length-1` is a step
-   * (writes land in that step's `overrides`). Ephemeral, like the selection.
+   * Which slide is being edited — `0..slides.length-1`, and never out of that
+   * range, because there is always at least one slide and no "before the first
+   * one" layout to sit in. Transform writes land in this slide's `states`.
+   * Ephemeral, like the selection.
    */
-  currentStepIndex: number;
+  currentSlideIndex: number;
 
   // --- creation ---
   addIcon: (iconId: string, native?: Point) => string;
@@ -87,7 +90,7 @@ export interface EditorState extends PlanDoc {
   setLocked: (id: string, locked: boolean) => void;
   /**
    * Say what an object follows — its origin pinned to one object, its direction
-   * aimed at another (plan §18.17). Step-independent, like style and lock: what
+   * aimed at another (plan §18.17). Slide-independent, like style and lock: what
    * a thing follows is a fact about the thing, not about the moment.
    */
   setFollow: (id: string, follow: Follow | undefined) => void;
@@ -126,24 +129,24 @@ export interface EditorState extends PlanDoc {
   /** Dissolve the groups any selected object belongs to. */
   ungroupSelected: () => void;
 
-  // --- steps (plan §3.2) ---
-  addStep: () => string;
-  duplicateStep: (index: number) => void;
-  deleteStep: (index: number) => void;
-  moveStep: (from: number, to: number) => void;
-  selectStep: (index: number) => void;
-  setStepName: (index: number, name: string) => void;
+  // --- slides (plan §3.2) ---
+  addSlide: () => string;
+  duplicateSlide: (index: number) => void;
+  deleteSlide: (index: number) => void;
+  moveSlide: (from: number, to: number) => void;
+  selectSlide: (index: number) => void;
+  setSlideName: (index: number, name: string) => void;
 
   // --- animations (plan §3.4) ---
-  addAnimation: (stepIndex: number, objectId: string) => string | undefined;
+  addAnimation: (slideIndex: number, objectId: string) => string | undefined;
   /**
    * Give every selected object the same animation, in one go (plan §18.9).
    * Returns the new ids, in document order. One action rather than a loop over
    * {@link addAnimation}, so animating a group of six is a single undo.
    */
-  animateSelection: (stepIndex: number) => string[];
+  animateSelection: (slideIndex: number) => string[];
   updateAnimation: (
-    stepIndex: number,
+    slideIndex: number,
     animId: string,
     patch: Partial<Omit<Anim, "id">>,
   ) => void;
@@ -153,12 +156,12 @@ export interface EditorState extends PlanDoc {
    * six undos to take back one edit.
    */
   updateAnimations: (
-    stepIndex: number,
+    slideIndex: number,
     animIds: string[],
     patch: Partial<Omit<Anim, "id">>,
   ) => void;
-  deleteAnimation: (stepIndex: number, animId: string) => void;
-  deleteAnimations: (stepIndex: number, animIds: string[]) => void;
+  deleteAnimation: (slideIndex: number, animId: string) => void;
+  deleteAnimations: (slideIndex: number, animIds: string[]) => void;
 
   /**
    * Definitions for the attacks this plan can use, keyed by id (plan §17).
@@ -174,9 +177,9 @@ export interface EditorState extends PlanDoc {
    * Drop a pre-designed attack on the board at a point (plan §18.3).
    *
    * Placement belongs to the plan, so this works from the base layout as well as
-   * from a step. *When* it fires is a separate question: it's pinned to the step
+   * from a slide. *When* it fires is a separate question: it's pinned to the slide
    * being edited, or to the first one when you're laying out the board — and a
-   * plan with no steps gets one, because an attack that never fires is furniture.
+   * plan with no slides gets one, because an attack that never fires is furniture.
    *
    * A definition with **placeholders** (§18.14) takes them from the current
    * selection, in document order — select the boss and the tank, then place the
@@ -186,9 +189,9 @@ export interface EditorState extends PlanDoc {
   addAttack: (
     attackId: string,
     at: { x: number; y: number },
-    stepId?: string,
+    slideId?: string,
   ) => string | undefined;
-  /** Retune a placed attack — position, rotation, scale, step or start offset. */
+  /** Retune a placed attack — position, rotation, scale, slide or start offset. */
   updateAttack: (
     instanceId: string,
     patch: Partial<Omit<AttackInstance, "id" | "attackId">>,
@@ -219,14 +222,15 @@ export interface EditorState extends PlanDoc {
 const INITIAL_VIEW: View = { scale: 1, x: 0, y: 0 };
 const INITIAL_STAGE_SIZE: Size = { width: 0, height: 0 };
 
-/** `currentStepIndex` for "the starting layout", before any step runs. */
-export const BASE_STEP_INDEX = -1;
-
 /**
- * The properties a step can override (they match `StepOverrideSchema`). Anything
- * else — tint, label, z — is step-independent and always lives on the base.
+ * The properties that live on the *slide* rather than on the object. Everything
+ * else a patch can carry — tint, label, z, the origin — is slide-independent and
+ * belongs to the object itself.
+ *
+ * `satisfies` ties this to {@link SlideState}, so a field added to the document's
+ * per-slide state is a compile error here until it is handled.
  */
-const OVERRIDABLE_KEYS = [
+const SLIDE_KEYS = [
   "x",
   "y",
   "w",
@@ -234,44 +238,60 @@ const OVERRIDABLE_KEYS = [
   "rotation",
   "opacity",
   "visible",
-] as const satisfies readonly (keyof StepOverride)[];
+] as const satisfies readonly (keyof SlideState)[];
 
-/** Split a property patch into the step-overridable part and the base-only part. */
+/** Split a property patch into the per-slide part and the object-level part. */
 function splitPatch(patch: Partial<ObjectBase>): {
-  override: StepOverride;
-  baseOnly: Partial<ObjectBase>;
+  slide: Partial<ObjectState>;
+  objectOnly: Partial<ObjectBase>;
 } {
-  const override: Record<string, unknown> = {};
-  const baseOnly: Record<string, unknown> = {};
+  const slide: Record<string, unknown> = {};
+  const objectOnly: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(patch)) {
-    if ((OVERRIDABLE_KEYS as readonly string[]).includes(key)) {
-      override[key] = value;
-    } else {
-      baseOnly[key] = value;
-    }
+    if ((SLIDE_KEYS as readonly string[]).includes(key)) slide[key] = value;
+    else objectOnly[key] = value;
   }
-  return { override, baseOnly };
+  return { slide, objectOnly };
 }
 
 /**
- * Write transform-ish properties to wherever the current step says they belong:
- * the base layout, or the current step's overrides. This is the single choke
- * point that makes "the editor edits the end state" true (plan §5).
+ * Write transform-ish properties into the slide being edited. The single choke
+ * point that makes "the editor edits the current slide's layout" true (plan §5)
+ * — every tool that moves anything goes through here, which is what keeps them
+ * all slide-aware without knowing they are.
+ *
+ * It writes to exactly one slide and never to any other, which is the whole
+ * point of the model: this used to fan a sparse override out along a cascade, so
+ * editing slide 2 moved the object on every slide after it.
  */
-function writeOverridable(
+function writeSlideState(
   s: EditorState,
   id: string,
-  override: StepOverride,
+  patch: Partial<ObjectState>,
 ): void {
-  if (Object.keys(override).length === 0) return;
-  if (s.currentStepIndex === BASE_STEP_INDEX) {
-    const object = s.objects[id];
-    if (object) Object.assign(object.base, override);
-    return;
-  }
-  const step = s.steps[s.currentStepIndex];
-  if (!step) return;
-  step.overrides[id] = { ...step.overrides[id], ...override };
+  if (Object.keys(patch).length === 0) return;
+  const state = s.slides[s.currentSlideIndex]?.states[id];
+  if (state) Object.assign(state, patch);
+}
+
+/**
+ * Give `id` a state on **every** slide — the density invariant, applied whenever
+ * an object joins the document.
+ *
+ * Slides before `from` get the object hidden rather than absent: a token added
+ * while writing slide 4 has not entered the fight yet on slide 1, and making it
+ * retroactively appear on the opening layout is never what was meant.
+ */
+function seedAcrossSlides(
+  s: EditorState,
+  id: string,
+  state: ObjectState,
+  from: number,
+): void {
+  s.slides.forEach((slide, index) => {
+    slide.states[id] =
+      index < from ? { ...state, visible: false } : { ...state };
+  });
 }
 
 /** Keep `base.z` aligned with the id order after any structural change. */
@@ -348,9 +368,9 @@ const CLONE_OFFSET = 20;
  * Copy an object under a fresh id, nudged by `CLONE_OFFSET`. Shared by
  * duplicate and paste so both produce identical results.
  *
- * `appearance` is the source's *resolved* state on the current step, so a copy
+ * `appearance` is the source's *resolved* state on the current slide, so a copy
  * lands where the original visibly is rather than at its base — the two differ
- * as soon as a step overrides the original.
+ * as soon as a slide overrides the original.
  */
 function cloneObject(
   source: PlanObject,
@@ -401,7 +421,7 @@ export const useEditorStore = create<EditorState>()(
       background: DEFAULT_BACKGROUND,
       objects: {},
       objectIds: [],
-      steps: [],
+      slides: [makeFirstSlide()],
       selectedIds: [],
       selectedAttackIds: [],
       view: INITIAL_VIEW,
@@ -409,7 +429,7 @@ export const useEditorStore = create<EditorState>()(
       snapEnabled: false,
       gridSize: DEFAULT_GRID_SIZE,
       clipboard: [],
-      currentStepIndex: BASE_STEP_INDEX,
+      currentSlideIndex: 0,
 
       addIcon: (iconId, native) => {
         const state = get();
@@ -423,6 +443,12 @@ export const useEditorStore = create<EditorState>()(
         set((s) => {
           s.objects[object.id] = object;
           s.objectIds.push(object.id);
+          seedAcrossSlides(
+            s,
+            object.id,
+            seedState(object),
+            s.currentSlideIndex,
+          );
           s.selectedIds = [object.id];
           s.selectedAttackIds = [];
         });
@@ -442,6 +468,12 @@ export const useEditorStore = create<EditorState>()(
         set((s) => {
           s.objects[object.id] = object;
           s.objectIds.push(object.id);
+          seedAcrossSlides(
+            s,
+            object.id,
+            seedState(object),
+            s.currentSlideIndex,
+          );
           s.selectedIds = [object.id];
           s.selectedAttackIds = [];
         });
@@ -463,6 +495,12 @@ export const useEditorStore = create<EditorState>()(
         set((s) => {
           s.objects[object.id] = object;
           s.objectIds.push(object.id);
+          seedAcrossSlides(
+            s,
+            object.id,
+            seedState(object),
+            s.currentSlideIndex,
+          );
           s.selectedIds = [object.id];
           s.selectedAttackIds = [];
         });
@@ -473,20 +511,20 @@ export const useEditorStore = create<EditorState>()(
         set((s) => {
           const object = s.objects[id];
           if (!object) return;
-          const { override, baseOnly } = splitPatch(patch);
-          // tint/label/z are step-independent; transforms follow the step.
-          if (Object.keys(baseOnly).length > 0) {
-            Object.assign(object.base, baseOnly);
+          const { slide, objectOnly } = splitPatch(patch);
+          // tint/label/z/origin belong to the object; transforms to the slide.
+          if (Object.keys(objectOnly).length > 0) {
+            Object.assign(object.base, objectOnly);
           }
-          writeOverridable(s, id, override);
+          writeSlideState(s, id, slide);
         }),
 
       updateStyle: (id, patch) =>
         set((s) => {
           const object = s.objects[id];
           if (!object) return;
-          // Style is step-independent (like tint) — it lives on the object,
-          // never in a step's overrides. Merge so toggles compose.
+          // Style is slide-independent (like tint) — it lives on the object,
+          // never in a slide's states. Merge so toggles compose.
           object.style = { ...object.style, ...patch };
         }),
 
@@ -495,7 +533,7 @@ export const useEditorStore = create<EditorState>()(
           const object = s.objects[id];
           if (!object || object.locked) return;
           const grid = s.snapEnabled ? s.gridSize : 0;
-          writeOverridable(s, id, {
+          writeSlideState(s, id, {
             x: snapValue(x, grid),
             y: snapValue(y, grid),
           });
@@ -503,20 +541,20 @@ export const useEditorStore = create<EditorState>()(
 
       nudgeSelected: (dx, dy, big = false) =>
         set((s) => {
-          const step = s.snapEnabled ? s.gridSize : big ? 10 : 1;
+          const distance = s.snapEnabled ? s.gridSize : big ? 10 : 1;
           for (const id of s.selectedIds) {
             const object = s.objects[id];
             if (!object || object.locked) continue;
-            // Nudge from where the object *currently appears*, which on a step
-            // is its resolved position, not its base.
+            // Nudge from where the object *currently appears* — this slide's
+            // position, which is the only one it has.
             const current = resolveObjectState(
               object,
-              s.steps,
-              s.currentStepIndex,
+              s.slides,
+              s.currentSlideIndex,
             );
-            writeOverridable(s, id, {
-              x: current.x + dx * step,
-              y: current.y + dy * step,
+            writeSlideState(s, id, {
+              x: current.x + dx * distance,
+              y: current.y + dy * distance,
             });
           }
         }),
@@ -556,12 +594,12 @@ export const useEditorStore = create<EditorState>()(
           for (const id of doomed) delete s.objects[id];
           s.objectIds = s.objectIds.filter((id) => !doomed.has(id));
           s.selectedIds = s.selectedIds.filter((id) => !doomed.has(id));
-          // Don't leave steps referencing an object that no longer exists.
-          // Resolution tolerates stale overrides, but they'd resurrect on undo
+          // Don't leave slides referencing an object that no longer exists.
+          // Resolution tolerates a stale entry, but it would resurrect on undo
           // and bloat every save.
-          for (const step of s.steps) {
-            for (const id of doomed) delete step.overrides[id];
-            step.animations = step.animations.filter(
+          for (const slide of s.slides) {
+            for (const id of doomed) delete slide.states[id];
+            slide.animations = slide.animations.filter(
               (a) => !doomed.has(a.objectId),
             );
           }
@@ -615,19 +653,25 @@ export const useEditorStore = create<EditorState>()(
 
       addClones: (sources) => {
         if (sources.length === 0) return [];
-        const { objectIds, steps, currentStepIndex } = get();
+        const { objectIds, slides, currentSlideIndex } = get();
         const startZ = objectIds.length;
         const clones = sources.map((source, i) =>
           cloneObject(
             source,
             startZ + i,
-            resolveObjectState(source, steps, currentStepIndex),
+            resolveObjectState(source, slides, currentSlideIndex),
           ),
         );
         set((s) => {
           for (const clone of clones) {
             s.objects[clone.id] = clone;
             s.objectIds.push(clone.id);
+            seedAcrossSlides(
+              s,
+              clone.id,
+              seedState(clone),
+              s.currentSlideIndex,
+            );
           }
           s.selectedIds = clones.map((c) => c.id);
           s.selectedAttackIds = [];
@@ -716,29 +760,36 @@ export const useEditorStore = create<EditorState>()(
           }
         }),
 
-      addStep: () => {
-        const step: Step = {
-          id: nextStepId(),
-          name: `Step ${get().steps.length + 1}`,
-          overrides: {},
+      addSlide: () => {
+        // A new slide opens looking exactly like the one you were on, so adding
+        // one and dragging a token expresses "this moves" rather than "everything
+        // teleports back to where it started". Read through `get()`, never from
+        // the immer draft: drafts are Proxies and `structuredClone` throws.
+        const state = get();
+        const slide: Slide = {
+          id: nextSlideId(),
+          name: `Slide ${state.slides.length + 1}`,
+          states: structuredClone(
+            state.slides[state.currentSlideIndex]?.states ?? {},
+          ),
           animations: [],
         };
         set((s) => {
-          s.steps.push(step);
-          s.currentStepIndex = s.steps.length - 1;
+          s.slides.push(slide);
+          s.currentSlideIndex = s.slides.length - 1;
         });
-        return step.id;
+        return slide.id;
       },
 
-      duplicateStep: (index) => {
+      duplicateSlide: (index) => {
         // Read through `get()`, never from the immer draft: drafts are Proxies
         // and `structuredClone` throws on them.
-        const source = get().steps[index];
+        const source = get().slides[index];
         if (!source) return;
-        const copy: Step = {
-          id: nextStepId(),
-          name: `${source.name ?? `Step ${index + 1}`} copy`,
-          overrides: structuredClone(source.overrides),
+        const copy: Slide = {
+          id: nextSlideId(),
+          name: `${source.name ?? `Slide ${index + 1}`} copy`,
+          states: structuredClone(source.states),
           // Animations are copied, but each needs its own identity.
           animations: source.animations.map((a) => ({
             ...structuredClone(a),
@@ -748,60 +799,64 @@ export const useEditorStore = create<EditorState>()(
             ? { autoAdvanceMs: source.autoAdvanceMs }
             : {}),
         };
-        // The attacks this step fires come along too — a duplicated step that
+        // The attacks this slide fires come along too — a duplicated slide that
         // dropped them would only look like a copy.
         const copiedAttacks = get()
-          .attacks.filter((a) => a.stepId === source.id)
+          .attacks.filter((a) => a.slideId === source.id)
           .map((a) => ({
             ...structuredClone(a),
             id: nextAttackId(),
-            stepId: copy.id,
+            slideId: copy.id,
           }));
         set((s) => {
-          s.steps.splice(index + 1, 0, copy);
+          s.slides.splice(index + 1, 0, copy);
           s.attacks.push(...copiedAttacks);
-          s.currentStepIndex = index + 1;
+          s.currentSlideIndex = index + 1;
         });
       },
 
-      deleteStep: (index) =>
+      deleteSlide: (index) =>
         set((s) => {
-          const doomed = s.steps[index];
-          if (!doomed) return;
-          s.steps.splice(index, 1);
-          // An attack fires on exactly one step; without it there is no moment
+          const doomed = s.slides[index];
+          // The last slide can't go: a plan is its slides, and one with none has
+          // no layout to draw and nowhere to put the cursor.
+          if (!doomed || s.slides.length <= 1) return;
+          s.slides.splice(index, 1);
+          // An attack fires on exactly one slide; without it there is no moment
           // for it to happen, so it goes too (undo brings both back).
-          s.attacks = s.attacks.filter((a) => a.stepId !== doomed.id);
-          // Stay in range; fall back to the base layout when the last step goes.
-          s.currentStepIndex = Math.min(s.currentStepIndex, s.steps.length - 1);
-        }),
-
-      moveStep: (from, to) =>
-        set((s) => {
-          if (!s.steps[from] || to < 0 || to >= s.steps.length) return;
-          const [moved] = s.steps.splice(from, 1);
-          if (!moved) return;
-          s.steps.splice(to, 0, moved);
-          s.currentStepIndex = to;
-        }),
-
-      selectStep: (index) =>
-        set((s) => {
-          s.currentStepIndex = Math.max(
-            BASE_STEP_INDEX,
-            Math.min(index, s.steps.length - 1),
+          s.attacks = s.attacks.filter((a) => a.slideId !== doomed.id);
+          s.currentSlideIndex = Math.min(
+            s.currentSlideIndex,
+            s.slides.length - 1,
           );
         }),
 
-      setStepName: (index, name) =>
+      moveSlide: (from, to) =>
         set((s) => {
-          const step = s.steps[index];
-          if (step) step.name = name;
+          if (!s.slides[from] || to < 0 || to >= s.slides.length) return;
+          const [moved] = s.slides.splice(from, 1);
+          if (!moved) return;
+          s.slides.splice(to, 0, moved);
+          s.currentSlideIndex = to;
         }),
 
-      addAnimation: (stepIndex, objectId) => {
-        const { steps, objects } = get();
-        if (!steps[stepIndex] || !objects[objectId]) return undefined;
+      selectSlide: (index) =>
+        set((s) => {
+          s.currentSlideIndex = Math.max(
+            0,
+            Math.min(index, s.slides.length - 1),
+          );
+        }),
+
+      setSlideName: (index, name) =>
+        set((s) => {
+          const slide = s.slides[index];
+          if (slide) slide.name = name;
+        }),
+
+      addAnimation: (slideIndex, objectId) => {
+        const { slides, objects } = get();
+        if (!slides[slideIndex] || !objects[objectId]) return undefined;
         const anim: Anim = {
           id: nextAnimId(),
           objectId,
@@ -813,14 +868,14 @@ export const useEditorStore = create<EditorState>()(
           easing: "power2.out",
         };
         set((s) => {
-          s.steps[stepIndex]?.animations.push(anim);
+          s.slides[slideIndex]?.animations.push(anim);
         });
         return anim.id;
       },
 
-      animateSelection: (stepIndex) => {
-        const { steps, objects, objectIds, selectedIds } = get();
-        if (!steps[stepIndex]) return [];
+      animateSelection: (slideIndex) => {
+        const { slides, objects, objectIds, selectedIds } = get();
+        if (!slides[slideIndex]) return [];
         // Document order, so the animation list reads like the board's z-order
         // rather than the order things happened to be clicked in.
         const targets = objectIds.filter(
@@ -839,31 +894,31 @@ export const useEditorStore = create<EditorState>()(
           easing: "power2.out",
         }));
         set((s) => {
-          s.steps[stepIndex]?.animations.push(...anims);
+          s.slides[slideIndex]?.animations.push(...anims);
         });
         return anims.map((a) => a.id);
       },
 
-      updateAnimation: (stepIndex, animId, patch) =>
-        get().updateAnimations(stepIndex, [animId], patch),
+      updateAnimation: (slideIndex, animId, patch) =>
+        get().updateAnimations(slideIndex, [animId], patch),
 
-      updateAnimations: (stepIndex, animIds, patch) =>
+      updateAnimations: (slideIndex, animIds, patch) =>
         set((s) => {
           const wanted = new Set(animIds);
-          for (const anim of s.steps[stepIndex]?.animations ?? []) {
+          for (const anim of s.slides[slideIndex]?.animations ?? []) {
             if (wanted.has(anim.id)) Object.assign(anim, patch);
           }
         }),
 
-      deleteAnimation: (stepIndex, animId) =>
-        get().deleteAnimations(stepIndex, [animId]),
+      deleteAnimation: (slideIndex, animId) =>
+        get().deleteAnimations(slideIndex, [animId]),
 
-      deleteAnimations: (stepIndex, animIds) =>
+      deleteAnimations: (slideIndex, animIds) =>
         set((s) => {
-          const step = s.steps[stepIndex];
-          if (!step) return;
+          const slide = s.slides[slideIndex];
+          if (!slide) return;
           const doomed = new Set(animIds);
-          step.animations = step.animations.filter((a) => !doomed.has(a.id));
+          slide.animations = slide.animations.filter((a) => !doomed.has(a.id));
         }),
 
       setAttackDefs: (defs) =>
@@ -871,7 +926,7 @@ export const useEditorStore = create<EditorState>()(
           s.attackDefs = defs;
         }),
 
-      addAttack: (attackId, at, stepId) => {
+      addAttack: (attackId, at, slideId) => {
         const state = get();
         const def = state.attackDefs[attackId];
 
@@ -887,20 +942,19 @@ export const useEditorStore = create<EditorState>()(
             slots[hole.id] = chosen[index]!;
           });
         }
-        // Laying out the board is a fine time to place an attack; it fires on
-        // the step you're editing, else the first one, creating it if need be.
+        // An attack fires on the slide you're editing — there is always one, so
+        // there is nothing to create and no "laid out but never happens" case.
         const firesOn =
-          stepId ??
-          state.steps[state.currentStepIndex]?.id ??
-          state.steps[0]?.id ??
-          get().addStep();
+          slideId ??
+          state.slides[state.currentSlideIndex]?.id ??
+          state.slides[0]!.id;
         // The def's default size is the size it was drawn at; centre it on the
         // drop point so the attack lands where you aimed (plan §18.2).
         const size = def?.defaultSize ?? { w: 400, h: 400 };
         const instance: AttackInstance = {
           id: nextAttackId(),
           attackId,
-          stepId: firesOn,
+          slideId: firesOn,
           // On top of what's there, like every other newly added thing.
           z: boardStack(state).length,
           x: at.x - size.w / 2,
@@ -975,10 +1029,10 @@ export const useEditorStore = create<EditorState>()(
           s.objects = doc.objects;
           s.objectIds = doc.objectIds;
           s.attacks = doc.attacks;
-          s.steps = doc.steps;
+          s.slides = doc.slides;
           s.selectedIds = [];
           s.selectedAttackIds = [];
-          s.currentStepIndex = BASE_STEP_INDEX;
+          s.currentSlideIndex = 0;
         }),
 
       getPlan: () => toPlan(get()),
@@ -992,10 +1046,10 @@ export const useEditorStore = create<EditorState>()(
           s.selectedAttackIds = [];
           s.title = "Untitled plan";
           s.background = DEFAULT_BACKGROUND;
-          s.steps = [];
+          s.slides = [makeFirstSlide()];
           s.view = INITIAL_VIEW;
           s.clipboard = [];
-          s.currentStepIndex = BASE_STEP_INDEX;
+          s.currentSlideIndex = 0;
         }),
 
       setView: (view) =>

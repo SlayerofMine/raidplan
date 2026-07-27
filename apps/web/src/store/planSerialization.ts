@@ -1,10 +1,11 @@
 import {
+  normalizeSlides,
   SCHEMA_VERSION,
   type AttackInstance,
   type Background,
   type Plan,
   type PlanObject,
-  type Step,
+  type Slide,
 } from "@raidplan/shared";
 
 /**
@@ -29,10 +30,10 @@ export interface PlanDoc {
   objectIds: string[];
   /**
    * Placed attacks (plan §18.3). Like objects they belong to the plan rather
-   * than to a slide; each names the step it fires on.
+   * than to a slide; each names the slide it fires on.
    */
   attacks: AttackInstance[];
-  steps: Step[];
+  slides: Slide[];
 }
 
 /**
@@ -56,7 +57,7 @@ const DOC_SLICES: Record<keyof PlanDoc, true> = {
   objects: true,
   objectIds: true,
   attacks: true,
-  steps: true,
+  slides: true,
 };
 
 export const PLAN_DOC_KEYS = Object.keys(DOC_SLICES) as (keyof PlanDoc)[];
@@ -90,12 +91,18 @@ export function toPlan(doc: PlanDoc): Plan {
       .map((id) => doc.objects[id])
       .filter((o): o is PlanObject => o !== undefined),
     attacks: doc.attacks,
-    steps: doc.steps,
+    slides: doc.slides,
     schemaVersion: SCHEMA_VERSION,
   };
 }
 
-/** The shared `Plan` document → normalized editor document. */
+/**
+ * The shared `Plan` document → normalized editor document.
+ *
+ * Slides are normalised on the way in, which is the one place a document from
+ * *outside* the store (a load, an import, a stale autosave) becomes one the
+ * store's density invariant can be trusted for.
+ */
 export function fromPlan(plan: Plan): PlanDoc {
   const objects: Record<string, PlanObject> = {};
   const objectIds: string[] = [];
@@ -112,6 +119,6 @@ export function fromPlan(plan: Plan): PlanDoc {
     objects,
     objectIds,
     attacks: plan.attacks,
-    steps: plan.steps,
+    slides: normalizeSlides(plan.objects, plan.slides),
   };
 }

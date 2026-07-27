@@ -45,10 +45,10 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
 
   it("points an objectRefs parameter at an animation's collideWith", async () => {
     const user = userEvent.setup();
-    // The designer's plan *is* the definition: one step holds its animations.
+    // The designer's plan *is* the definition: one slide holds its animations.
     const objectId = state().addPrimitive("shape", "circle");
     state().updateObject(objectId, { name: "Orb" });
-    state().addStep();
+    state().addSlide();
     const animId = state().addAnimation(0, objectId)!;
 
     const params: AttackParam[] = [
@@ -83,7 +83,7 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
     state().updateObject(orb, { name: "Orb" });
     const cone = state().addPrimitive("shape", "circle");
     state().updateObject(cone, { name: "Cone" });
-    state().addStep();
+    state().addSlide();
     const first = state().addAnimation(0, orb)!;
     const second = state().addAnimation(0, cone)!;
 
@@ -112,7 +112,7 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
     const user = userEvent.setup();
     const orb = state().addPrimitive("shape", "circle");
     state().updateObject(orb, { name: "Orb" });
-    state().addStep();
+    state().addSlide();
     const animId = state().addAnimation(0, orb)!;
 
     const onBindingsChange = vi.fn();
@@ -134,7 +134,7 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
   it("shows a place another parameter already drives as taken", () => {
     const orb = state().addPrimitive("shape", "circle");
     state().updateObject(orb, { name: "Orb" });
-    state().addStep();
+    state().addSlide();
     const animId = state().addAnimation(0, orb)!;
 
     render(
@@ -162,7 +162,7 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
     const user = userEvent.setup();
     const orb = state().addPrimitive("shape", "circle");
     state().updateObject(orb, { name: "Orb" });
-    state().addStep();
+    state().addSlide();
     const animId = state().addAnimation(0, orb)!;
 
     const onBindingsChange = vi.fn();
@@ -186,7 +186,7 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
 
   it("says so when a parameter drives nothing — the half everyone misses", () => {
     const objectId = state().addPrimitive("shape", "circle");
-    state().addStep();
+    state().addSlide();
     state().addAnimation(0, objectId);
 
     render(
@@ -255,7 +255,7 @@ describe("AttackArgs — answering with this plan's objects", () => {
   const instance = {
     id: "i1",
     attackId: "atk1",
-    stepId: "s0",
+    slideId: "s0",
     x: 0,
     y: 0,
     w: 100,

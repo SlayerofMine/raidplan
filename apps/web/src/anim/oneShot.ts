@@ -1,28 +1,33 @@
-import type { Anim, ObjectState, ResolvedStates, Step } from "@raidplan/shared";
+import type {
+  Anim,
+  ObjectState,
+  ResolvedStates,
+  Slide,
+} from "@raidplan/shared";
 import { compileStep, type CompiledStep } from "./compileStep";
 
 /**
  * Play **one** animation on demand (plan §7).
  *
- * Deferred triggers — `onClick`, `onCollision` — are excluded from the step's
+ * Deferred triggers — `onClick`, `onCollision` — are excluded from the slide's
  * timeline, so something has to run them individually when they fire. Rather
  * than a second tween engine, this reuses `compileStep` with a synthetic
- * one-animation step: the trigger is normalised to `onEnter` and the delay
+ * one-animation slide: the trigger is normalised to `onEnter` and the delay
  * dropped, because "when it fires" has already been decided by the click or the
  * collision. Every effect therefore behaves identically whether it was reached
  * by the timeline or by a trigger.
  */
 export interface OneShotParams {
   anim: Anim;
-  /** The step it belongs to — supplies the surrounding context to `compileStep`. */
-  step: Step;
+  /** The slide it belongs to — supplies the surrounding context to `compileStep`. */
+  slide: Slide;
   /**
    * Where the animated object is *right now*. Playback passes the object's live
    * node state, so a triggered animation continues from where the object
-   * actually is rather than snapping back to the step's start.
+   * actually is rather than snapping back to the slide's start.
    */
   start: ResolvedStates;
-  /** The step's settled end state, the target for effects that resolve to it. */
+  /** The slide's settled end state, the target for effects that resolve to it. */
   end: ResolvedStates;
   apply: (objectId: string, props: Partial<ObjectState>) => void;
   onUpdate?: () => void;
@@ -30,15 +35,15 @@ export interface OneShotParams {
 
 export function compileOneShot({
   anim,
-  step,
+  slide,
   start,
   end,
   apply,
   onUpdate,
 }: OneShotParams): CompiledStep {
   return compileStep({
-    step: {
-      ...step,
+    slide: {
+      ...slide,
       animations: [{ ...anim, trigger: "onEnter", delayMs: 0 }],
     },
     start,
@@ -48,13 +53,13 @@ export function compileOneShot({
   });
 }
 
-/** The deferred animations on a step for one object, in document order. */
+/** The deferred animations on a slide for one object, in document order. */
 export function deferredAnimsFor(
-  step: Step | undefined,
+  slide: Slide | undefined,
   objectId: string,
   trigger: Anim["trigger"],
 ): Anim[] {
-  return (step?.animations ?? []).filter(
+  return (slide?.animations ?? []).filter(
     (a) => a.objectId === objectId && a.trigger === trigger,
   );
 }

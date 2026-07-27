@@ -39,7 +39,7 @@ test("an internal indicator turns to follow the attack's own moving part", async
   await page.getByTestId("prop-x").fill("800");
   await page.getByTestId("prop-x").blur();
 
-  // The orb flies down over the step.
+  // The orb flies down over the slide.
   await page.getByTestId("mode-animate").click();
   await page.getByTestId("add-animation").click();
   await page.getByTestId("anim-duration").fill("2000");

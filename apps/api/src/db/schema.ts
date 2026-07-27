@@ -182,7 +182,7 @@ export const icons = sqliteTable(
 /**
  * Admin-authored encounter presets (plan §17, stage 1).
  *
- * Like `plan_data`, the preset body (background + pre-placed objects + steps)
+ * Like `plan_data`, the preset body (background + pre-placed objects + slides)
  * lives as one JSON blob in `doc`; the relational columns exist only for the
  * selector — grouping by `raid`, labelling by `name`, and an idempotent seed
  * keyed on `slug`. Rows are few, so parsing `doc` for a background preview is

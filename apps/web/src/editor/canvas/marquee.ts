@@ -1,4 +1,4 @@
-import type { PlanObject } from "@raidplan/shared";
+import type { ObjectState, PlanObject } from "@raidplan/shared";
 import type { Point } from "./coords";
 
 /**
@@ -31,9 +31,14 @@ export function normalizeRect(a: Point, b: Point): Rect {
  * The axis-aligned bounding box of an object, accounting for rotation. Konva
  * rotates a node about its own origin (its `x, y` top-left), so the four corners
  * are rotated about that point and then bounded.
+ *
+ * Takes the object's **resolved state on the current slide**, not its
+ * `base` — the sweep has to hit-test what is on screen. Reading `base` instead
+ * meant a marquee drawn on any slide but the first tested against wherever the
+ * objects had been left when they were created.
  */
-export function objectBounds(object: PlanObject): Rect {
-  const { x, y, w, h, rotation } = object.base;
+export function objectBounds(state: ObjectState): Rect {
+  const { x, y, w, h, rotation } = state;
   if (!rotation) return { x, y, width: w, height: h };
 
   const rad = (rotation * Math.PI) / 180;
@@ -82,16 +87,16 @@ export function rectsIntersect(a: Rect, b: Rect): boolean {
  * so they're selected by clicking the line, not by a sweep.
  */
 export function objectsInMarquee(
-  objects: readonly PlanObject[],
+  objects: readonly { object: PlanObject; state: ObjectState }[],
   marquee: Rect,
 ): string[] {
   return objects
     .filter(
-      (object) =>
-        object.base.visible &&
+      ({ object, state }) =>
+        state.visible &&
         !object.locked &&
         object.type !== "tether" &&
-        rectsIntersect(objectBounds(object), marquee),
+        rectsIntersect(objectBounds(state), marquee),
     )
-    .map((object) => object.id);
+    .map(({ object }) => object.id);
 }

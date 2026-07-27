@@ -18,8 +18,8 @@ import {
 } from "../../anim/stepTimeline";
 
 /**
- * One step's Gantt chart (plan §3.4 / §7). Rows are the objects that have an
- * animation on this step; each animation is a bar whose position and length come
+ * One slide's Gantt chart (plan §3.4 / §7). Rows are the objects that have an
+ * animation on this slide; each animation is a bar whose position and length come
  * from the shared {@link layoutStepTimeline} — the *same* math the player runs,
  * so a bar sits exactly where the frame will.
  *
@@ -45,36 +45,36 @@ const KIND_BG: Record<AnimKind, string> = {
   motion: "bg-sky-500/80",
 };
 
-export function TimelineChart({ stepIndex }: { stepIndex: number }) {
-  const step = useEditorStore((s) => s.steps[stepIndex]);
+export function TimelineChart({ slideIndex }: { slideIndex: number }) {
+  const slide = useEditorStore((s) => s.slides[slideIndex]);
   const objects = useEditorStore((s) => s.objects);
-  const selectStep = useEditorStore((s) => s.selectStep);
-  const currentStepIndex = useEditorStore((s) => s.currentStepIndex);
+  const selectSlide = useEditorStore((s) => s.selectSlide);
+  const currentSlideIndex = useEditorStore((s) => s.currentSlideIndex);
   // Measure a wrapper that is *always* mounted (present in both the empty and
   // populated states), never the track column itself. `useContainerSize` only
   // observes its element on mount, so a track that appears later — the instant
-  // you add the first animation to a fresh step — would never be measured, and
+  // you add the first animation to a fresh slide — would never be measured, and
   // every bar would collapse to a zero-width, undraggable stub until reload.
   const [measureRef, measured] = useContainerSize<HTMLDivElement>();
 
-  const stepName = step?.name ?? `Step ${stepIndex + 1}`;
+  const slideName = slide?.name ?? `Slide ${slideIndex + 1}`;
 
   // Layout depends only on the animation list; recompute when it changes.
   const timeline = useMemo(
-    () => layoutStepTimeline(step?.animations ?? []),
-    [step?.animations],
+    () => layoutStepTimeline(slide?.animations ?? []),
+    [slide?.animations],
   );
 
-  // Placed attacks get a row each: they occupy the step from `startMs` for as
+  // Placed attacks get a row each: they occupy the slide from `startMs` for as
   // long as their definition runs — the same `layoutStepTimeline` the player
   // uses, so a bar means the same thing whether it's an animation or an attack.
   const attackDefs = useEditorStore((s) => s.attackDefs);
   const attacks = useEditorStore((s) => s.attacks);
   const attackRows = useMemo(
     () =>
-      // Attacks live on the plan; a step's chart shows the ones it fires.
+      // Attacks live on the plan; a slide's chart shows the ones it fires.
       attacks
-        .filter((instance) => instance.stepId === step?.id)
+        .filter((instance) => instance.slideId === slide?.id)
         .map((instance) => {
           const def = attackDefs[instance.attackId];
           const naturalMs = def ? attackNaturalMs(def) : 0;
@@ -85,7 +85,7 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
             spanMs: instance.durationMs ?? naturalMs,
           };
         }),
-    [attacks, step?.id, attackDefs],
+    [attacks, slide?.id, attackDefs],
   );
 
   // Object rows in first-appearance order, so the chart reads top-to-bottom the
@@ -102,13 +102,13 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
     return order;
   }, [timeline]);
 
-  if (!step) return null;
+  if (!slide) return null;
 
-  const active = currentStepIndex === stepIndex;
+  const active = currentSlideIndex === slideIndex;
   // The track column is the measured width minus the fixed label column (there
   // is no column gap), so the scale is known even before the first row exists.
   const trackWidth = Math.max(0, measured.width - LABEL_W);
-  // An attack can outlast the step's own animations, so the ruler has to cover
+  // An attack can outlast the slide's own animations, so the ruler has to cover
   // it or its bar would run off the end.
   const contentMs = attackRows.reduce(
     (longest, row) => Math.max(longest, row.instance.startMs + row.spanMs),
@@ -118,8 +118,8 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
 
   return (
     <section
-      aria-label={`Timeline: ${stepName}`}
-      data-testid={`timeline-step-${stepIndex}`}
+      aria-label={`Timeline: ${slideName}`}
+      data-testid={`timeline-slide-${slideIndex}`}
       className={`rounded border px-2 py-1.5 ${
         active ? "border-accent/70" : "border-panelborder"
       }`}
@@ -127,13 +127,13 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
       <div className="mb-1 flex items-baseline justify-between gap-2">
         <button
           type="button"
-          onClick={() => selectStep(stepIndex)}
+          onClick={() => selectSlide(slideIndex)}
           className={`truncate text-xs font-semibold ${
             active ? "text-accent" : "text-neutral-300 hover:text-neutral-100"
           }`}
-          title="Edit this step"
+          title="Edit this slide"
         >
-          {stepName}
+          {slideName}
         </button>
         <span className="shrink-0 text-[10px] tabular-nums text-neutral-500">
           {Math.round(timeline.totalMs)}ms
@@ -141,13 +141,13 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
       </div>
 
       {/* Always mounted, so its width is known before any row appears. */}
-      <div ref={measureRef} data-testid={`timeline-track-${stepIndex}`}>
+      <div ref={measureRef} data-testid={`timeline-track-${slideIndex}`}>
         {rows.length === 0 && attackRows.length === 0 ? (
           <p
-            data-testid={`timeline-empty-${stepIndex}`}
+            data-testid={`timeline-empty-${slideIndex}`}
             className="py-1 text-xs text-neutral-600"
           >
-            No animations on this step.
+            No animations on this slide.
           </p>
         ) : (
           <div
@@ -172,7 +172,7 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
               return (
                 <ObjectRow
                   key={objectId}
-                  stepIndex={stepIndex}
+                  slideIndex={slideIndex}
                   objectId={objectId}
                   label={objectDisplayName(objects[objectId])}
                   spans={spans}
@@ -201,7 +201,7 @@ export function TimelineChart({ stepIndex }: { stepIndex: number }) {
 /**
  * A placed attack's bar, with the same two grips every animation bar has:
  *
- *  - the **body** moves the whole attack within the step (`startMs`);
+ *  - the **body** moves the whole attack within the slide (`startMs`);
  *  - the **handle** stretches it in time — the attack still plays exactly as
  *    authored, just slower or faster, because the whole bundle is scaled rather
  *    than re-timed part by part.
@@ -330,13 +330,13 @@ function AttackRow({
 }
 
 function ObjectRow({
-  stepIndex,
+  slideIndex,
   objectId,
   label,
   spans,
   pxPerMs,
 }: {
-  stepIndex: number;
+  slideIndex: number;
   objectId: string;
   label: string;
   spans: AnimSpan[];
@@ -368,7 +368,7 @@ function ObjectRow({
         {spans.map((span) => (
           <Bar
             key={span.animId}
-            stepIndex={stepIndex}
+            slideIndex={slideIndex}
             span={span}
             pxPerMs={pxPerMs}
             top={(lane.get(span.animId) ?? 0) * (LANE_H + LANE_GAP)}
@@ -380,12 +380,12 @@ function ObjectRow({
 }
 
 function Bar({
-  stepIndex,
+  slideIndex,
   span,
   pxPerMs,
   top,
 }: {
-  stepIndex: number;
+  slideIndex: number;
   span: AnimSpan;
   pxPerMs: number;
   top: number;
@@ -394,9 +394,9 @@ function Bar({
   const select = useEditorStore((s) => s.select);
 
   const setDelay = (delayMs: number) =>
-    updateAnimation(stepIndex, span.animId, { delayMs });
+    updateAnimation(slideIndex, span.animId, { delayMs });
   const setDuration = (durationMs: number) =>
-    updateAnimation(stepIndex, span.animId, { durationMs });
+    updateAnimation(slideIndex, span.animId, { durationMs });
 
   const delayW = msToPx(span.delayMs, pxPerMs);
   const bodyW = msToPx(span.spanMs, pxPerMs);

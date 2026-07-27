@@ -13,6 +13,22 @@ import {
   type Point,
 } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
+import { BASE_SIZE_ATTRS } from "./applyToStage";
+
+/**
+ * An object's size *right now*, in native pixels. `ObjectNode` stamps the size
+ * it drew at as `baseW`/`baseH` and animation expresses size as a scale on top
+ * (see `applyToStage`), so the two together are the only honest answer
+ * mid-tween.
+ */
+function liveSizeOf(node: Node): { w: number; h: number } {
+  const baseW = node.getAttr(BASE_SIZE_ATTRS.w) as number | undefined;
+  const baseH = node.getAttr(BASE_SIZE_ATTRS.h) as number | undefined;
+  return {
+    w: (baseW ?? node.width()) * node.scaleX(),
+    h: (baseH ?? node.height()) * node.scaleY(),
+  };
+}
 
 /**
  * Things that follow other things, **every frame** (plan §18.17).
@@ -116,11 +132,17 @@ export function useFollowing(stageRef: { current: Stage | null }): void {
         const node = stage.findOne(`#${object.id}`);
         if (!node) continue;
 
+        // Size comes off the node too, not the document: `object.base.w/h` is
+        // only the size the object was *created* at now that each slide carries
+        // its own, and a part being scaled by its own animation has a different
+        // one again this very frame. `ox`/`oy`/`dir` are genuinely
+        // slide-independent, so those do come from the object.
+        const size = liveSizeOf(node);
         const live = {
           x: node.x(),
           y: node.y(),
-          w: object.base.w,
-          h: object.base.h,
+          w: size.w,
+          h: size.h,
           rotation: node.rotation(),
           ox: object.base.ox,
           oy: object.base.oy,

@@ -32,7 +32,7 @@ function scaleFor(node: Node, size: number, baseAttr: string): number | null {
  * clip can't diverge from what playback shows.
  *
  * **Only the properties present in `props` are written.** Two timelines can run
- * on one object at once — a step's move and a collision's disappear — and each
+ * on one object at once — a slide's move and a collision's disappear — and each
  * must write what it animates and nothing else, or the last writer per frame
  * silently undoes the other.
  */
@@ -63,7 +63,7 @@ export function applyObjectState(
  * An object's state *right now*, read back off its Konva node.
  *
  * A triggered animation starts from where the object actually is rather than
- * snapping back to the step's start — including mid-resize, which is why `w`/`h`
+ * snapping back to the slide's start — including mid-resize, which is why `w`/`h`
  * come back through the node's scale rather than from `fallback`.
  */
 export function readObjectState(

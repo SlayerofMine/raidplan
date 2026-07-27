@@ -7,7 +7,7 @@ import { isLocalPlan, LOCAL_PLAN_ID } from "./planScope";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { SaveStatus } from "./SaveStatus";
 import { SyncedIconResolver } from "./SyncedIconResolver";
-import { StepStrip } from "./StepStrip";
+import { SlideStrip } from "./SlideStrip";
 import { TimelineDock } from "./timeline/TimelineDock";
 import { Toolbar } from "./Toolbar";
 import { useEditorHotkeys } from "./useEditorHotkeys";
@@ -19,7 +19,7 @@ import {
 
 /**
  * The five-region editor shell (plan §1.1): toolbar across the top, palette /
- * canvas / properties in the middle row, steps strip along the bottom. The grid
+ * canvas / properties in the middle row, slides strip along the bottom. The grid
  * gives the canvas all remaining space while the side panels keep a fixed width.
  */
 export function EditorLayout({ planId }: { planId: string }) {
@@ -35,7 +35,7 @@ export function EditorLayout({ planId }: { planId: string }) {
         gridTemplateAreas: `
           "toolbar toolbar toolbar"
           "palette canvas  props"
-          "steps   steps   steps"
+          "slides   slides   slides"
         `,
       }}
     >
@@ -71,8 +71,8 @@ export function EditorLayout({ planId }: { planId: string }) {
         <AnimationPanel />
         <AttacksPanel />
       </div>
-      <div style={{ gridArea: "steps" }} className="flex min-h-0 flex-col">
-        <StepStrip />
+      <div style={{ gridArea: "slides" }} className="flex min-h-0 flex-col">
+        <SlideStrip />
         <TimelineDock />
       </div>
     </div>

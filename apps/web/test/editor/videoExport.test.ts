@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Anim, Step } from "@raidplan/shared";
+import type { Anim, Slide } from "@raidplan/shared";
 import {
   collisionTailMs,
   DEFAULT_HOLD_MS,
@@ -25,76 +25,76 @@ function anim(over: Partial<Anim> = {}): Anim {
   };
 }
 
-const step = (id: string, animations: Anim[] = []): Step => ({
+const slide = (id: string, animations: Anim[] = []): Slide => ({
   id,
-  overrides: {},
+  states: {},
   animations,
 });
 
 describe("planFrames", () => {
-  it("covers a step's full playing length at the requested fps", () => {
+  it("covers a slide's full playing length at the requested fps", () => {
     // 1000ms at 10fps = 100ms per frame -> 10 intervals, 11 frames (0…1000).
-    const frames = planFrames([step("s", [anim({ durationMs: 1000 })])], {
+    const frames = planFrames([slide("s", [anim({ durationMs: 1000 })])], {
       fps: 10,
     });
     expect(frames).toHaveLength(11);
-    expect(frames[0]).toEqual({ stepIndex: 0, timeMs: 0 });
-    expect(frames.at(-1)).toEqual({ stepIndex: 0, timeMs: 1000 });
+    expect(frames[0]).toEqual({ slideIndex: 0, timeMs: 0 });
+    expect(frames.at(-1)).toEqual({ slideIndex: 0, timeMs: 1000 });
   });
 
-  it("ends on the settled state, so the last frame is the step's end", () => {
+  it("ends on the settled state, so the last frame is the slide's end", () => {
     // `holdMs: 0` isolates this from the minimum-hold rule below.
-    const frames = planFrames([step("s", [anim({ durationMs: 500 })])], {
+    const frames = planFrames([slide("s", [anim({ durationMs: 500 })])], {
       fps: 20,
       holdMs: 0,
     });
     expect(frames.at(-1)!.timeMs).toBe(500);
   });
 
-  it("holds a step that doesn't animate, rather than skipping it", () => {
+  it("holds a slide that doesn't animate, rather than skipping it", () => {
     // Otherwise a static plan would export as a zero-length file.
-    const frames = planFrames([step("static")], { fps: 10 });
+    const frames = planFrames([slide("static")], { fps: 10 });
     expect(frames.length).toBeGreaterThan(1);
     expect(frames.at(-1)!.timeMs).toBe(DEFAULT_HOLD_MS);
-    expect(frames.every((f) => f.stepIndex === 0)).toBe(true);
+    expect(frames.every((f) => f.slideIndex === 0)).toBe(true);
   });
 
-  it("holds a step whose animation is shorter than the minimum", () => {
-    const frames = planFrames([step("s", [anim({ durationMs: 100 })])], {
+  it("holds a slide whose animation is shorter than the minimum", () => {
+    const frames = planFrames([slide("s", [anim({ durationMs: 100 })])], {
       fps: 10,
       holdMs: 1000,
     });
     expect(frames.at(-1)!.timeMs).toBe(1000);
   });
 
-  it("walks every step in order, with time restarting each step", () => {
+  it("walks every slide in order, with time restarting each slide", () => {
     const frames = planFrames(
       [
-        step("a", [anim({ durationMs: 200 })]),
-        step("b", [anim({ durationMs: 200 })]),
+        slide("a", [anim({ durationMs: 200 })]),
+        slide("b", [anim({ durationMs: 200 })]),
       ],
       { fps: 10, holdMs: 0 },
     );
-    const first = frames.filter((f) => f.stepIndex === 0);
-    const second = frames.filter((f) => f.stepIndex === 1);
+    const first = frames.filter((f) => f.slideIndex === 0);
+    const second = frames.filter((f) => f.slideIndex === 1);
     expect(first.length).toBeGreaterThan(0);
     expect(second.length).toBe(first.length);
-    // Ordered, and each step's clock starts at zero.
-    expect(frames.findIndex((f) => f.stepIndex === 1)).toBe(first.length);
+    // Ordered, and each slide's clock starts at zero.
+    expect(frames.findIndex((f) => f.slideIndex === 1)).toBe(first.length);
     expect(second[0]!.timeMs).toBe(0);
   });
 
   it("honours fps", () => {
-    const at30 = planFrames([step("s", [anim({ durationMs: 1000 })])], {
+    const at30 = planFrames([slide("s", [anim({ durationMs: 1000 })])], {
       fps: 30,
     });
-    const at60 = planFrames([step("s", [anim({ durationMs: 1000 })])], {
+    const at60 = planFrames([slide("s", [anim({ durationMs: 1000 })])], {
       fps: 60,
     });
     expect(at60.length).toBeGreaterThan(at30.length);
   });
 
-  it("produces nothing for a plan with no steps", () => {
+  it("produces nothing for a plan with no slides", () => {
     expect(planFrames([])).toEqual([]);
   });
 
@@ -108,7 +108,7 @@ describe("planFrames", () => {
       durationMs: 400,
     });
     const withCollision = planFrames(
-      [step("s", [anim({ durationMs: 1000 }), collide])],
+      [slide("s", [anim({ durationMs: 1000 }), collide])],
       { fps: 10, holdMs: 0 },
     );
     expect(withCollision.at(-1)!.timeMs).toBe(1400);
@@ -117,7 +117,7 @@ describe("planFrames", () => {
   it("doesn't pad for onClick, which can't fire during an export", () => {
     const frames = planFrames(
       [
-        step("s", [
+        slide("s", [
           anim({ durationMs: 1000 }),
           anim({ id: "c", trigger: "onClick", durationMs: 400 }),
         ]),
@@ -129,10 +129,10 @@ describe("planFrames", () => {
 });
 
 describe("collisionTailMs", () => {
-  it("is the longest collision animation on the step", () => {
+  it("is the longest collision animation on the slide", () => {
     expect(
       collisionTailMs(
-        step("s", [
+        slide("s", [
           anim({ id: "a", trigger: "onCollision", durationMs: 300 }),
           anim({ id: "b", trigger: "onCollision", durationMs: 700 }),
         ]),
@@ -143,7 +143,7 @@ describe("collisionTailMs", () => {
   it("counts pulse/blink at their out-and-back length", () => {
     expect(
       collisionTailMs(
-        step("s", [
+        slide("s", [
           anim({
             trigger: "onCollision",
             kind: "emphasis",
@@ -156,8 +156,8 @@ describe("collisionTailMs", () => {
   });
 
   it("is zero without collision triggers", () => {
-    expect(collisionTailMs(step("s", [anim()]))).toBe(0);
-    expect(collisionTailMs(step("empty"))).toBe(0);
+    expect(collisionTailMs(slide("s", [anim()]))).toBe(0);
+    expect(collisionTailMs(slide("empty"))).toBe(0);
   });
 });
 
@@ -231,9 +231,9 @@ function harness(over: Partial<VideoDeps> = {}) {
 
 const canvas = {} as HTMLCanvasElement;
 const frames: Frame[] = [
-  { stepIndex: 0, timeMs: 0 },
-  { stepIndex: 0, timeMs: 100 },
-  { stepIndex: 1, timeMs: 0 },
+  { slideIndex: 0, timeMs: 0 },
+  { slideIndex: 0, timeMs: 100 },
+  { slideIndex: 1, timeMs: 0 },
 ];
 
 describe("encodePlanVideo", () => {
@@ -292,7 +292,7 @@ describe("encodePlanVideo", () => {
     const h = harness();
     await encodePlanVideo({
       frames,
-      renderFrame: (f) => (f.stepIndex === 1 ? null : canvas),
+      renderFrame: (f) => (f.slideIndex === 1 ? null : canvas),
       size: { width: 100, height: 100 },
       filename: "p.webm",
       deps: h.deps,

@@ -22,9 +22,9 @@ const round = (n: number) => Math.round(n * 100) / 100;
 export function PropertiesPanel() {
   const selectedAttackIds = useEditorStore((s) => s.selectedAttackIds);
   const selectedIds = useEditorStore((s) => s.selectedIds);
-  // `state` is what's on the canvas — the base with the current step's
+  // `state` is what's on the canvas — the base with the current slide's
   // overrides applied — not the raw base. Editing a value writes it back to
-  // whichever of the two the current step implies (see `writeOverridable`).
+  // whichever of the two the current slide implies (see `writeOverridable`).
   const { object, state } = useSoleSelection();
   const updateObject = useEditorStore((s) => s.updateObject);
   const updateStyle = useEditorStore((s) => s.updateStyle);

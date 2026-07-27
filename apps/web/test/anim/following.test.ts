@@ -22,8 +22,22 @@ import { clearHistory, useEditorStore } from "../../src/store/editorStore";
  * Moving a token and watching the cone turn is then an assertion rather than a
  * screenshot.
  */
-function fakeNode(box: { x: number; y: number; rotation?: number }) {
-  const attrs: Record<string, unknown> = { rotation: 0, ...box };
+function fakeNode(box: {
+  x: number;
+  y: number;
+  rotation?: number;
+  w?: number;
+  h?: number;
+}) {
+  const { w = 40, h = 40, ...position } = box;
+  // `baseW`/`baseH` plus a scale is how a size reaches a real node
+  // (`applyToStage`), and the follow runtime reads its size back that way.
+  const attrs: Record<string, unknown> = {
+    rotation: 0,
+    baseW: w,
+    baseH: h,
+    ...position,
+  };
   const identity = {
     copy: () => identity,
     invert: () => identity,
@@ -36,13 +50,18 @@ function fakeNode(box: { x: number; y: number; rotation?: number }) {
     x: () => attrs["x"] as number,
     y: () => attrs["y"] as number,
     rotation: () => attrs["rotation"] as number,
+    getAttr: (key: string) => attrs[key],
+    scaleX: () => (attrs["scaleX"] as number) ?? 1,
+    scaleY: () => (attrs["scaleY"] as number) ?? 1,
+    width: () => w,
+    height: () => h,
     getParent: () => parent,
     getLayer: () => ({}),
     getClientRect: () => ({
       x: attrs["x"] as number,
       y: attrs["y"] as number,
-      width: 40,
-      height: 40,
+      width: w,
+      height: h,
     }),
   };
   return node;
@@ -103,7 +122,7 @@ const plan: Plan = {
     {
       id: "i1",
       attackId: "atk",
-      stepId: "s0",
+      slideId: "s0",
       x: 0,
       y: 0,
       w: 200,
@@ -114,7 +133,7 @@ const plan: Plan = {
       args: {},
     },
   ],
-  steps: [{ id: "s0", overrides: {}, animations: [] }],
+  slides: [{ id: "s0", states: {}, animations: [] }],
   schemaVersion: SCHEMA_VERSION,
 };
 
@@ -164,12 +183,12 @@ describe("a whole attack that follows the board", () => {
     expect(group.attrs["y"]).toBeCloseTo(520);
   });
 
-  it("re-aims when the target moves — every frame, not per step", async () => {
+  it("re-aims when the target moves — every frame, not per slide", async () => {
     renderHook(() => useFollowing(ref));
     await tick();
     expect(group.attrs["rotation"]).toBeCloseTo(0);
 
-    // Nothing re-rendered and no step changed: the token simply moved, as it
+    // Nothing re-rendered and no slide changed: the token simply moved, as it
     // does mid-drag and mid-tween.
     tank.setAttrs({ x: 500, y: 900 });
     await tick();
@@ -234,7 +253,9 @@ describe("an ordinary object that follows another", () => {
       .loadPlan({ ...plan, attacks: [], objects: [indicator, orb] });
     clearHistory();
 
-    const indicatorNode = fakeNode({ x: 100, y: 100 });
+    // The node's size must match the document's: the follow runtime reads its
+    // size off the node now that a slide, not `base`, says how big a thing is.
+    const indicatorNode = fakeNode({ x: 100, y: 100, w: 80, h: 20 });
     const orbNode = fakeNode({ x: 400, y: 100 });
     nodes = { indicator: indicatorNode, orb: orbNode };
     ref = { current: stage() };

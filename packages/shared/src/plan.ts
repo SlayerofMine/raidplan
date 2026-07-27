@@ -17,15 +17,35 @@ import { ObjectStyleSchema } from "./mechanics.js";
  * the TypeScript types can never drift apart.
  */
 
-/** Current on-disk schema version. Bump when a migration is required. */
-export const SCHEMA_VERSION = 3;
+/**
+ * Current on-disk schema version. Bump when a migration is required.
+ *
+ * **4** replaced the `base` + cascading sparse `steps` model with **slides**:
+ * every slide carries a *complete* state for every object, so editing one slide
+ * can never change another. Documents written at 3 or below do not parse.
+ */
+export const SCHEMA_VERSION = 4;
 
 /** Opacity is always normalised to 0..1. */
 const OpacitySchema = z.number().min(0).max(1);
 
 /**
- * The base (step-independent) appearance of an object. This is its state
- * before any step overrides are applied — i.e. the settled state of step -1.
+ * An object's **slide-independent** properties, plus the transform it was
+ * created with.
+ *
+ * Two different lifetimes live here, and the split matters:
+ *
+ *  - `z`, `tint`, `name`, `label`, `ox`, `oy`, `dir` are properties of the
+ *    object itself. They are the same on every slide and are read live.
+ *  - `x`, `y`, `w`, `h`, `rotation`, `opacity`, `visible` are the **creation
+ *    seed** only. Since schema 4 every slide carries its own complete
+ *    {@link SlideStateSchema}, so nothing renders from these — they are read
+ *    when a new slide entry is minted and by {@link ../resolve.js normalizeSlides},
+ *    and are otherwise stale. Read the slide, never the seed.
+ *
+ * They stay on one schema because an {@link ../attack.js AttackDef} is genuinely
+ * two-state (a start shape and an end shape) and still uses `base` + a single
+ * `overrides` map as its live model.
  */
 export const ObjectBaseSchema = TransformSchema.extend({
   opacity: OpacitySchema,
@@ -91,12 +111,31 @@ export const AnimParamsSchema = z.object({
   toX: z.number().finite().optional(),
   toY: z.number().finite().optional(),
   toOpacity: OpacitySchema.optional(),
-  /** Waypoints for `motion` effects (GSAP MotionPathPlugin). */
+  /**
+   * **Interior** waypoints for a `move`, as absolute plan-pixel positions of the
+   * object's *centre* — the route it takes rather than where it ends up.
+   *
+   * The endpoints are deliberately **not** stored. The route always starts at
+   * the object's state on the previous slide and ends at its state on this one
+   * (or at `toX`/`toY`), so the path cannot desync from the slides: dragging the
+   * destination handle *is* editing this slide's state, and there is no second
+   * copy of it to fall out of step. Absent or empty means a straight line, which
+   * is exactly what a `move` did before paths existed.
+   *
+   * Centres rather than top-lefts because that is what a drawn route means; the
+   * conversion to the document's top-left `x`/`y` happens at playback, using the
+   * object's size at the start of the move (see `motionPath.ts`).
+   */
   path: z.array(PointSchema).optional(),
+  /**
+   * How much the route rounds off at its waypoints: `0` (the default) is a
+   * polyline with hard corners, `1` a smooth curve passing through every one.
+   */
+  curve: z.number().min(0).max(1).optional(),
 });
 export type AnimParams = z.infer<typeof AnimParamsSchema>;
 
-/** One animation attached to one object within a step. */
+/** One animation attached to one object within a slide. */
 export const AnimSchema = z.object({
   id: z.string().min(1),
   objectId: z.string().min(1),
@@ -130,13 +169,13 @@ export const AttackInstanceSchema = z.object({
   /** Which attack definition to expand (resolved to the current version). */
   attackId: z.string().min(1),
   /**
-   * The step this attack fires on. *Where* an attack sits is a property of the
-   * board and belongs to the plan; *when* it goes off is a property of one step
-   * — so an attack is placed from the base layout like any other object, and
-   * carries the id of the step that plays it. By id, not index, so reordering
-   * steps can't shuffle the encounter's timing.
+   * The slide this attack fires on. *Where* an attack sits is a property of the
+   * board and belongs to the plan; *when* it goes off is a property of one slide
+   * — so an attack is placed like any other object, and carries the id of the
+   * slide that plays it. By id, not index, so reordering slides can't shuffle
+   * the encounter's timing.
    */
-  stepId: z.string().min(1),
+  slideId: z.string().min(1),
   /**
    * The rectangle the attack is drawn into, in the plan's native pixels —
    * top-left plus size, like every other object. The def's unit space (-1..1) is
@@ -191,7 +230,7 @@ export const AttackInstanceSchema = z.object({
    * to want, and losing its placement to do so isn't.
    */
   visible: z.boolean().optional(),
-  /** Delay from the step's start before the attack begins. */
+  /** Delay from the slide's start before the attack begins. */
   startMs: z.number().finite().nonnegative().default(0),
   /**
    * How long the whole attack takes, in ms. Absent means "however long the
@@ -224,9 +263,14 @@ export const AttackInstanceSchema = z.object({
 export type AttackInstance = z.infer<typeof AttackInstanceSchema>;
 
 /**
- * The end-state delta applied to a single object when a step is "settled".
- * Every field is optional: absent fields inherit the previous step's value
- * (see {@link ./resolve.ts}). This is the "PowerPoint slide" the author edits.
+ * The end-state delta of a single object inside an **attack definition**, whose
+ * two-state model (a `base` shape and one set of overrides reached by its
+ * animations) predates slides and is deliberately kept — see
+ * {@link ./attack.js AttackDef}. Every field is optional; absent means "the
+ * definition's base value".
+ *
+ * Plans no longer use this. A plan's slides each carry a complete
+ * {@link SlideStateSchema}, precisely so that nothing inherits along a chain.
  */
 export const StepOverrideSchema = z
   .object({
@@ -241,16 +285,44 @@ export const StepOverrideSchema = z
   .partial();
 export type StepOverride = z.infer<typeof StepOverrideSchema>;
 
-/** An ordered "slide": settled end-state deltas plus the animations to reach them. */
+/**
+ * One object's **complete** visual state on one slide.
+ *
+ * Dense on purpose: every field is required, and a slide holds one of these for
+ * every object in the plan. That density is the whole point of the model — with
+ * nothing inherited from a previous slide there is no cascade, so editing slide
+ * 2 cannot move anything on slide 3. Structurally identical to
+ * {@link ./resolve.js ObjectState}, which is what the renderers consume.
+ */
+export const SlideStateSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  w: z.number().finite().nonnegative(),
+  h: z.number().finite().nonnegative(),
+  rotation: z.number().finite(),
+  opacity: OpacitySchema,
+  visible: z.boolean(),
+});
+export type SlideState = z.infer<typeof SlideStateSchema>;
+
+/**
+ * One slide: a complete layout, plus the animations that morph the *previous*
+ * slide's layout into it.
+ *
+ * Slide 0 is the opening layout and has nothing before it, so it is static —
+ * entrances and emphasis play, but a `move` has nowhere to move from (see
+ * {@link ./resolve.js resolveSlideTransition}).
+ */
 export const StepSchema = z.object({
   id: z.string().min(1),
   name: z.string().optional(),
-  overrides: z.record(z.string().min(1), StepOverrideSchema),
+  /** objectId → its complete state on this slide. */
+  states: z.record(z.string().min(1), SlideStateSchema),
   animations: z.array(AnimSchema),
-  /** Optional autoplay dwell before advancing to the next step. */
+  /** Optional autoplay dwell before advancing to the next slide. */
   autoAdvanceMs: z.number().finite().nonnegative().optional(),
 });
-export type Step = z.infer<typeof StepSchema>;
+export type Slide = z.infer<typeof StepSchema>;
 
 /** The background map the plan is drawn on, in native pixel dimensions. */
 export const BackgroundSchema = z.object({
@@ -273,19 +345,31 @@ export const PlanSchema = z.object({
    */
   encounterId: z.string().min(1).optional(),
   background: BackgroundSchema,
-  /** Base object set — objects exist across all steps. */
+  /**
+   * The object set. Objects are plan-level and exist on every slide — a slide
+   * says where an object *is*, never whether it exists.
+   */
   objects: z.array(PlanObjectSchema),
   /**
    * Pre-designed attacks placed on the board (plan §17). Like objects they live
-   * on the plan, not inside a slide; each names the step it fires on.
+   * on the plan, not inside a slide; each names the slide it fires on.
    * `expandPlan` stamps them into concrete objects and animations at render time.
    */
   attacks: z.array(AttackInstanceSchema).default([]),
-  /** Ordered slides. */
-  steps: z.array(StepSchema),
+  /**
+   * Ordered slides — **always at least one**. A plan with no slides has no
+   * layout to show, and the old "base layout, plus zero or more slides" split is
+   * exactly the thing slides replaced.
+   */
+  slides: z.array(StepSchema).min(1),
   schemaVersion: z.number().int().positive(),
 });
 export type Plan = z.infer<typeof PlanSchema>;
+
+/** The opening slide every plan starts with — an empty board, nothing animating. */
+export function makeFirstSlide(): Slide {
+  return { id: "slide-1", name: "Slide 1", states: {}, animations: [] };
+}
 
 /**
  * Build an empty, valid plan. Useful for "new plan" flows and as a fixture.
@@ -306,7 +390,9 @@ export function makeEmptyPlan(params: {
     background: params.background,
     objects: [],
     attacks: [],
-    steps: [],
+    // Never empty: `PlanSchema` requires a slide, because a plan with no layout
+    // is not a thing the editor can put a cursor in.
+    slides: [makeFirstSlide()],
     schemaVersion: SCHEMA_VERSION,
   };
 }

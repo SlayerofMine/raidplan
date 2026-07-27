@@ -4,7 +4,11 @@ import {
   type Anim,
   type Plan,
   type PlanObject,
+  type Slide,
+  type SlideState,
+  type StepOverride,
 } from "./plan.js";
+import { seedState } from "./resolve.js";
 import type { ObjectStyle } from "./mechanics.js";
 
 /**
@@ -22,6 +26,63 @@ import type { ObjectStyle } from "./mechanics.js";
  */
 
 const BOARD = { assetId: "arena", width: 1600, height: 900 } as const;
+
+/** A slide as it is *written* here: only what changes from the slide before. */
+interface AuthoredSlide {
+  id: string;
+  name: string;
+  changes?: Record<string, StepOverride>;
+  animations: Anim[];
+  autoAdvanceMs?: number;
+}
+
+/**
+ * Expand authored slides into the dense states the document actually stores.
+ *
+ * Slides are dense so that nothing cascades, but a *fixture* is far easier to
+ * read — and to keep correct as objects are added — when each slide says only
+ * what it changes. So the cascade lives here, at authoring time, and what comes
+ * out the other side is a plain list of complete layouts.
+ *
+ * The opening layout comes first and animates nothing: slide 0 has no slide
+ * before it to move from, so every demo transition starts on slide 1.
+ */
+function slidesFrom(
+  objects: readonly PlanObject[],
+  authored: readonly AuthoredSlide[],
+): Slide[] {
+  let previous: Record<string, SlideState> = {};
+  for (const object of objects) previous[object.id] = seedState(object);
+
+  const slides: Slide[] = [
+    {
+      id: "slide-open",
+      name: "0 · Opening layout",
+      states: previous,
+      animations: [],
+    },
+  ];
+  for (const slide of authored) {
+    const states: Record<string, SlideState> = {};
+    for (const object of objects) {
+      states[object.id] = {
+        ...previous[object.id]!,
+        ...slide.changes?.[object.id],
+      };
+    }
+    previous = states;
+    slides.push({
+      id: slide.id,
+      name: slide.name,
+      states,
+      animations: slide.animations,
+      ...(slide.autoAdvanceMs !== undefined
+        ? { autoAdvanceMs: slide.autoAdvanceMs }
+        : {}),
+    });
+  }
+  return slides;
+}
 
 /** Sizes that read well on the board, per shape. */
 const SHAPE_SIZE: Record<string, { w: number; h: number }> = {
@@ -187,7 +248,7 @@ export function buildDemoPlan(): Plan {
     );
   });
 
-  // --- Row 3: one token per animation effect, animated with it in step 1 --
+  // --- Row 3: one token per animation effect, animated with it on slide 1 --
   const EFFECT_ICON: Record<AnimEffect, string> = {
     appear: "class-mage",
     disappear: "class-warlock",
@@ -249,7 +310,7 @@ export function buildDemoPlan(): Plan {
       name: "DPS",
       label: "D1",
     }),
-    // The runner crosses the orb during step 3 — that's the collision demo.
+    // The runner crosses the orb during slide 3 — that's the collision demo.
     object({
       id: "tok-runner",
       type: "token",
@@ -324,9 +385,9 @@ export function buildDemoPlan(): Plan {
     }),
   );
 
-  // --- Steps --------------------------------------------------------------
+  // --- Slides --------------------------------------------------------------
 
-  /** Step 1 — every effect at once, staggered so you can watch them land. */
+  /** Slide 1 — every effect at once, staggered so you can watch them land. */
   const showcase: Anim[] = ANIM_EFFECTS.map((effect, i) =>
     anim({
       id: `a-fx-${effect}`,
@@ -348,22 +409,22 @@ export function buildDemoPlan(): Plan {
     background: { ...BOARD },
     objects,
     attacks: [],
-    steps: [
+    slides: slidesFrom(objects, [
       {
-        id: "step-effects",
+        id: "slide-effects",
         name: "1 · Every effect",
         // `move` and `scale` need an end state to travel to.
-        overrides: {
+        changes: {
           "fx-move": { x: 70 + 4 * 120, y: 580 },
           "fx-scale": { w: TOKEN * 1.8, h: TOKEN * 1.8 },
         },
         animations: showcase,
       },
       {
-        id: "step-chaining",
+        id: "slide-chaining",
         name: "2 · Trigger chaining",
         // The three roles walk right; watch how the triggers sequence them.
-        overrides: {
+        changes: {
           "tok-tank": { x: 620 },
           "tok-healer": { x: 620 },
           "tok-dps": { x: 700 },
@@ -396,10 +457,10 @@ export function buildDemoPlan(): Plan {
         ],
       },
       {
-        id: "step-collision",
+        id: "slide-collision",
         name: "3 · Collision pickup",
         // The runner crosses the orb's box on the way right.
-        overrides: { "tok-runner": { x: 1300 } },
+        changes: { "tok-runner": { x: 1300 } },
         animations: [
           anim({
             id: "a-run",
@@ -423,9 +484,8 @@ export function buildDemoPlan(): Plan {
         ],
       },
       {
-        id: "step-click",
+        id: "slide-click",
         name: "4 · Click trigger",
-        overrides: {},
         animations: [
           anim({
             id: "a-click",
@@ -446,7 +506,7 @@ export function buildDemoPlan(): Plan {
         ],
         autoAdvanceMs: 3000,
       },
-    ],
+    ]),
     schemaVersion: SCHEMA_VERSION,
   };
 

@@ -49,7 +49,7 @@ test("the WoW icon tab mounts and degrades gracefully with no catalog", async ({
   ).toBeVisible();
 });
 
-test("exports the current step as a PNG download", async ({ page }) => {
+test("exports the current slide as a PNG download", async ({ page }) => {
   await page.goto("/plan/local/edit");
   // Put something on the board so the capture isn't an empty floor.
   await page
@@ -61,7 +61,7 @@ test("exports the current step as a PNG download", async ({ page }) => {
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Export PNG" }).click(),
   ]);
-  expect(download.suggestedFilename()).toMatch(/-base\.png$/);
+  expect(download.suggestedFilename()).toMatch(/-slide-1\.png$/);
 });
 
 test("copy/paste, duplicate and select-all work from the keyboard", async ({

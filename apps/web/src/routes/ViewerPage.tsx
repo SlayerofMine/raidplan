@@ -33,7 +33,7 @@ export function ViewerPage() {
   const [load, setLoad] = useState<LoadState>("loading");
 
   const title = useEditorStore((s) => s.title);
-  const steps = useEditorStore((s) => s.steps);
+  const slides = useEditorStore((s) => s.slides);
   const playback = usePlayback(stageRef);
   // Whatever follows something else — a whole attack tracking the boss, one of
   // its parts tracking the orb — is re-placed every frame, after the tweens
@@ -77,7 +77,7 @@ export function ViewerPage() {
     };
   }, [slug]);
 
-  // Keyboard transport: ←/→ steps, space play/pause (plan §7).
+  // Keyboard transport: ←/→ slides, space play/pause (plan §7).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isEditableTarget(e.target)) return;
@@ -99,8 +99,8 @@ export function ViewerPage() {
     else void el.requestFullscreen?.();
   };
 
-  const stepName =
-    steps[playback.stepIndex]?.name ?? `Step ${playback.stepIndex + 1}`;
+  const slideName =
+    slides[playback.slideIndex]?.name ?? `Slide ${playback.slideIndex + 1}`;
 
   return (
     <div
@@ -135,10 +135,6 @@ export function ViewerPage() {
           <p data-testid="viewer-missing" className="p-8 text-neutral-500">
             This plan doesn&apos;t exist, or isn&apos;t shared with you.
           </p>
-        ) : load === "ready" && steps.length === 0 ? (
-          <p data-testid="viewer-empty" className="p-8 text-neutral-500">
-            This plan has no steps yet. Add some in the editor.
-          </p>
         ) : (
           <ViewerStage
             stageRef={stageRef}
@@ -151,7 +147,7 @@ export function ViewerPage() {
       <PlaybackControls
         playback={playback}
         onFullscreen={toggleFullscreen}
-        stepName={stepName}
+        slideName={slideName}
       />
     </div>
   );

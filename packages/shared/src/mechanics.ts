@@ -106,10 +106,10 @@ function starPoints(
   innerRatio: number,
 ): number[] {
   const out: number[] = [];
-  const step = Math.PI / points;
+  const slide = Math.PI / points;
   for (let i = 0; i < points * 2; i++) {
     const r = i % 2 === 0 ? 1 : innerRatio;
-    const a = -Math.PI / 2 + i * step;
+    const a = -Math.PI / 2 + i * slide;
     out.push(cx + Math.cos(a) * rx * r, cy + Math.sin(a) * ry * r);
   }
   return out;

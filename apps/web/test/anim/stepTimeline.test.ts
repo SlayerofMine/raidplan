@@ -5,7 +5,7 @@ import {
   type Anim,
   type ObjectState,
   type ResolvedStates,
-  type Step,
+  type Slide,
 } from "@raidplan/shared";
 import { compileStep } from "../../src/anim/compileStep";
 import {
@@ -53,9 +53,9 @@ describe("layoutStepTimeline — matches the compiled GSAP timeline", () => {
     const states: ResolvedStates = Object.fromEntries(
       ids.map((id) => [id, state()]),
     );
-    const step: Step = { id: "s", overrides: {}, animations };
+    const slide: Slide = { id: "s", states: {}, animations };
     const { timeline } = compileStep({
-      step,
+      slide,
       start: states,
       end: states,
       apply: () => {},
@@ -193,7 +193,7 @@ describe("pixel <-> millisecond helpers", () => {
     expect(dragValueMs(500, -9999, pxPerMs, 50)).toBe(50);
   });
 
-  it("nudgeValueMs steps by whole grid increments and floors", () => {
+  it("nudgeValueMs slides by whole grid increments and floors", () => {
     expect(nudgeValueMs(200, 1)).toBe(250);
     expect(nudgeValueMs(200, -1)).toBe(150);
     expect(nudgeValueMs(0, -1, 0)).toBe(0);

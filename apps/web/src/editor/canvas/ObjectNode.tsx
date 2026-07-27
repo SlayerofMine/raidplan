@@ -27,7 +27,7 @@ export const ObjectNode = memo(function ObjectNode({
   draggable: boolean;
 }) {
   const object = useEditorStore((s) => s.objects[objectId]);
-  // What to draw = base + the current step's overrides (plan §5). `useShallow`
+  // What to draw = base + the current slide's overrides (plan §5). `useShallow`
   // is required: the selector builds a fresh state object every call.
   const state = useEditorStore(
     useShallow((s) => selectObjectState(s, objectId)),
@@ -50,7 +50,7 @@ export const ObjectNode = memo(function ObjectNode({
   if (!object || !state) return null;
   // A tether has no transform of its own — it's drawn from its endpoints.
   if (object.type === "tether") return <TetherNode objectId={objectId} />;
-  // Transforms come from the resolved step state; tint/label are step-independent.
+  // Transforms come from the resolved slide state; tint/label are slide-independent.
   const { x, y, w, h, rotation, opacity } = state;
   const { tint, label } = object.base;
   const colour = tint ?? DEFAULT_TINT;
@@ -153,13 +153,13 @@ export const ObjectNode = memo(function ObjectNode({
       scaleX={1}
       scaleY={1}
       // Hidden objects keep their node rather than unmounting: playback drives
-      // Konva by id, so an object that starts a step invisible — every attack
+      // Konva by id, so an object that starts a slide invisible — every attack
       // part does (plan §17) — must already be there for an entrance effect to
       // reveal. Konva skips invisible nodes when drawing and hit-testing, so
       // this costs nothing on screen.
       visible={state.visible}
       draggable={draggable && !object.locked}
-      // Selection is an *editor* concern. The viewer enables listening on steps
+      // Selection is an *editor* concern. The viewer enables listening on slides
       // with onClick animations, and must not mutate the editor's selection.
       onMouseDown={draggable ? handleMouseDown : undefined}
       onTap={draggable ? () => select([objectId]) : undefined}

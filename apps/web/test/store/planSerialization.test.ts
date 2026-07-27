@@ -47,7 +47,34 @@ function plan(): Plan {
       },
     ],
     attacks: [],
-    steps: [],
+    // A plan always has at least one slide, and slides are dense — every object
+    // has a state on every one of them.
+    slides: [
+      {
+        id: "s1",
+        states: {
+          a: {
+            x: 1,
+            y: 2,
+            w: 64,
+            h: 64,
+            rotation: 0,
+            opacity: 1,
+            visible: true,
+          },
+          b: {
+            x: 3,
+            y: 4,
+            w: 100,
+            h: 100,
+            rotation: 45,
+            opacity: 0.5,
+            visible: true,
+          },
+        },
+        animations: [],
+      },
+    ],
     schemaVersion: SCHEMA_VERSION,
   };
 }
@@ -85,10 +112,21 @@ describe("plan serialization", () => {
     expect(PlanSchema.safeParse(toPlan(fromPlan(plan()))).success).toBe(true);
   });
 
-  it("carries steps through untouched (Phase 3 forward-compat)", () => {
-    const withStep = plan();
-    withStep.steps = [{ id: "s1", overrides: {}, animations: [] }];
-    expect(toPlan(fromPlan(withStep)).steps).toEqual(withStep.steps);
+  it("carries slides through untouched when they're already dense", () => {
+    const p = plan();
+    expect(toPlan(fromPlan(p)).slides).toEqual(p.slides);
+  });
+
+  it("normalises slides on the way in, so a sparse document loads dense", () => {
+    // `fromPlan` is where a document from outside the store — a load, an
+    // import, a stale autosave — becomes one the density invariant holds for.
+    const sparse = plan();
+    sparse.slides = [{ id: "s1", states: {}, animations: [] }];
+    const doc = fromPlan(sparse);
+    // Filled from each object's creation transform, since there's no slide
+    // before this one to inherit from.
+    expect(doc.slides[0]!.states["a"]).toMatchObject({ x: 1, y: 2 });
+    expect(doc.slides[0]!.states["b"]).toMatchObject({ x: 3, y: 4 });
   });
 });
 

@@ -1,4 +1,9 @@
-import { PlanSchema, type Plan } from "@raidplan/shared";
+import {
+  normalizeSlides,
+  PlanSchema,
+  SCHEMA_VERSION,
+  type Plan,
+} from "@raidplan/shared";
 
 /**
  * Import/export of `.json` plan files (plan §2.8). Parsing is *pure* and
@@ -28,9 +33,26 @@ export function parsePlanJson(text: string): ImportResult {
   }
   const parsed = PlanSchema.safeParse(json);
   if (!parsed.success) {
+    // Schema 4 replaced steps with slides and does not read older files, so
+    // say which problem it is — "not a plan" sends someone hunting for a typo
+    // in a file that is perfectly good, only older than the app.
+    const version = (json as { schemaVersion?: unknown } | null)?.schemaVersion;
+    if (typeof version === "number" && version < SCHEMA_VERSION) {
+      return {
+        ok: false,
+        error: `That plan was saved in an older format (v${version}) and can't be opened.`,
+      };
+    }
     return { ok: false, error: "That file isn't a valid RaidPlans plan." };
   }
-  return { ok: true, plan: parsed.data };
+  // An imported file is the least trustworthy source of slides there is.
+  return {
+    ok: true,
+    plan: {
+      ...parsed.data,
+      slides: normalizeSlides(parsed.data.objects, parsed.data.slides),
+    },
+  };
 }
 
 /** Serialize a plan to the exact bytes written to disk. */

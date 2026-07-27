@@ -54,7 +54,7 @@ export function OriginHandle() {
   /**
    * Live state of an origin drag, kept off React so a 60fps gesture never
    * re-renders on its own account. Holds where the drag began so the whole
-   * gesture can be rewound and re-applied as a *single* undo step, and — when
+   * gesture can be rewound and re-applied as a *single* undo slide, and — when
    * pinned — the anchor the crosshair is locked to.
    */
   const drag = useRef<{
@@ -158,7 +158,7 @@ export function OriginHandle() {
   const pinned = Boolean(object.follow?.pin);
 
   /**
-   * Put the origin at fraction `ox,oy` of the box, as one undoable step.
+   * Put the origin at fraction `ox,oy` of the box, as one undoable slide.
    *
    * On a free object this just moves the origin — a cone's apex belongs off the
    * shape, so the crosshair follows the cursor wherever it goes. On a **pinned**
@@ -179,7 +179,7 @@ export function OriginHandle() {
   /**
    * Start of a drag. We stop recording history for the duration (a drag is one
    * gesture, not fifty edits) and snapshot where it began, so the move can be
-   * rewound and committed as a single step when it ends.
+   * rewound and committed as a single slide when it ends.
    */
   const startOrigin = (e: KonvaEventObject<DragEvent>) => {
     temporalStore.getState().pause();
@@ -224,7 +224,7 @@ export function OriginHandle() {
   };
 
   /**
-   * End of a drag: fold the whole gesture into one undo step. Rewind to where
+   * End of a drag: fold the whole gesture into one undo slide. Rewind to where
    * it began while still untracked, resume recording, then apply the final
    * placement once — so undo takes back the drag in a single press, not frame
    * by frame. React batches the two writes, so nothing flickers between them.

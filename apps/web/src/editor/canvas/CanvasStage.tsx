@@ -11,7 +11,7 @@ import { Layer, Line, Image as KonvaImage, Rect, Stage } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import type { Stage as StageNode } from "konva/lib/Stage";
 import type { PlanObject, ShapeKind } from "@raidplan/shared";
-import { getBackgroundSrc } from "@raidplan/shared";
+import { getBackgroundSrc, resolveObjectState } from "@raidplan/shared";
 import { useFollowing } from "../../anim/useFollowing";
 import { boardStack, useEditorStore } from "../../store/editorStore";
 import { selectSelectionSizes } from "../../store/selectors";
@@ -29,6 +29,7 @@ import {
 } from "./marquee";
 import { PlacedAttackNode } from "./AttackPreviewLayer";
 import { ObjectNode } from "./ObjectNode";
+import { MotionPathLayer } from "./MotionPathLayer";
 import { OriginHandle } from "./OriginHandle";
 import { SelectionTransformer } from "./SelectionTransformer";
 import { setStageNode } from "./stageHandle";
@@ -182,10 +183,17 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
       return;
     }
 
-    const { objects, objectIds, selectedIds } = useEditorStore.getState();
+    const { objects, objectIds, selectedIds, slides, currentSlideIndex } =
+      useEditorStore.getState();
     const ordered = objectIds
       .map((id) => objects[id])
-      .filter((o): o is PlanObject => o !== undefined);
+      .filter((o): o is PlanObject => o !== undefined)
+      // Sweep against where things are on *this* slide, which is the only place
+      // the user can see them.
+      .map((object) => ({
+        object,
+        state: resolveObjectState(object, slides, currentSlideIndex),
+      }));
     const swept = objectsInMarquee(ordered, rect);
 
     select(
@@ -318,6 +326,7 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
             objectIds={objectIds}
             selectionSizes={selectionSizes}
           />
+          <MotionPathLayer />
           <OriginHandle />
         </Layer>
       </Stage>

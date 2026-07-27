@@ -5,7 +5,7 @@ import {
   effectsForKind,
   isInstantEffect,
 } from "../anim/effectChoices";
-import { BASE_STEP_INDEX, useEditorStore } from "../store/editorStore";
+import { useEditorStore } from "../store/editorStore";
 import { objectDisplayName } from "./objectName";
 
 /** GSAP eases offered in the picker (plan §7: easing is a GSAP ease name). */
@@ -22,7 +22,7 @@ const EASINGS = [
 
 /**
  * Animation authoring for the **selection** (plan §3.4): pick kind → effect →
- * trigger, then delay/duration/easing. Animations belong to a *step*, so the
+ * trigger, then delay/duration/easing. Animations belong to a *slide*, so the
  * panel is inert on the Base layout.
  *
  * Objects doing **the same thing** share one row: animating a selection gives
@@ -32,32 +32,23 @@ const EASINGS = [
  * happens naturally when you select a single object and change just that one.
  *
  * It shows only what the selected objects do, because the Timeline below already
- * shows the step as a whole. That split is the same one the rest of the editor
+ * shows the slide as a whole. That split is the same one the rest of the editor
  * makes: the properties column inspects what you picked, the timeline is the
- * overview — and a step with thirty animations is unreadable as a list of
+ * overview — and a slide with thirty animations is unreadable as a list of
  * dropdowns anyway. Clicking a bar in the timeline selects its object, so the
  * two halves navigate to each other.
  */
 export function AnimationPanel() {
-  const currentStepIndex = useEditorStore((s) => s.currentStepIndex);
-  const step = useEditorStore((s) => s.steps[s.currentStepIndex]);
+  const currentSlideIndex = useEditorStore((s) => s.currentSlideIndex);
+  const slide = useEditorStore((s) => s.slides[s.currentSlideIndex]);
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const animateSelection = useEditorStore((s) => s.animateSelection);
 
-  if (currentStepIndex === BASE_STEP_INDEX) {
-    return (
-      <Section>
-        <p data-testid="anim-base-hint" className="text-sm text-neutral-500">
-          Animations belong to a step. Select or add one below.
-        </p>
-      </Section>
-    );
-  }
-  if (!step) return null;
+  if (!slide) return null;
 
   const count = selectedIds.length;
-  const mine = step.animations.filter((a) => selectedIds.includes(a.objectId));
-  const elsewhere = step.animations.length - mine.length;
+  const mine = slide.animations.filter((a) => selectedIds.includes(a.objectId));
+  const elsewhere = slide.animations.length - mine.length;
   const rows = groupAnimations(mine);
 
   return (
@@ -71,7 +62,7 @@ export function AnimationPanel() {
             ? "Select something to animate"
             : "Give each selected object the same animation"
         }
-        onClick={() => animateSelection(currentStepIndex)}
+        onClick={() => animateSelection(currentSlideIndex)}
         className="w-full rounded border border-panelborder py-1 text-sm hover:border-accent disabled:opacity-40"
       >
         {count > 1 ? `+ Animate ${count} objects` : "+ Animate selection"}
@@ -79,12 +70,12 @@ export function AnimationPanel() {
 
       {selectedIds.length === 0 ? (
         <p data-testid="anim-no-selection" className="text-sm text-neutral-500">
-          Select an object to see what it does on this step. The timeline shows
-          the whole step.
+          Select an object to see what it does on this slide. The timeline shows
+          the whole slide.
         </p>
       ) : mine.length === 0 ? (
         <p data-testid="anim-empty" className="text-sm text-neutral-500">
-          Nothing animates the selection on this step yet.
+          Nothing animates the selection on this slide yet.
         </p>
       ) : (
         <ul className="flex flex-col gap-3" data-testid="anim-list">
@@ -92,7 +83,7 @@ export function AnimationPanel() {
             <AnimationRow
               key={row[0]!.id}
               anims={row}
-              stepIndex={currentStepIndex}
+              slideIndex={currentSlideIndex}
             />
           ))}
         </ul>
@@ -100,7 +91,7 @@ export function AnimationPanel() {
 
       {elsewhere > 0 && (
         <p data-testid="anim-elsewhere" className="text-xs text-neutral-600">
-          {elsewhere} more on this step, on other objects — see the timeline.
+          {elsewhere} more on this slide, on other objects — see the timeline.
         </p>
       )}
     </Section>
@@ -157,10 +148,10 @@ function groupAnimations(animations: readonly Anim[]): Anim[][] {
 
 function AnimationRow({
   anims,
-  stepIndex,
+  slideIndex,
 }: {
   anims: Anim[];
-  stepIndex: number;
+  slideIndex: number;
 }) {
   const anim = anims[0]!;
   const objects = useEditorStore((s) => s.objects);
@@ -176,7 +167,7 @@ function AnimationRow({
       : `${objectIdsHere.length} objects`;
 
   const patch = (p: Partial<Omit<Anim, "id">>) =>
-    updateAnimations(stepIndex, ids, p);
+    updateAnimations(slideIndex, ids, p);
 
   return (
     <li
@@ -200,7 +191,7 @@ function AnimationRow({
         <button
           type="button"
           aria-label="Delete animation"
-          onClick={() => deleteAnimations(stepIndex, ids)}
+          onClick={() => deleteAnimations(slideIndex, ids)}
           className="text-xs text-neutral-500 hover:text-accent"
         >
           ×
@@ -243,6 +234,7 @@ function AnimationRow({
           onChange={patch}
         />
       )}
+      {anim.effect === "move" && <RouteRow anim={anim} onChange={patch} />}
       {/* An instant effect ignores both, so it isn't offered either. */}
       {!isInstantEffect(anim.effect) && (
         <Picker
@@ -272,6 +264,61 @@ function AnimationRow({
         />
       )}
     </li>
+  );
+}
+
+/**
+ * The shape of a `move`'s route (plan §7 "Motion paths").
+ *
+ * The waypoints themselves are dragged on the canvas, where they mean something
+ * — this only carries the two things a route needs that aren't a position: how
+ * much it rounds off at the corners, and a way to be rid of it. A straight move
+ * has no route and shows nothing but the hint.
+ */
+function RouteRow({
+  anim,
+  onChange,
+}: {
+  anim: Anim;
+  onChange: (patch: Partial<Omit<Anim, "id">>) => void;
+}) {
+  const waypoints = anim.params?.path ?? [];
+  if (waypoints.length === 0) {
+    return (
+      <p data-testid="anim-route-hint" className="text-xs text-neutral-500">
+        Straight line. Double-click the route on the board to bend it.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="flex items-center justify-between gap-2 text-sm">
+        <span className="text-neutral-500">Curve</span>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          data-testid="anim-curve"
+          value={anim.params?.curve ?? 0}
+          onChange={(e) =>
+            onChange({
+              params: { ...anim.params, curve: Number(e.target.value) },
+            })
+          }
+          className="w-32"
+        />
+      </label>
+      <button
+        type="button"
+        data-testid="anim-route-clear"
+        onClick={() => onChange({ params: { ...anim.params, path: [] } })}
+        className="self-end text-xs text-neutral-500 hover:text-accent"
+      >
+        Straighten ({waypoints.length}{" "}
+        {waypoints.length === 1 ? "waypoint" : "waypoints"})
+      </button>
+    </div>
   );
 }
 

@@ -14,7 +14,7 @@ import { encounters } from "../db/schema.js";
  * Data access for encounter presets (plan §17, stage 1). Transport-free like
  * `planRepo`: the router decides *who may*, this decides *what is*.
  *
- * The `EncounterPreset` (background + pre-placed objects + steps) is stored as
+ * The `EncounterPreset` (background + pre-placed objects + slides) is stored as
  * JSON in `doc` and re-validated on read, so a row written by an older build can
  * never crash a reader — the same discipline as `getPlanWithDoc`.
  */
@@ -161,7 +161,7 @@ function uniqueSlug(db: Db, base: string): string {
 /**
  * Create an encounter from the admin panel (plan §17, stage 2). The slug is
  * derived from the name and de-duplicated, so the admin never has to invent one.
- * Content (objects/steps) starts empty — pre-placed content is authored later.
+ * Content (objects/slides) starts empty — pre-placed content is authored later.
  */
 export function createEncounter(
   db: Db,
@@ -171,12 +171,12 @@ export function createEncounter(
     slug: uniqueSlug(db, slugifyName(input.name)),
     raid: input.raid,
     name: input.name,
-    preset: { background: input.background, objects: [], steps: [] },
+    preset: { background: input.background, objects: [], slides: [] },
   });
 }
 
 /**
- * Patch an encounter's editable fields. **Objects and steps are preserved** —
+ * Patch an encounter's editable fields. **Objects and slides are preserved** —
  * the admin panel only edits name/raid/background, so an update must never wipe
  * pre-placed content it doesn't manage. Returns `undefined` if no such row.
  */

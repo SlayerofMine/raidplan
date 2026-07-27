@@ -24,7 +24,7 @@ import {
   type ObjectBase,
   type Plan,
   type PlanObject,
-  type Step,
+  type Slide,
   type StepOverride,
 } from "../src/plan.js";
 
@@ -91,7 +91,7 @@ const makeDef = (over: Partial<AttackDef> = {}): AttackDef => ({
 const inst = (over: Partial<AttackInstance> = {}): AttackInstance => ({
   id: "i1",
   attackId: "atk",
-  stepId: "s1",
+  slideId: "s1",
   x: 0,
   y: 0,
   w: 200,
@@ -103,15 +103,15 @@ const inst = (over: Partial<AttackInstance> = {}): AttackInstance => ({
   ...over,
 });
 
-const step = (over: Partial<Step> = {}): Step => ({
+const slide = (over: Partial<Slide> = {}): Slide => ({
   id: "s1",
-  overrides: {},
+  states: {},
   animations: [],
   ...over,
 });
 
 const makePlan = (
-  steps: Step[],
+  slides: Slide[],
   objects: PlanObject[] = [],
   attacks: AttackInstance[] = [],
 ): Plan => ({
@@ -121,7 +121,7 @@ const makePlan = (
   background: { assetId: "arena", width: 1600, height: 900 },
   objects,
   attacks,
-  steps,
+  slides,
   schemaVersion: SCHEMA_VERSION,
 });
 
@@ -129,11 +129,11 @@ const makePlan = (
 const lastObject = (plan: Plan) => plan.objects.at(-1)!;
 
 /** One expanded animation, by its namespaced id. */
-const animById = (plan: Plan, id: string, stepIndex = 0) =>
-  plan.steps[stepIndex]!.animations.find((a) => a.id === id)!;
+const animById = (plan: Plan, id: string, slideIndex = 0) =>
+  plan.slides[slideIndex]!.animations.find((a) => a.id === id)!;
 
 const expandOne = (def: AttackDef, instance: AttackInstance) =>
-  expandPlan(makePlan([step()], [], [instance]), { atk: def });
+  expandPlan(makePlan([slide()], [], [instance]), { atk: def });
 
 describe("AttackDefSchema", () => {
   it("defaults version, placement hint and end state", () => {
@@ -153,25 +153,25 @@ describe("AttackDefSchema", () => {
 describe("attackIdsInPlan", () => {
   it("collects distinct attack ids across the plan", () => {
     const plan = makePlan(
-      [step({ id: "s0" }), step({ id: "s1" })],
+      [slide({ id: "s0" }), slide({ id: "s1" })],
       [],
       [
         inst({ attackId: "a" }),
         inst({ attackId: "b" }),
-        inst({ attackId: "a", stepId: "s1" }),
+        inst({ attackId: "a", slideId: "s1" }),
       ],
     );
     expect(attackIdsInPlan(plan).sort()).toEqual(["a", "b"]);
   });
 
   it("is empty for a plan with no attacks", () => {
-    expect(attackIdsInPlan(makePlan([step()]))).toEqual([]);
+    expect(attackIdsInPlan(makePlan([slide()]))).toEqual([]);
   });
 });
 
 describe("expandPlan — the common case is free", () => {
   it("returns the very same plan when nothing has attacks", () => {
-    const plan = makePlan([step()]);
+    const plan = makePlan([slide()]);
     expect(expandPlan(plan, {})).toBe(plan);
   });
 });
@@ -253,26 +253,26 @@ describe("expandPlan — stamping", () => {
     expect(out.attacks).toEqual([]);
   });
 
-  it("bounds visibility to the instance's step", () => {
+  it("bounds visibility to the instance's slide", () => {
     const plan = makePlan(
-      [step({ id: "s1" }), step({ id: "s2" })],
+      [slide({ id: "s1" }), slide({ id: "s2" })],
       [],
       [inst()],
     );
     const out = expandPlan(plan, { atk: makeDef() });
-    expect(out.steps[0]!.overrides["i1::o1"]).toEqual({ visible: true });
-    expect(out.steps[1]!.overrides["i1::o1"]).toEqual({ visible: false });
+    expect(out.slides[0]!.states["i1::o1"]).toMatchObject({ visible: true });
+    expect(out.slides[1]!.states["i1::o1"]).toMatchObject({ visible: false });
   });
 
-  it("adds no trailing override when the attack is on the last step", () => {
+  it("is present on its own slide when that's the only slide there is", () => {
     const out = expandOne(makeDef(), inst());
-    expect(out.steps).toHaveLength(1);
-    expect(out.steps[0]!.overrides["i1::o1"]).toEqual({ visible: true });
+    expect(out.slides).toHaveLength(1);
+    expect(out.slides[0]!.states["i1::o1"]).toMatchObject({ visible: true });
   });
 
   it("skips an instance whose def is missing, leaving the rest renderable", () => {
     const out = expandPlan(
-      makePlan([step()], [], [inst({ attackId: "ghost" })]),
+      makePlan([slide()], [], [inst({ attackId: "ghost" })]),
       {},
     );
     expect(out.objects).toEqual([]);
@@ -281,18 +281,18 @@ describe("expandPlan — stamping", () => {
 
   it("skips an attack that was switched off", () => {
     const out = expandPlan(
-      makePlan([step({ id: "s1" })], [], [inst({ visible: false })]),
+      makePlan([slide({ id: "s1" })], [], [inst({ visible: false })]),
       { atk: makeDef() },
     );
     // Still in the document, just not happening — the placement survives to be
     // switched back on.
     expect(out.objects).toEqual([]);
-    expect(out.steps[0]!.animations).toEqual([]);
+    expect(out.slides[0]!.animations).toEqual([]);
   });
 
-  it("skips an instance whose step has been deleted", () => {
+  it("skips an instance whose slide has been deleted", () => {
     const out = expandPlan(
-      makePlan([step({ id: "s1" })], [], [inst({ stepId: "gone" })]),
+      makePlan([slide({ id: "s1" })], [], [inst({ slideId: "gone" })]),
       { atk: makeDef() },
     );
     expect(out.objects).toEqual([]);
@@ -300,7 +300,7 @@ describe("expandPlan — stamping", () => {
 
   it("keeps two instances of one def from colliding", () => {
     const plan = makePlan(
-      [step()],
+      [slide()],
       [],
       [inst({ id: "i1" }), inst({ id: "i2" })],
     );
@@ -316,7 +316,7 @@ describe("expandPlan — stamping", () => {
     const over = defObj("token");
     over.base.z = 2;
     const plan = makePlan(
-      [step()],
+      [slide()],
       [under, over],
       [inst({ z: 1 })], // between them
     );
@@ -328,26 +328,26 @@ describe("expandPlan — stamping", () => {
   });
 
   it("puts an attack with no place in the stack on top", () => {
-    const plan = makePlan([step()], [defObj("token")], [inst()]);
+    const plan = makePlan([slide()], [defObj("token")], [inst()]);
     const out = expandPlan(plan, { atk: makeDef() });
     expect(out.objects.map((o) => o.id).at(-1)).toBe("i1::o1");
   });
 
-  it("preserves the plan's own objects and step animations", () => {
+  it("preserves the plan's own objects and slide animations", () => {
     const own = defObj("boss");
     const ownAnim = defAnim({ id: "own", objectId: "boss" });
     const def = makeDef({ animations: [defAnim({ objectId: "o1" })] });
-    const plan = makePlan([step({ animations: [ownAnim] })], [own], [inst()]);
+    const plan = makePlan([slide({ animations: [ownAnim] })], [own], [inst()]);
     const out = expandPlan(plan, { atk: def });
     expect(out.objects[0]).toBe(own);
-    expect(out.steps[0]!.animations[0]).toBe(ownAnim);
+    expect(out.slides[0]!.animations[0]).toBe(ownAnim);
     // own + the def's, + the implicit entrance that reveals the attack.
-    expect(out.steps[0]!.animations).toHaveLength(3);
+    expect(out.slides[0]!.animations).toHaveLength(3);
   });
 });
 
 describe("expandPlan — end-state overrides", () => {
-  it("places the def's end state onto the instance's step, made present", () => {
+  it("places the def's end state onto the instance's slide, made present", () => {
     // A half-width part that slides across: its life spans unit space, so the
     // rectangle covers the whole sweep.
     const def = makeDef({
@@ -357,7 +357,7 @@ describe("expandPlan — end-state overrides", () => {
     const out = expandOne(def, inst());
     // Ends at the middle of the rectangle; the y it never changed comes along,
     // because a rotated placement can't express one axis alone.
-    expect(out.steps[0]!.overrides["i1::c"]).toEqual({
+    expect(out.slides[0]!.states["i1::c"]).toMatchObject({
       x: 100,
       y: 0,
       visible: true,
@@ -370,7 +370,7 @@ describe("expandPlan — end-state overrides", () => {
       overrides: { c: { visible: false } },
     });
     const out = expandOne(def, inst());
-    expect(out.steps[0]!.overrides["i1::c"]).toMatchObject({ visible: false });
+    expect(out.slides[0]!.states["i1::c"]).toMatchObject({ visible: false });
   });
 });
 
@@ -440,7 +440,7 @@ describe("expandPlan — animations", () => {
       ],
     });
     const out = expandOne(def, inst());
-    const anim = out.steps[0]!.animations.find((a) => a.id === "i1::hit")!;
+    const anim = out.slides[0]!.animations.find((a) => a.id === "i1::hit")!;
     expect(anim.collideWith).toEqual(["i1::tank"]);
     expect(out.objects.find((o) => o.id === "i1::tether")).toMatchObject({
       fromId: "i1::orb",
@@ -451,7 +451,7 @@ describe("expandPlan — animations", () => {
 
 describe("expandPlan — an attack shows itself", () => {
   /**
-   * Materialising an attack's parts hidden is what keeps them off the steps
+   * Materialising an attack's parts hidden is what keeps them off the slides
    * around it — but nothing tweens `visible`, so without an entrance the attack
    * would play out invisibly. The expansion supplies one.
    */
@@ -468,7 +468,7 @@ describe("expandPlan — an attack shows itself", () => {
       trigger: "onEnter",
       delayMs: 300,
     });
-    expect(out.steps[0]!.overrides["i1::cone"]).toEqual({ visible: true });
+    expect(out.slides[0]!.states["i1::cone"]).toMatchObject({ visible: true });
   });
 
   it("leaves a part that has its own entrance alone", () => {
@@ -485,15 +485,17 @@ describe("expandPlan — an attack shows itself", () => {
     });
     const out = expandOne(def, inst());
     expect(
-      out.steps[0]!.animations.filter((a) => a.effect === "appear"),
+      out.slides[0]!.animations.filter((a) => a.effect === "appear"),
     ).toHaveLength(0);
   });
 
   it("keeps a part the author hid hidden, and never reveals it", () => {
     const def = makeDef({ objects: [defObj("ghost", { visible: false })] });
     const out = expandOne(def, inst());
-    expect(out.steps[0]!.overrides["i1::ghost"]).toEqual({ visible: false });
-    expect(out.steps[0]!.animations).toHaveLength(0);
+    expect(out.slides[0]!.states["i1::ghost"]).toMatchObject({
+      visible: false,
+    });
+    expect(out.slides[0]!.animations).toHaveLength(0);
   });
 
   it("ends visible when the def's own entrance brings a hidden part on", () => {
@@ -509,7 +511,7 @@ describe("expandPlan — an attack shows itself", () => {
       ],
     });
     const out = expandOne(def, inst());
-    expect(out.steps[0]!.overrides["i1::orb"]).toMatchObject({ visible: true });
+    expect(out.slides[0]!.states["i1::orb"]).toMatchObject({ visible: true });
   });
 });
 
@@ -561,7 +563,7 @@ describe("expandPlan — an attack owns its own timing", () => {
       ],
     });
     const out = expandOne(def, inst({ startMs: 400 }));
-    // It fires from the collision, not from the step — offsetting it would
+    // It fires from the collision, not from the slide — offsetting it would
     // delay the *reaction*.
     expect(animById(out, "i1::hit")).toMatchObject({
       trigger: "onCollision",
@@ -569,9 +571,9 @@ describe("expandPlan — an attack owns its own timing", () => {
     });
   });
 
-  it("keeps two attacks on one step from chaining into each other", () => {
+  it("keeps two attacks on one slide from chaining into each other", () => {
     const plan = makePlan(
-      [step()],
+      [slide()],
       [],
       [inst({ id: "i1" }), inst({ id: "i2" })],
     );
@@ -881,7 +883,7 @@ describe("expandPlan — a stretched attack", () => {
   });
 
   it("stacks with the start offset without scaling it", () => {
-    // `startMs` says when the attack fires within the step; stretching says how
+    // `startMs` says when the attack fires within the slide; stretching says how
     // long it then takes. Scaling the offset too would couple the two.
     const out = expandOne(chained, inst({ startMs: 300, durationMs: 1400 }));
     expect(animById(out, "i1::a1").delayMs).toBe(300);
@@ -916,7 +918,7 @@ describe("expandPlan — a stretched attack", () => {
     );
     expect(attackNaturalMs(makeDef({ animations: [] }))).toBe(0);
     // Only the implicit entrance, still instant.
-    expect(out.steps[0]!.animations.every((a) => a.durationMs === 0)).toBe(
+    expect(out.slides[0]!.animations.every((a) => a.durationMs === 0)).toBe(
       true,
     );
   });
@@ -947,7 +949,7 @@ describe("expandPlan — parameters", () => {
 
   it("takes collision targets from the plan, un-namespaced", () => {
     const out = expandOne(catchable(), inst({ args: { victims: ["tank-1"] } }));
-    const anim = out.steps[0]!.animations.find((a) => a.id === "i1::caught")!;
+    const anim = out.slides[0]!.animations.find((a) => a.id === "i1::caught")!;
     // A plan's own object id, used as given — namespacing it would point at
     // nothing.
     expect(anim.collideWith).toEqual(["tank-1"]);
@@ -965,7 +967,7 @@ describe("expandPlan — parameters", () => {
       ],
     });
     const out = expandOne(def, inst());
-    const anim = out.steps[0]!.animations.find((a) => a.id === "i1::caught")!;
+    const anim = out.slides[0]!.animations.find((a) => a.id === "i1::caught")!;
     expect(anim.collideWith).toEqual(["boss"]);
   });
 
@@ -982,7 +984,7 @@ describe("expandPlan — parameters", () => {
       ],
     });
     const out = expandOne(def, inst());
-    const anim = out.steps[0]!.animations.find((a) => a.id === "i1::hit")!;
+    const anim = out.slides[0]!.animations.find((a) => a.id === "i1::hit")!;
     expect(anim.collideWith).toEqual(["i1::tank"]);
   });
 
@@ -1210,7 +1212,9 @@ describe("defToPlan / planToAttackContent", () => {
       w: 300,
       h: 200,
     });
-    expect(plan.steps).toHaveLength(1);
+    // Two slides, not one: a def is a start shape and the end its animations
+    // reach, which the designer shows as Layout and Animate.
+    expect(plan.slides).toHaveLength(2);
   });
 
   it("shrink-wraps what was drawn: its extent becomes unit space", () => {
@@ -1265,7 +1269,19 @@ describe("defToPlan / planToAttackContent", () => {
         },
       },
     ];
-    drawn.steps[0]!.overrides = { o1: { x: 300, y: 0 } };
+    // Where the End slide leaves it — a def's `overrides` are read back as the
+    // difference between the two slides.
+    drawn.slides[1]!.states = {
+      o1: {
+        x: 300,
+        y: 0,
+        w: 100,
+        h: 100,
+        rotation: 0,
+        opacity: 1,
+        visible: true,
+      },
+    };
 
     const content = planToAttackContent(drawn, { name: "Sweep" });
     // 0‥400 across, 0‥100 down: the rectangle covers everywhere it goes.
@@ -1309,7 +1325,7 @@ describe("expandPlan — result is a valid plan", () => {
       animations: [defAnim({ objectId: "c", params: { toX: 1, toY: 1 } })],
     });
     const plan = makePlan(
-      [step({ id: "s1" }), step({ id: "s2" })],
+      [slide({ id: "s1" }), slide({ id: "s2" })],
       [],
       [inst()],
     );

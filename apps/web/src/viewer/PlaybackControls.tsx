@@ -1,49 +1,49 @@
 import type { PlaybackApi } from "../anim/usePlayback";
 
 /**
- * The viewer's transport bar (plan §3.6): play/pause, restart, step nav,
- * scrub, and a step readout. Keyboard equivalents live in `ViewerPage`.
+ * The viewer's transport bar (plan §3.6): play/pause, restart, slide nav,
+ * scrub, and a slide readout. Keyboard equivalents live in `ViewerPage`.
  */
 export function PlaybackControls({
   playback,
   onFullscreen,
-  stepName,
+  slideName,
 }: {
   playback: PlaybackApi;
   onFullscreen: () => void;
-  stepName: string;
+  slideName: string;
 }) {
-  const { stepIndex, stepCount, isPlaying, progress } = playback;
+  const { slideIndex, slideCount, isPlaying, progress } = playback;
 
   return (
     <div className="flex items-center gap-2 border-t border-panelborder bg-panel px-3 py-2">
       <Btn
-        label="Previous step"
+        label="Previous slide"
         glyph="⏮"
         onClick={playback.previous}
-        disabled={stepIndex <= 0}
+        disabled={slideIndex <= 0}
       />
       <Btn
         label={isPlaying ? "Pause" : "Play"}
         glyph={isPlaying ? "⏸" : "▶"}
         onClick={playback.toggle}
-        disabled={stepCount === 0}
+        disabled={slideCount === 0}
         testId="play-toggle"
       />
-      <Btn label="Restart step" glyph="↺" onClick={playback.restart} />
+      <Btn label="Restart slide" glyph="↺" onClick={playback.restart} />
       <Btn
-        label="Next step"
+        label="Next slide"
         glyph="⏭"
         onClick={playback.next}
-        disabled={stepIndex >= stepCount - 1}
+        disabled={slideIndex >= slideCount - 1}
       />
 
       <span
         className="whitespace-nowrap text-sm text-neutral-400"
-        data-testid="viewer-step"
+        data-testid="viewer-slide"
       >
-        {stepCount === 0 ? "No steps" : `${stepIndex + 1} / ${stepCount}`}
-        <span className="ml-2 text-neutral-500">{stepName}</span>
+        {`${slideIndex + 1} / ${slideCount}`}
+        <span className="ml-2 text-neutral-500">{slideName}</span>
       </span>
 
       <input
@@ -52,7 +52,7 @@ export function PlaybackControls({
         max={1}
         step={0.001}
         value={progress}
-        aria-label="Scrub step"
+        aria-label="Scrub slide"
         data-testid="scrub"
         onChange={(e) => playback.seek(Number(e.target.value))}
         className="mx-2 flex-1 accent-accent"

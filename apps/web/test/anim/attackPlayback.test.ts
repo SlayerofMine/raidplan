@@ -11,11 +11,11 @@ import {
 import { compileStep } from "../../src/anim/compileStep";
 
 /**
- * A placed attack has to be *on screen* while its step plays.
+ * A placed attack has to be *on screen* while its slide plays.
  *
- * Its parts are materialised hidden (that's what keeps them off the steps around
+ * Its parts are materialised hidden (that's what keeps them off the slides around
  * it) and nothing tweens `visible`, so this pins the end of that chain: expand a
- * plan, compile the step exactly as the player does, and watch the attack come
+ * plan, compile the slide exactly as the player does, and watch the attack come
  * into view. The unit tests in shared cover the expansion; this covers the
  * handover to GSAP.
  */
@@ -44,7 +44,7 @@ const def: AttackDef = {
       },
     },
   ],
-  // It sweeps to the right edge over the step.
+  // It sweeps to the right edge over the slide.
   overrides: { cone: { x: 0.5, y: -1 } },
   animations: [
     {
@@ -72,7 +72,7 @@ const plan: Plan = {
     {
       id: "i1",
       attackId: "atk",
-      stepId: "s0",
+      slideId: "s0",
       x: 0,
       y: 0,
       w: 200,
@@ -83,18 +83,18 @@ const plan: Plan = {
       args: {},
     },
   ],
-  steps: [
-    { id: "s0", overrides: {}, animations: [] },
-    { id: "s1", overrides: {}, animations: [] },
+  slides: [
+    { id: "s0", states: {}, animations: [] },
+    { id: "s1", states: {}, animations: [] },
   ],
   schemaVersion: SCHEMA_VERSION,
 };
 
-/** Every object's state on a step, the way the playback hook resolves them. */
+/** Every object's state on a slide, the way the playback hook resolves them. */
 function statesOn(doc: Plan, index: number): ResolvedStates {
   const states: ResolvedStates = {};
   for (const object of doc.objects) {
-    states[object.id] = resolveObjectState(object, doc.steps, index);
+    states[object.id] = resolveObjectState(object, doc.slides, index);
   }
   return states;
 }
@@ -102,7 +102,7 @@ function statesOn(doc: Plan, index: number): ResolvedStates {
 function playStep(doc: Plan, index: number) {
   const applied: Record<string, Partial<ObjectState>> = {};
   const { timeline, initial } = compileStep({
-    step: doc.steps[index]!,
+    slide: doc.slides[index]!,
     start: statesOn(doc, index - 1),
     end: statesOn(doc, index),
     // A patch per push, merged the way a Konva node accumulates them.
@@ -116,7 +116,7 @@ function playStep(doc: Plan, index: number) {
 describe("a placed attack during playback", () => {
   const expanded = expandPlan(plan, { atk: def });
 
-  it("starts the step hidden and is on screen by the end of it", () => {
+  it("starts the slide hidden and is on screen by the end of it", () => {
     const { timeline, initial, applied } = playStep(expanded, 0);
 
     expect(initial["i1::cone"]!.visible).toBe(false);
@@ -133,9 +133,9 @@ describe("a placed attack during playback", () => {
     expect(applied["i1::cone"]!.x).toBeCloseTo(150);
   });
 
-  it("is gone once the step after it is entered", () => {
-    // The next step's start state is this step's settled state, so the attack is
-    // still up; its own step's end took it away.
+  it("is gone once the slide after it is entered", () => {
+    // The next slide's start state is this slide's settled state, so the attack is
+    // still up; its own slide's end took it away.
     expect(statesOn(expanded, 1)["i1::cone"]!.visible).toBe(false);
   });
 });

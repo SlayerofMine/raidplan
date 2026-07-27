@@ -16,7 +16,7 @@ const planWith = (attacks: Plan["attacks"]): Plan => ({
   background: { assetId: "arena", width: 1600, height: 900 },
   objects: [],
   attacks,
-  steps: [{ id: "s0", overrides: {}, animations: [] }],
+  slides: [{ id: "s0", states: {}, animations: [] }],
   schemaVersion: 2,
 });
 
@@ -66,7 +66,7 @@ describe("expandForViewing", () => {
       {
         id: "i1",
         attackId: "atk1",
-        stepId: "s0",
+        slideId: "s0",
         x: 300,
         y: 200,
         w: 200,

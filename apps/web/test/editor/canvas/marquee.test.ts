@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PlanObject } from "@raidplan/shared";
+import { seedState, type ObjectState, type PlanObject } from "@raidplan/shared";
 import {
   normalizeRect,
   objectBounds,
@@ -29,6 +29,18 @@ function obj(
     ...extra,
   };
 }
+
+/**
+ * A sweep candidate: the object plus where it sits *on the current slide*.
+ *
+ * The two are separate because that is the bug this signature exists to make
+ * impossible — hit-testing used to read `object.base`, so a marquee drawn on any
+ * slide but the first tested against wherever things were created.
+ */
+const sweepable = (object: PlanObject, state?: Partial<ObjectState>) => ({
+  object,
+  state: { ...seedState(object), ...state },
+});
 
 describe("normalizeRect", () => {
   it("builds a positive rect regardless of drag direction", () => {
@@ -60,7 +72,9 @@ describe("normalizeRect", () => {
 
 describe("objectBounds", () => {
   it("is the plain box for an unrotated object", () => {
-    expect(objectBounds(obj("a", { x: 10, y: 20, w: 30, h: 40 }))).toEqual({
+    expect(
+      objectBounds(seedState(obj("a", { x: 10, y: 20, w: 30, h: 40 }))),
+    ).toEqual({
       x: 10,
       y: 20,
       width: 30,
@@ -71,7 +85,7 @@ describe("objectBounds", () => {
   it("grows to bound a 45°-rotated square", () => {
     // A 100x100 square rotated 45° about its top-left corner spans 100*√2
     // horizontally, and vertically from the origin down to 100*√2.
-    const bounds = objectBounds(obj("a", { rotation: 45 }));
+    const bounds = objectBounds(seedState(obj("a", { rotation: 45 })));
     const diagonal = 100 * Math.SQRT2;
     expect(bounds.width).toBeCloseTo(diagonal);
     expect(bounds.height).toBeCloseTo(diagonal);
@@ -81,7 +95,7 @@ describe("objectBounds", () => {
 
   it("returns the same box for a 90° rotation, swapped", () => {
     const bounds = objectBounds(
-      obj("a", { x: 0, y: 0, w: 40, h: 10, rotation: 90 }),
+      seedState(obj("a", { x: 0, y: 0, w: 40, h: 10, rotation: 90 })),
     );
     expect(bounds.width).toBeCloseTo(10);
     expect(bounds.height).toBeCloseTo(40);
@@ -125,26 +139,31 @@ describe("objectsInMarquee", () => {
       obj("b", { x: 120, y: 120 }), // only a corner is swept
       obj("c", { x: 400, y: 400 }), // far outside
     ];
-    expect(objectsInMarquee(objects, marquee)).toEqual(["a", "b"]);
+    expect(
+      objectsInMarquee(
+        objects.map((o) => sweepable(o)),
+        marquee,
+      ),
+    ).toEqual(["a", "b"]);
   });
 
   it("selects on partial overlap, not just full containment", () => {
     // Straddles the marquee's right edge.
-    expect(objectsInMarquee([obj("a", { x: 100, y: 0 })], marquee)).toEqual([
-      "a",
-    ]);
+    expect(
+      objectsInMarquee([sweepable(obj("a", { x: 100, y: 0 }))], marquee),
+    ).toEqual(["a"]);
   });
 
   it("skips hidden objects", () => {
-    expect(objectsInMarquee([obj("a", { visible: false })], marquee)).toEqual(
-      [],
-    );
+    expect(
+      objectsInMarquee([sweepable(obj("a", { visible: false }))], marquee),
+    ).toEqual([]);
   });
 
   it("skips locked objects", () => {
-    expect(objectsInMarquee([obj("a", {}, { locked: true })], marquee)).toEqual(
-      [],
-    );
+    expect(
+      objectsInMarquee([sweepable(obj("a", {}, { locked: true }))], marquee),
+    ).toEqual([]);
   });
 
   it("skips tethers (their degenerate box would false-positive at the origin)", () => {
@@ -153,16 +172,16 @@ describe("objectsInMarquee", () => {
       { x: 0, y: 0, w: 0, h: 0 },
       { type: "tether", fromId: "a", toId: "b" },
     );
-    expect(objectsInMarquee([tether], marquee)).toEqual([]);
+    expect(objectsInMarquee([sweepable(tether)], marquee)).toEqual([]);
   });
 
   it("accounts for rotation when deciding what was swept", () => {
     // Unrotated this sits clear of the marquee; rotated, a corner swings into it.
     const outside = obj("a", { x: 160, y: 0, w: 100, h: 100 });
-    expect(objectsInMarquee([outside], marquee)).toEqual([]);
+    expect(objectsInMarquee([sweepable(outside)], marquee)).toEqual([]);
     expect(
       objectsInMarquee(
-        [obj("a", { x: 160, y: 0, w: 100, h: 100, rotation: 45 })],
+        [sweepable(obj("a", { x: 160, y: 0, w: 100, h: 100, rotation: 45 }))],
         marquee,
       ),
     ).toEqual(["a"]);
@@ -170,7 +189,12 @@ describe("objectsInMarquee", () => {
 
   it("returns nothing for an empty sweep", () => {
     expect(
-      objectsInMarquee([obj("a")], { x: 500, y: 500, width: 0, height: 0 }),
+      objectsInMarquee([sweepable(obj("a"))], {
+        x: 500,
+        y: 500,
+        width: 0,
+        height: 0,
+      }),
     ).toEqual([]);
   });
 });

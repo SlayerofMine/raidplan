@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Anim, ObjectState, Step } from "@raidplan/shared";
+import type { Anim, ObjectState, Slide } from "@raidplan/shared";
 import { compileOneShot, deferredAnimsFor } from "../../src/anim/oneShot";
 
 function state(over: Partial<ObjectState> = {}): ObjectState {
@@ -30,9 +30,9 @@ function anim(over: Partial<Anim> = {}): Anim {
   };
 }
 
-const step = (animations: Anim[]): Step => ({
+const slide = (animations: Anim[]): Slide => ({
   id: "s1",
-  overrides: {},
+  states: {},
   animations,
 });
 
@@ -40,7 +40,7 @@ function harness(a: Anim, start: ObjectState, end: ObjectState) {
   const applied: Record<string, Partial<ObjectState>> = {};
   const { timeline } = compileOneShot({
     anim: a,
-    step: step([a]),
+    slide: slide([a]),
     start: { a: start },
     end: { a: end },
     apply: (id, props) => {
@@ -72,7 +72,7 @@ describe("compileOneShot", () => {
     expect(timeline.duration()).toBeCloseTo(0.5);
   });
 
-  it("starts from the state it's given, not the step's start", () => {
+  it("starts from the state it's given, not the slide's start", () => {
     // Playback passes the object's *live* position so a triggered animation
     // continues from where the object actually is.
     const { timeline, applied } = harness(
@@ -97,7 +97,7 @@ describe("compileOneShot", () => {
 });
 
 describe("deferredAnimsFor", () => {
-  const s = step([
+  const s = slide([
     anim({ id: "1", objectId: "a", trigger: "onClick" }),
     anim({ id: "2", objectId: "a", trigger: "onCollision" }),
     anim({ id: "3", objectId: "b", trigger: "onClick" }),
@@ -111,7 +111,7 @@ describe("deferredAnimsFor", () => {
     ]);
   });
 
-  it("is empty for an unknown object or a missing step", () => {
+  it("is empty for an unknown object or a missing slide", () => {
     expect(deferredAnimsFor(s, "ghost", "onClick")).toEqual([]);
     expect(deferredAnimsFor(undefined, "a", "onClick")).toEqual([]);
   });

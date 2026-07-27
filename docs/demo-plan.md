@@ -7,7 +7,7 @@ eyeballing a change without building a plan by hand.
 ## Load it
 
 Editor → **Import** → pick `docs/demo-plan.json`. Then hit **Play** to walk the
-steps. (Import replaces the current board and clears undo history, so save
+slides. (Import replaces the current board and clears undo history, so save
 anything you care about first.)
 
 ## What's on the board
@@ -16,10 +16,13 @@ anything you care about first.)
 | --- | -------------------------------------------------------------------------------------------------- |
 | 1   | One of every shape kind: `rect`, `circle`, `cone`, `line`, `soak`, `voidzone`, `pickup`            |
 | 2   | Style variants — scalloped vs round voidzone, striped/solid/hollow fills, outline off, hazard soak |
-| 3   | One token per animation effect, animated with that effect in step 1                                |
+| 3   | One token per animation effect, animated with that effect in slide 1                               |
 | 4   | A raid group (both tether line styles), the collision runner + orb, and a click target             |
 
-## What the steps show
+## What the slides show
+
+Slide 0 is the opening layout and animates nothing — it has no slide before it
+to move from, which is why every demo transition starts on slide 1.
 
 1. **Every effect** — all eight effects fire at once, staggered, so you can see
    `appear`/`fade`/`fly`/`disappear`/`move`/`scale`/`pulse`/`blink` side by side.
@@ -27,7 +30,7 @@ anything you care about first.)
    `withPrevious` and `afterPrevious`, so the sequencing is visible.
 3. **Collision pickup** — the runner crosses the orb; the orb is armed with an
    `onCollision` exit animation against it, so it vanishes on contact. Fires
-   once; restart the step to re-arm.
+   once; restart the slide to re-arm.
 4. **Click trigger** — click the "click me" soak (it pulses) or the arrow (it
    fades). `onClick` only fires in the viewer.
 

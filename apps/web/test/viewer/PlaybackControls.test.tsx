@@ -5,10 +5,10 @@ import { PlaybackControls } from "../../src/viewer/PlaybackControls";
 
 function playback(over: Partial<PlaybackApi> = {}): PlaybackApi {
   return {
-    stepIndex: 0,
+    slideIndex: 0,
     isPlaying: false,
     progress: 0,
-    stepCount: 3,
+    slideCount: 3,
     play: vi.fn(),
     pause: vi.fn(),
     toggle: vi.fn(),
@@ -25,7 +25,7 @@ function playback(over: Partial<PlaybackApi> = {}): PlaybackApi {
 
 const renderControls = (api: PlaybackApi) =>
   render(
-    <PlaybackControls playback={api} onFullscreen={vi.fn()} stepName="Pull" />,
+    <PlaybackControls playback={api} onFullscreen={vi.fn()} slideName="Pull" />,
   );
 
 describe("PlaybackControls — transport", () => {
@@ -41,28 +41,27 @@ describe("PlaybackControls — transport", () => {
       <PlaybackControls
         playback={playback({ isPlaying: true })}
         onFullscreen={vi.fn()}
-        stepName="Pull"
+        slideName="Pull"
       />,
     );
     expect(screen.getByTestId("play-toggle")).toHaveAccessibleName("Pause");
   });
 
-  it("pins step navigation at the ends of the plan", () => {
-    renderControls(playback({ stepIndex: 0 }));
-    expect(screen.getByLabelText("Previous step")).toBeDisabled();
-    expect(screen.getByLabelText("Next step")).toBeEnabled();
+  it("pins slide navigation at the ends of the plan", () => {
+    renderControls(playback({ slideIndex: 0 }));
+    expect(screen.getByLabelText("Previous slide")).toBeDisabled();
+    expect(screen.getByLabelText("Next slide")).toBeEnabled();
 
-    renderControls(playback({ stepIndex: 2, stepCount: 3 }));
-    expect(screen.getAllByLabelText("Next step")[1]).toBeDisabled();
+    renderControls(playback({ slideIndex: 2, slideCount: 3 }));
+    expect(screen.getAllByLabelText("Next slide")[1]).toBeDisabled();
   });
 
-  it("disables play for a plan with no steps", () => {
-    renderControls(playback({ stepCount: 0 }));
-    expect(screen.getByTestId("play-toggle")).toBeDisabled();
-    expect(screen.getByTestId("viewer-step")).toHaveTextContent("No steps");
+  it("counts from one, so the label matches the slide strip", () => {
+    renderControls(playback({ slideIndex: 1, slideCount: 4 }));
+    expect(screen.getByTestId("viewer-slide")).toHaveTextContent("2 / 4");
   });
 
-  it("scrubs to a position within the step", () => {
+  it("scrubs to a position within the slide", () => {
     const api = playback();
     renderControls(api);
     fireEvent.change(screen.getByTestId("scrub"), { target: { value: "0.4" } });
