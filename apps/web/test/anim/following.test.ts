@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import gsap from "gsap";
 import { act, renderHook } from "@testing-library/react";
 import type { Stage } from "konva/lib/Stage";
 import {
@@ -275,5 +276,36 @@ describe("an ordinary object that follows another", () => {
     await tick();
 
     expect((nodes["a"] as ReturnType<typeof fakeNode>).attrs["x"]).toBe(1);
+  });
+
+  /**
+   * The chrome that reads these nodes back — the origin handle's correction, an
+   * attack's grab frame — registers from components nested inside `CanvasStage`,
+   * and React flushes effects child-first. So a reader is always on the ticker
+   * *before* this hook is, and in plain add order it would run a frame behind
+   * the placement: reading a node React had just reset to its document
+   * placement, and drawing the handle at the object's un-followed position for
+   * exactly one frame before the next tick put it right.
+   */
+  it("places the node before anything registered earlier reads it", async () => {
+    const seen: number[] = [];
+    const reader = () => {
+      const node = nodes["indicator"] as ReturnType<typeof fakeNode>;
+      seen.push(node.attrs["rotation"] as number);
+    };
+    // On the ticker first, exactly as the origin handle is.
+    gsap.ticker.add(reader);
+    try {
+      renderHook(() => useFollowing(ref));
+      await tick();
+
+      // The *first* frame is the whole point: the reader must never catch the
+      // node at the rotation the document still says it has.
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen[0]).toBeCloseTo(1.79, 1);
+      expect(seen.every((r) => Math.abs(r - 1.79) < 0.1)).toBe(true);
+    } finally {
+      gsap.ticker.remove(reader);
+    }
   });
 });

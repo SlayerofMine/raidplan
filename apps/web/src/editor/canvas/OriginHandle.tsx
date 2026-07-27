@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import gsap from "gsap";
 import { Circle, Group, Line } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
@@ -92,9 +92,18 @@ export function OriginHandle() {
    * ticker callback torn down and re-added that often would shuffle itself to
    * the back of the queue mid-gesture. The callback reads it when it runs, so it
    * is never stale.
+   *
+   * **Layout, not passive.** This base has to describe the very render that
+   * placed the children, because {@link carryToNode} subtracts one from the
+   * other: an offset taken from the previous placement, applied to children
+   * already drawn at the new one, displaces the whole group by the difference.
+   * React defers passive effects to their own task, which the ticker's
+   * `requestAnimationFrame` can beat — and a single tick landing in that gap
+   * threw the handle across the canvas for one frame before the next tick put it
+   * back. A layout effect runs in the commit itself, so the gap does not exist.
    */
   const baseRef = useRef({ x: 0, y: 0, rotation: 0 });
-  useEffect(() => {
+  useLayoutEffect(() => {
     baseRef.current = {
       x: state?.x ?? 0,
       y: state?.y ?? 0,

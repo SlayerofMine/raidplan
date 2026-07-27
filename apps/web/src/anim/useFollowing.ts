@@ -142,7 +142,20 @@ export function useFollowing(stageRef: { current: Stage | null }): void {
       stage.batchDraw();
     };
 
-    gsap.ticker.add(tick);
+    // **First on the ticker, and it has to be.** This pass is what *places* a
+    // followed node; everything else riding the ticker reads those nodes back —
+    // the origin handle's correction, an attack's grab frame. Those are
+    // registered from components nested inside `CanvasStage`, and React flushes
+    // effects child-first, so they land on the ticker ahead of this one and, in
+    // plain add order, would run a frame behind: each would read a node that
+    // React had just reset to its *document* placement and not yet re-solved,
+    // and flash the chrome at the object's un-followed position for exactly one
+    // frame. `prioritize` puts the placement in front of every reader.
+    //
+    // It also settles this hook's own churn: the deps below change on every
+    // committed edit, so the callback is removed and re-added constantly, and a
+    // plain re-add would shuffle it to the back of the queue mid-gesture.
+    gsap.ticker.add(tick, false, true);
     return () => gsap.ticker.remove(tick);
   }, [objects, attacks, attackDefs, stageRef]);
 }
