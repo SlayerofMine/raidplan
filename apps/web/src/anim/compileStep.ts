@@ -4,6 +4,7 @@ import {
   isDeferredTrigger,
   samplePath,
   layoutStepTimeline,
+  stateBeforeAnim,
   type Anim,
   type ObjectState,
   type ResolvedStates,
@@ -129,6 +130,19 @@ export function compileStep({
       anim,
       proxy: proxyFor(anim.objectId),
       initial: initial[anim.objectId]!,
+      // Where this animation's object stands when it starts — the opening state
+      // with everything before it folded in. A move begins *there*, so a slide
+      // can chain "out, wait, back" as three moves without the second one
+      // teleporting to where the slide opened. Computed from the slide's own
+      // state rather than the entrance-adjusted `initial`, because that is what
+      // `settledState` is defined over (a fade-in ends at the slide's opacity,
+      // not at the 0 the entrance parked it on).
+      origin: stateBeforeAnim(
+        states[anim.objectId]!,
+        animations,
+        anim.objectId,
+        anim.id,
+      ),
       state: states[anim.objectId]!,
       at: span.startMs / MS,
       duration: anim.durationMs / MS,
@@ -170,6 +184,12 @@ interface TweenParams {
   proxy: ObjectState;
   /** Where this animation starts: the slide's layout, plus any entrance offset. */
   initial: ObjectState;
+  /**
+   * Where the object stands by the time this animation runs — the slide's
+   * layout with every earlier animation on it folded in. What a `move` starts
+   * from, so consecutive moves chain end-to-end.
+   */
+  origin: ObjectState;
   /** The slide's own value for this object, before an entrance displaced it. */
   state: ObjectState;
   at: number;
@@ -203,6 +223,7 @@ function addTween({
   anim,
   proxy,
   initial,
+  origin,
   state,
   at,
   duration,
@@ -259,13 +280,15 @@ function addTween({
       return;
 
     case "move": {
-      // The journey is the animation's own: it starts where the object stands on
-      // this slide and ends where the author drew it. A move with no destination
-      // has not been drawn yet and goes nowhere, rather than quietly borrowing
-      // some other slide's idea of where the object belongs.
+      // The journey is the animation's own: it starts where the object stands
+      // *by the time this move runs* (`origin` — the slide's layout with any
+      // earlier move already folded in) and ends where the author drew it. A
+      // move with no destination has not been drawn yet and goes nowhere,
+      // rather than quietly borrowing some other slide's idea of where the
+      // object belongs.
       const destination = {
-        x: anim.params?.toX ?? initial.x,
-        y: anim.params?.toY ?? initial.y,
+        x: anim.params?.toX ?? origin.x,
+        y: anim.params?.toY ?? origin.y,
       };
       const waypoints = anim.params?.path ?? [];
       // No waypoints is the overwhelmingly common case and stays a plain
@@ -282,10 +305,10 @@ function addTween({
       // an object that is also being scaled has no single centre offset, and
       // recomputing it per tick would make the drawn route and the travelled
       // one disagree.
-      const half = { x: initial.w / 2, y: initial.h / 2 };
+      const half = { x: origin.w / 2, y: origin.h / 2 };
       const path = buildMotionPath(
         [
-          { x: initial.x + half.x, y: initial.y + half.y },
+          { x: origin.x + half.x, y: origin.y + half.y },
           ...waypoints,
           { x: destination.x + half.x, y: destination.y + half.y },
         ],

@@ -217,6 +217,36 @@ function effectResult(anim: Anim, from: ObjectState): Partial<ObjectState> {
   }
 }
 
+/**
+ * Where an object stands **when `animId` is about to play** — the slide's
+ * opening state with every earlier animation of that object folded in.
+ *
+ * This is what makes a chain of moves mean what it looks like. A `move` states
+ * its own journey, and the journey starts where the object *is by then*, not
+ * where the slide opened: draw "in, wait, out" as three moves and the second
+ * begins where the first left off, rather than snapping back to the start.
+ *
+ * Same paper evaluation as {@link settledState} — indeed it is that function
+ * over the preceding animations — so the editor's route overlay, the playback
+ * compiler and the still renderer all get the same answer from one rule.
+ *
+ * An unknown (or absent) `animId` means "after everything", which is the answer
+ * a *new* animation appended to the slide wants.
+ */
+export function stateBeforeAnim(
+  state: ObjectState,
+  animations: readonly Anim[],
+  objectId: string,
+  animId?: string,
+): ObjectState {
+  const index = animId ? animations.findIndex((a) => a.id === animId) : -1;
+  return settledState(
+    state,
+    index < 0 ? animations : animations.slice(0, index),
+    objectId,
+  );
+}
+
 /** Every object's state once `slide` has played out. */
 export function settledStates(slide: Slide): Record<string, SlideState> {
   const out: Record<string, SlideState> = {};

@@ -5,6 +5,7 @@ import { immer } from "zustand/middleware/immer";
 import {
   attackSlots,
   attackZ,
+  isDeferredTrigger,
   isFollowing,
   isOnSlide,
   makeFirstSlide,
@@ -12,6 +13,7 @@ import {
   settledStates,
   resolveObjectState,
   seedState,
+  stateBeforeAnim,
   type Anim,
   type AttackDef,
   type AttackInstance,
@@ -208,9 +210,19 @@ export interface EditorState extends PlanDoc {
    * already is: the corners it turns, ending where it comes to rest. Fewer than
    * one point is not a journey and does nothing.
    *
-   * Creates the animation or replaces the route on `animId`, so the same call
-   * backs both "draw a move" and "redraw this one". One action, so one undo —
+   * **One animation per leg.** Three clicks make three chained `move`s, not one
+   * move with two waypoints, so every leg has its own bar in the timeline with
+   * its own delay and duration — which is what lets a planner say "run in, wait
+   * two seconds, run out" without splitting the slide up. Each leg starts where
+   * the one before it ended (see `stateBeforeAnim`), so the chain draws and
+   * plays as the single line that was drawn.
+   *
+   * Creates those animations or, given `animId`, redraws that leg — replacing it
+   * in place and inserting any further legs directly after it, so its timing,
+   * easing and position in the slide's order survive. One action, so one undo —
    * a route drawn in six clicks must not take six presses to take back.
+   *
+   * Returns the id of the first leg.
    */
   drawMove: (
     slideIndex: number,
@@ -473,6 +485,50 @@ function reorder(objectIds: string[], id: string, delta: number): string[] {
   next.splice(from, 1);
   next.splice(to, 0, id);
   return next;
+}
+
+/**
+ * How long a whole drawn route takes by default. Long enough to read as a
+ * journey rather than a jump; the panel and the timeline are where it gets
+ * tuned, per leg.
+ */
+const DRAWN_MOVE_MS = 1000;
+/** No leg is shorter than this, however brief a corner-to-corner hop is. */
+const MIN_LEG_MS = 60;
+
+/**
+ * Cut a drawn route into one leg per corner, sharing `totalMs` between them
+ * **by length**.
+ *
+ * Splitting by length rather than evenly is what makes a segmented route play
+ * like the single line it was drawn as: the object holds one speed across the
+ * whole journey instead of dawdling over a short leg and bolting down a long
+ * one. Each leg is then free to be retimed on its own — which is the point of
+ * segmenting at all.
+ */
+function splitLegs(
+  from: Point,
+  corners: readonly Point[],
+  totalMs: number,
+): { to: Point; durationMs: number }[] {
+  const points = [from, ...corners];
+  const lengths = corners.map((to, i) =>
+    Math.hypot(to.x - points[i]!.x, to.y - points[i]!.y),
+  );
+  const total = lengths.reduce((sum, l) => sum + l, 0);
+  return corners.map((to, i) => ({
+    to,
+    // A zero-length route (every corner dropped on the object) has no lengths
+    // to share by, so it splits evenly rather than dividing by zero.
+    durationMs: Math.max(
+      MIN_LEG_MS,
+      Math.round(
+        total > 0
+          ? (totalMs * lengths[i]!) / total
+          : totalMs / Math.max(corners.length, 1),
+      ),
+    ),
+  }));
 }
 
 export const useEditorStore = create<EditorState>()(
@@ -1102,48 +1158,106 @@ export const useEditorStore = create<EditorState>()(
       drawMove: (slideIndex, objectId, route, animId) => {
         const { slides, objects } = get();
         const object = objects[objectId];
-        if (!object || route.length === 0) return undefined;
+        const slide = slides[slideIndex];
+        if (!object || !slide || route.length === 0) return undefined;
         if (!isOnSlide(slides, slideIndex, objectId)) return undefined;
 
+        const existing = animId
+          ? slide.animations.find((a) => a.id === animId)
+          : undefined;
+
+        // Where the journey begins: the object's opening state on this slide
+        // with everything that plays before this move folded in — the same
+        // answer the route overlay draws from and the player walks from. A
+        // brand-new move is appended, so for it that is "after everything".
+        const start = stateBeforeAnim(
+          resolveObjectState(object, slides, slideIndex),
+          slide.animations,
+          objectId,
+          existing?.id,
+        );
         // The route is drawn in centres, because that is what a drawn line
         // means; the document stores an object's top-left. Converted with the
-        // size the object has *here*, matching how the player walks the path.
-        const state = resolveObjectState(object, slides, slideIndex);
-        const half = { x: state.w / 2, y: state.h / 2 };
-        const last = route[route.length - 1]!;
-        const params = {
-          path: route.slice(0, -1).map((p) => ({ x: p.x, y: p.y })),
-          toX: last.x - half.x,
-          toY: last.y - half.y,
-        };
+        // size the object has *here*, matching how the player places it.
+        const half = { x: start.w / 2, y: start.h / 2 };
+        const corners = route.map((p) => ({ x: p.x, y: p.y }));
+        const last = corners[corners.length - 1]!;
 
-        const existing = animId
-          ? slides[slideIndex]?.animations.find((a) => a.id === animId)
-          : undefined;
-        if (existing) {
+        // A **deferred** move can't be a chain: a click or a collision fires one
+        // animation, and legs after it would have nothing to hang off. Redrawing
+        // one keeps the single-animation shape it needs, with the corners as its
+        // own waypoints — which is what `params.path` has always been for.
+        if (existing && isDeferredTrigger(existing.trigger)) {
           get().updateAnimation(slideIndex, existing.id, {
-            params: { ...existing.params, ...params },
+            params: {
+              ...existing.params,
+              path: corners.slice(0, -1),
+              toX: last.x - half.x,
+              toY: last.y - half.y,
+            },
           });
           return existing.id;
         }
 
-        const anim: Anim = {
-          id: nextAnimId(),
+        const legs = splitLegs(
+          { x: start.x + half.x, y: start.y + half.y },
+          corners,
+          existing?.durationMs ?? DRAWN_MOVE_MS,
+        );
+
+        // The first leg inherits the redrawn animation's identity — and so its
+        // timing, easing and place in the slide's order. A new draw chains onto
+        // whatever this object already does on the slide rather than starting
+        // at t=0 on top of it, which is the whole point of drawing a second
+        // move: it happens *next*.
+        const chained = slide.animations.some(
+          (a) => a.objectId === objectId && !isDeferredTrigger(a.trigger),
+        );
+        const template: Pick<
+          Anim,
+          "objectId" | "kind" | "trigger" | "delayMs" | "easing" | "collideWith"
+        > = existing ?? {
           objectId,
           kind: "motion",
-          effect: "move",
-          trigger: "onEnter",
+          trigger: chained ? "afterPrevious" : "onEnter",
           delayMs: 0,
-          // Long enough to read as a journey rather than a jump. The panel and
-          // the timeline are where it gets tuned.
-          durationMs: 1000,
           easing: "power2.out",
-          params,
         };
-        set((s) => {
-          s.slides[slideIndex]?.animations.push(anim);
+
+        const anims: Anim[] = legs.map((leg, index) => {
+          const first = index === 0;
+          return {
+            ...template,
+            id: first && existing ? existing.id : nextAnimId(),
+            effect: "move",
+            // Legs after the first run one after the other, back to back: a
+            // pause between them is theirs to be given in the timeline, not
+            // something a drawn line implies.
+            trigger: first ? template.trigger : "afterPrevious",
+            delayMs: first ? template.delayMs : 0,
+            durationMs: leg.durationMs,
+            params: {
+              // A leg is a straight hop, so it carries no waypoints of its own
+              // — the corners *are* the joins between legs now. Bending one is
+              // still possible per leg (double-click its route on the board).
+              toX: leg.to.x - half.x,
+              toY: leg.to.y - half.y,
+            },
+          };
         });
-        return anim.id;
+
+        set((s) => {
+          const target = s.slides[slideIndex];
+          if (!target) return;
+          if (existing) {
+            const at = target.animations.findIndex((a) => a.id === existing.id);
+            if (at < 0) return;
+            target.animations.splice(at, 1, ...anims);
+          } else {
+            target.animations.push(...anims);
+          }
+        });
+        return anims[0]?.id;
       },
 
       deleteAnimation: (slideIndex, animId) =>

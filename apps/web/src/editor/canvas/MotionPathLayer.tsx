@@ -8,6 +8,7 @@ import {
   pathTangent,
   pathToSvgD,
   resolveObjectState,
+  stateBeforeAnim,
   type Anim,
   type MotionPath,
   type Point,
@@ -65,8 +66,16 @@ export function MotionPathLayer() {
       const object = objects[anim.objectId];
       if (!object) continue;
 
-      // The journey begins where the object stands on this slide.
-      const from = resolveObjectState(object, slides, slideIndex);
+      // The journey begins where the object stands *by the time this move
+      // plays* — its opening state with every earlier animation folded in, so a
+      // chain of moves draws as one continuous line instead of every leg
+      // starting again from where the slide opened.
+      const from = stateBeforeAnim(
+        resolveObjectState(object, slides, slideIndex),
+        slide.animations,
+        anim.objectId,
+        anim.id,
+      );
       const waypoints = anim.params?.path ?? [];
       // Half-size from the *start* state, matching how `compileStep` converts
       // the route's centres back to the document's top-left coordinates.

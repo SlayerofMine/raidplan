@@ -205,7 +205,7 @@ assets(id, owner_id, kind /* background|icon|upload */, url, width, height, crea
 
 **Authoring**
 - Right‑panel "Animations" list for the **current step**: add per object, pick **kind** (entrance/exit/emphasis/motion) → **effect** (appear/fade/fly/move/scale/pulse/blink) → **trigger** (on enter / with previous / after previous / on click) → duration, delay, easing.
-- **Motion** effects: drag a path on canvas (array of points) → animate along it (GSAP MotionPathPlugin).
+- **Motion** effects: draw a route on canvas by clicking its corners → **one `move` per leg**, chained `afterPrevious`, each starting where the last one ended (`stateBeforeAnim`). Every leg is its own row in the panel and its own bar in the Gantt, so "run in, wait, run out" is one drawn route with a delay on its last leg. A leg can still be bent into a curve of its own (`params.path`, walked by `motionPath.ts` — deliberately not GSAP's MotionPathPlugin, so the editor overlay, the player, the frame exporter and the server SVG all draw one curve).
 - Live "Preview step" button re‑runs the timeline.
 
 **Playback engine** (`apps/web/src/anim/`)

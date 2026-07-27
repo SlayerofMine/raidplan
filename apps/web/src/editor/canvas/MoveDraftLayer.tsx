@@ -4,6 +4,7 @@ import {
   buildMotionPath,
   pathToSvgD,
   resolveObjectState,
+  stateBeforeAnim,
   type Point,
 } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
@@ -30,17 +31,25 @@ export function MoveDraftLayer() {
   const points = useMoveDraft((s) => s.points);
   const cursor = useMoveDraft((s) => s.cursor);
   const slideIndex = useMoveDraft((s) => s.slideIndex);
+  const animId = useMoveDraft((s) => s.animId);
   const object = useEditorStore((s) => (objectId ? s.objects[objectId] : null));
   const slides = useEditorStore((s) => s.slides);
 
   const route = useMemo<Point[]>(() => {
     if (!object) return [];
-    // The journey starts where the object stands on this slide — the one end
-    // that isn't drawn, because it is already on the board.
-    const from = resolveObjectState(object, slides, slideIndex);
+    // The journey starts where the object stands when this move runs — the one
+    // end that isn't drawn, because it is already on the board. A move drawn
+    // after another one begins where that one left off, and a *redrawn* one
+    // begins where its own leg did, not where the slide opened.
+    const from = stateBeforeAnim(
+      resolveObjectState(object, slides, slideIndex),
+      slides[slideIndex]?.animations ?? [],
+      object.id,
+      animId,
+    );
     const start = { x: from.x + from.w / 2, y: from.y + from.h / 2 };
     return [start, ...points, ...(cursor ? [cursor] : [])];
-  }, [object, slides, slideIndex, points, cursor]);
+  }, [object, slides, slideIndex, animId, points, cursor]);
 
   const path = useMemo(
     () => (route.length >= 2 ? buildMotionPath(route, 0) : null),

@@ -155,6 +155,57 @@ describe("compileStep — an animation states its own target", () => {
     expect(applied.a).toMatchObject({ x: 120, y: 80 });
   });
 
+  it("chained moves each start where the last one left off", () => {
+    // A drawn route is one move per leg, so this is the ordinary case, not an
+    // exotic one: leg two has to set out from leg one's destination rather than
+    // snapping back to where the slide opened.
+    const s = slide([
+      anim({ id: "1", effect: "move", params: { toX: 400, toY: 0 } }),
+      anim({
+        id: "2",
+        effect: "move",
+        trigger: "afterPrevious",
+        params: { toX: 400, toY: 300 },
+      }),
+    ]);
+    const { timeline, applied } = harness(s, { a: state({ x: 0, y: 0 }) });
+
+    // Half way through the second leg it is between the two destinations —
+    // which it can only be if it began at the first one.
+    timeline.progress(0.75);
+    expect(applied.a?.x).toBeCloseTo(400);
+    expect(applied.a?.y).toBeGreaterThan(0);
+    expect(applied.a?.y).toBeLessThan(300);
+
+    timeline.progress(1);
+    expect(applied.a).toMatchObject({ x: 400, y: 300 });
+  });
+
+  it("a chained move's route is walked from the previous leg's end", () => {
+    // The bent case takes the same start, and takes it explicitly: the path is
+    // built up-front from `origin`, so getting this wrong would teleport rather
+    // than merely ease oddly.
+    const s = slide([
+      anim({ id: "1", effect: "move", params: { toX: 400, toY: 0 } }),
+      anim({
+        id: "2",
+        effect: "move",
+        trigger: "afterPrevious",
+        // A waypoint out to the right, so the leg bulges away from a straight
+        // line between the two ends.
+        params: { toX: 400, toY: 400, path: [{ x: 850, y: 250 }] },
+      }),
+    ]);
+    const { timeline, applied } = harness(s, { a: state({ x: 0, y: 0 }) });
+
+    timeline.progress(0.75);
+    // Out past both ends of the leg — it is on the drawn bulge, which starts at
+    // (400, 0) plus the object's half-size, not back at the origin.
+    expect(applied.a?.x).toBeGreaterThan(400);
+    timeline.progress(1);
+    expect(applied.a).toMatchObject({ x: 400, y: 400 });
+  });
+
   it("is mid-way at half progress (it really tweens)", () => {
     const s = slide([
       anim({ effect: "move", easing: "none", params: { toX: 100 } }),

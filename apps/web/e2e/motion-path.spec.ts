@@ -4,9 +4,10 @@ import { expect, test, type Page } from "@playwright/test";
  * Drawing a move (plan §7).
  *
  * A move is a journey the author draws: pick an object, click the corners it
- * turns, press Enter. The animation carries the whole route — where it ends as
- * well as how it bends — so it is a complete statement on its own slide, and
- * needs no second slide to differ from.
+ * turns, press Enter. Each leg becomes its own `move`, chained onto the last —
+ * so the route is a row per leg in the Animation panel, each with its own delay
+ * and duration, and every one of them is a complete statement on its own slide
+ * that needs no second slide to differ from.
  *
  * The route lives on the Konva canvas, so it can't be queried like DOM: these
  * drive it the way a planner does and read the result back through the Animation
@@ -48,12 +49,40 @@ test.describe("drawing a move", () => {
     await page.keyboard.press("Enter");
 
     await expect(page.getByTestId("draw-move-active")).toHaveCount(0);
-    await expect(page.getByTestId("anim-row")).toHaveCount(1);
-    await expect(page.getByTestId("anim-effect")).toHaveValue("move");
-    // Three clicks: two corners plus the destination.
-    await expect(page.getByTestId("anim-route-clear")).toContainText(
-      "2 waypoints",
+    // Three clicks: three legs, so three moves to time independently.
+    await expect(page.getByTestId("anim-row")).toHaveCount(3);
+    await expect(page.getByTestId("anim-effect").first()).toHaveValue("move");
+    // The first leg opens the slide; the rest follow it, back to back.
+    await expect(page.getByTestId("anim-trigger").nth(0)).toHaveValue(
+      "onEnter",
     );
+    await expect(page.getByTestId("anim-trigger").nth(1)).toHaveValue(
+      "afterPrevious",
+    );
+    await expect(page.getByTestId("anim-trigger").nth(2)).toHaveValue(
+      "afterPrevious",
+    );
+  });
+
+  test("a leg can be made to wait, without touching the ones around it", async ({
+    page,
+  }) => {
+    // The point of a leg per move: "run in, wait two seconds, run out" is one
+    // drawn route with a delay on its last leg — no extra slide, no splitting.
+    await seedToken(page);
+    await page.getByTestId("draw-move").click();
+    await clickBoard(page, 0.5, 0.3);
+    await clickBoard(page, 0.8, 0.7);
+    await page.keyboard.press("Enter");
+
+    await expect(page.getByTestId("anim-row")).toHaveCount(2);
+    await page.getByTestId("anim-delay").nth(1).fill("2000");
+    await page.getByTestId("anim-duration").nth(1).fill("800");
+
+    // The wait belongs to the second leg alone.
+    await expect(page.getByTestId("anim-delay").nth(0)).toHaveValue("0");
+    await expect(page.getByTestId("anim-delay").nth(1)).toHaveValue("2000");
+    await expect(page.getByTestId("anim-duration").nth(1)).toHaveValue("800");
   });
 
   test("Escape abandons the draw and leaves nothing behind", async ({
@@ -81,10 +110,8 @@ test.describe("drawing a move", () => {
     await page.keyboard.press("Backspace");
     await page.keyboard.press("Enter");
 
-    // Three corners, one taken back, so one waypoint plus the destination.
-    await expect(page.getByTestId("anim-route-clear")).toContainText(
-      "1 waypoint",
-    );
+    // Three corners, one taken back, so two legs.
+    await expect(page.getByTestId("anim-row")).toHaveCount(2);
   });
 
   test("double-clicking in place ends the route", async ({ page }) => {
@@ -100,10 +127,8 @@ test.describe("drawing a move", () => {
 
     await expect(page.getByTestId("draw-move-active")).toHaveCount(0);
     // The corner, plus the destination the double-click landed on — the
-    // duplicate its second click left behind is dropped.
-    await expect(page.getByTestId("anim-route-clear")).toContainText(
-      "1 waypoint",
-    );
+    // duplicate its second click left behind is dropped, so two legs.
+    await expect(page.getByTestId("anim-row")).toHaveCount(2);
   });
 
   test("the panel's Finish button ends the draw like Enter does", async ({
@@ -119,11 +144,8 @@ test.describe("drawing a move", () => {
     await page.getByTestId("draw-move-finish").click();
 
     await expect(page.getByTestId("draw-move-active")).toHaveCount(0);
-    await expect(page.getByTestId("anim-row")).toHaveCount(1);
-    await expect(page.getByTestId("anim-effect")).toHaveValue("move");
-    await expect(page.getByTestId("anim-route-clear")).toContainText(
-      "1 waypoint",
-    );
+    await expect(page.getByTestId("anim-row")).toHaveCount(2);
+    await expect(page.getByTestId("anim-effect").first()).toHaveValue("move");
   });
 
   test("the panel's Cancel button abandons the draw like Escape does", async ({
@@ -183,7 +205,7 @@ test.describe("drawing a move", () => {
     await expect(page.getByTestId("anim-curve")).toHaveCount(0);
   });
 
-  test("the drawn route is stored on the animation, not on the panel", async ({
+  test("the drawn route is stored on the animations, not on the panel", async ({
     page,
   }) => {
     await seedToken(page);
@@ -192,20 +214,43 @@ test.describe("drawing a move", () => {
     await clickBoard(page, 0.8, 0.6);
     await page.keyboard.press("Enter");
 
-    await page.getByTestId("anim-curve").fill("1");
-    await expect(page.getByTestId("anim-curve")).toHaveValue("1");
+    // Retime one leg, so there is something to lose that isn't a position.
+    await page.getByTestId("anim-delay").nth(1).fill("1500");
+    await expect(page.getByTestId("anim-delay").nth(1)).toHaveValue("1500");
 
     // Leave the slide and come back: a value that lived in component state
-    // would be back at 0, and the route would straighten out under it.
+    // would be back at 0, and the pause between the legs would vanish.
     await page.getByTestId("add-slide").click();
-    await expect(page.getByTestId("anim-curve")).toHaveCount(0);
+    await expect(page.getByTestId("anim-row")).toHaveCount(0);
     await page.getByTestId("slide-0").click();
     // The new slide is empty, so the selection was dropped on the way there —
     // pick the token up again to inspect what it does here.
     await page.keyboard.press("Control+a");
-    await expect(page.getByTestId("anim-curve")).toHaveValue("1");
-    await expect(page.getByTestId("anim-route-clear")).toContainText(
-      "1 waypoint",
+    await expect(page.getByTestId("anim-row")).toHaveCount(2);
+    await expect(page.getByTestId("anim-delay").nth(1)).toHaveValue("1500");
+  });
+
+  test("redrawing one leg replaces just that leg", async ({ page }) => {
+    await seedToken(page);
+    await page.getByTestId("draw-move").click();
+    await clickBoard(page, 0.4, 0.3);
+    await clickBoard(page, 0.7, 0.6);
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("anim-row")).toHaveCount(2);
+
+    // Redraw the *first* leg as two corners: it becomes two legs, and the one
+    // that followed it is still there, still after them.
+    await page.getByTestId("anim-route-redraw").nth(0).click();
+    await clickBoard(page, 0.3, 0.5);
+    await clickBoard(page, 0.5, 0.5);
+    await page.keyboard.press("Enter");
+
+    await expect(page.getByTestId("anim-row")).toHaveCount(3);
+    await expect(page.getByTestId("anim-trigger").nth(0)).toHaveValue(
+      "onEnter",
+    );
+    await expect(page.getByTestId("anim-trigger").nth(2)).toHaveValue(
+      "afterPrevious",
     );
   });
 
@@ -238,7 +283,9 @@ test.describe("drawing a move", () => {
     await clickBoard(page, 0.5, 0.15);
     await clickBoard(page, 0.85, 0.75);
     await page.keyboard.press("Enter");
-    await page.getByTestId("anim-duration").fill("2000");
+    // Slow both legs down, so there is plenty of travel to catch mid-flight.
+    await page.getByTestId("anim-duration").nth(0).fill("1000");
+    await page.getByTestId("anim-duration").nth(1).fill("1000");
 
     await page.waitForTimeout(1400); // let autosave flush
     await page.getByTestId("open-viewer").click();

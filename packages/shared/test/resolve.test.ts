@@ -12,6 +12,7 @@ import {
   resolveSlideStates,
   settledStates,
   seedState,
+  stateBeforeAnim,
 } from "../src/resolve.js";
 
 function obj(id: string, base: Partial<PlanObject["base"]> = {}): PlanObject {
@@ -280,6 +281,65 @@ describe("settledStates", () => {
     });
     expect(s["a"]).toMatchObject({ x: 10 });
     expect(s["b"]).toMatchObject({ x: 900 });
+  });
+});
+
+/**
+ * Where an object stands when one particular animation is about to play — the
+ * rule a chain of `move`s hangs on. A drawn route is one move per leg, so leg
+ * two has to know it starts at leg one's destination.
+ */
+describe("stateBeforeAnim", () => {
+  const leg = (id: string, objectId: string, toX: number) => ({
+    ...anim(objectId),
+    id,
+    params: { toX },
+  });
+
+  it("folds in the animations before it, and none after", () => {
+    const animations = [
+      leg("a1", "a", 200),
+      leg("a2", "a", 500),
+      leg("a3", "a", 900),
+    ];
+    const before = stateBeforeAnim(state({ x: 0 }), animations, "a", "a2");
+    expect(before).toMatchObject({ x: 200 });
+  });
+
+  it("is the opening state for the first animation", () => {
+    const animations = [leg("a1", "a", 200), leg("a2", "a", 500)];
+    expect(
+      stateBeforeAnim(state({ x: 40 }), animations, "a", "a1"),
+    ).toMatchObject({ x: 40 });
+  });
+
+  it("means 'after everything' for an animation the slide doesn't have", () => {
+    // Which is what a *new* move, appended to the slide, wants to know.
+    const animations = [leg("a1", "a", 200), leg("a2", "a", 500)];
+    expect(stateBeforeAnim(state({ x: 0 }), animations, "a")).toMatchObject({
+      x: 500,
+    });
+  });
+
+  it("ignores the other objects' animations, wherever they sit", () => {
+    const animations = [
+      leg("b1", "b", 900),
+      leg("a1", "a", 200),
+      leg("a2", "a", 500),
+    ];
+    expect(
+      stateBeforeAnim(state({ x: 0 }), animations, "a", "a2"),
+    ).toMatchObject({ x: 200 });
+  });
+
+  it("skips a deferred leg — a click that may never come promises nothing", () => {
+    const animations = [
+      { ...leg("a1", "a", 200), trigger: "onClick" as const },
+      leg("a2", "a", 500),
+    ];
+    expect(
+      stateBeforeAnim(state({ x: 0 }), animations, "a", "a2"),
+    ).toMatchObject({ x: 0 });
   });
 });
 
