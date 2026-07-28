@@ -1,3 +1,10 @@
+import type { ReactNode } from "react";
+import {
+  LuChevronDown,
+  LuChevronsDown,
+  LuChevronsUp,
+  LuChevronUp,
+} from "react-icons/lu";
 import { attackFollow } from "@raidplan/shared";
 import type { MechFillStyle, ObjectStyle, PlanObject } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
@@ -193,22 +200,22 @@ export function PropertiesPanel() {
             <span className="text-sm text-neutral-500">Order</span>
             <div className="mt-1 grid grid-cols-4 gap-1">
               <OrderButton
-                label="⤒"
+                icon={<LuChevronsUp aria-hidden />}
                 title="Bring to front"
                 onClick={() => bringToFront(object.id)}
               />
               <OrderButton
-                label="↑"
+                icon={<LuChevronUp aria-hidden />}
                 title="Bring forward"
                 onClick={() => bringForward(object.id)}
               />
               <OrderButton
-                label="↓"
+                icon={<LuChevronDown aria-hidden />}
                 title="Send backward"
                 onClick={() => sendBackward(object.id)}
               />
               <OrderButton
-                label="⤓"
+                icon={<LuChevronsDown aria-hidden />}
                 title="Send to back"
                 onClick={() => sendToBack(object.id)}
               />
@@ -342,22 +349,22 @@ function AttackProperties({ instanceId }: { instanceId: string }) {
             themselves. */}
         <div className="mt-1 grid grid-cols-4 gap-1">
           <OrderButton
-            label="⤒"
+            icon={<LuChevronsUp aria-hidden />}
             title="Bring to front"
             onClick={() => reorderAttack(instance.id, attackCount)}
           />
           <OrderButton
-            label="↑"
+            icon={<LuChevronUp aria-hidden />}
             title="Bring forward"
             onClick={() => reorderAttack(instance.id, 1)}
           />
           <OrderButton
-            label="↓"
+            icon={<LuChevronDown aria-hidden />}
             title="Send backward"
             onClick={() => reorderAttack(instance.id, -1)}
           />
           <OrderButton
-            label="⤓"
+            icon={<LuChevronsDown aria-hidden />}
             title="Send to back"
             onClick={() => reorderAttack(instance.id, -attackCount)}
           />
@@ -522,11 +529,11 @@ function SelectRow({
 }
 
 function OrderButton({
-  label,
+  icon,
   title,
   onClick,
 }: {
-  label: string;
+  icon: ReactNode;
   title: string;
   onClick: () => void;
 }) {
@@ -536,9 +543,9 @@ function OrderButton({
       title={title}
       aria-label={title}
       onClick={onClick}
-      className="rounded border border-panelborder py-1 text-sm hover:border-accent"
+      className="flex items-center justify-center rounded border border-panelborder py-1.5 text-sm hover:border-accent"
     >
-      {label}
+      {icon}
     </button>
   );
 }

@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type MouseEvent } from "react";
+import { LuEye, LuEyeOff, LuLock, LuLockOpen, LuX } from "react-icons/lu";
 import { objectsOnSlide } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
 import { objectDisplayName } from "./objectName";
@@ -141,21 +142,25 @@ export function ObjectsPanel() {
                   active={!visible}
                   onClick={() => updateObject(id, { visible: !visible })}
                 >
-                  {visible ? "👁" : "🚫"}
+                  {visible ? <LuEye aria-hidden /> : <LuEyeOff aria-hidden />}
                 </RowButton>
                 <RowButton
                   label={`${object.locked ? "Unlock" : "Lock"} ${name}`}
                   active={object.locked === true}
                   onClick={() => setLocked(id, !object.locked)}
                 >
-                  {object.locked ? "🔒" : "🔓"}
+                  {object.locked ? (
+                    <LuLock aria-hidden />
+                  ) : (
+                    <LuLockOpen aria-hidden />
+                  )}
                 </RowButton>
                 <RowButton
                   label={`Delete ${name}`}
                   onClick={() => deleteObjects([id])}
                   className="hover:text-amber-400"
                 >
-                  ✕
+                  <LuX aria-hidden />
                 </RowButton>
               </li>
             );
@@ -189,7 +194,7 @@ function RowButton({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={`shrink-0 rounded px-1 py-0.5 text-xs leading-none ${
+      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded text-sm leading-none ${
         active ? "opacity-100" : "opacity-60"
       } hover:bg-neutral-700 hover:opacity-100 ${className ?? ""}`}
     >

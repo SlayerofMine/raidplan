@@ -1,3 +1,4 @@
+import { LuPencil, LuX } from "react-icons/lu";
 import { ANIM_KINDS, ANIM_TRIGGERS, type Anim } from "@raidplan/shared";
 import {
   defaultEffectFor,
@@ -117,9 +118,10 @@ export function AnimationPanel() {
               : "Click the corners of the route on the board"
           }
           onClick={() => begin(routable!, currentSlideIndex)}
-          className="w-full rounded border border-panelborder py-1 text-sm hover:border-accent disabled:opacity-40"
+          className="flex w-full items-center justify-center gap-1.5 rounded border border-panelborder py-1 text-sm hover:border-accent disabled:opacity-40"
         >
-          ✎ Draw a move
+          <LuPencil aria-hidden />
+          Draw a move
         </button>
       )}
 
@@ -247,9 +249,9 @@ function AnimationRow({
           type="button"
           aria-label="Delete animation"
           onClick={() => deleteAnimations(slideIndex, ids)}
-          className="text-xs text-neutral-500 hover:text-accent"
+          className="text-sm text-neutral-500 hover:text-accent"
         >
-          ×
+          <LuX aria-hidden />
         </button>
       </div>
 

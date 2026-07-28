@@ -1,3 +1,12 @@
+import type { ReactNode } from "react";
+import {
+  LuArrowRightToLine,
+  LuChevronLeft,
+  LuChevronRight,
+  LuCopy,
+  LuPlus,
+  LuX,
+} from "react-icons/lu";
 import { useEditorStore } from "../store/editorStore";
 
 /**
@@ -10,9 +19,10 @@ import { useEditorStore } from "../store/editorStore";
  *
  * Selecting a slide means edits land in *that slide's* layout, and in no other
  * (plan §5). A slide owns its cast too, so the three ways to make one are
- * genuinely different things to say: **+ Slide** is an empty stage, **⇥** keeps
- * the objects where the previous slide left them (what a `move` needs — it
- * animates one object across two slides), and **⧉** copies what happens as well.
+ * genuinely different things to say: **+ Slide** is an empty stage, **Continue**
+ * keeps the objects where the previous slide left them (what a `move` needs — it
+ * animates one object across two slides), and **Duplicate** copies what happens
+ * as well.
  */
 export function SlideStrip() {
   const slides = useEditorStore((s) => s.slides);
@@ -57,13 +67,13 @@ export function SlideStrip() {
             </button>
             <IconBtn
               label={`Move ${slide.name ?? `Slide ${index + 1}`} earlier`}
-              glyph="◀"
+              icon={<LuChevronLeft aria-hidden />}
               disabled={index === 0}
               onClick={() => moveSlide(index, index - 1)}
             />
             <IconBtn
               label={`Move ${slide.name ?? `Slide ${index + 1}`} later`}
-              glyph="▶"
+              icon={<LuChevronRight aria-hidden />}
               disabled={index === slides.length - 1}
               onClick={() => moveSlide(index, index + 1)}
             />
@@ -73,7 +83,7 @@ export function SlideStrip() {
                 slide.name ?? `Slide ${index + 1}`
               } leaves them`}
               testId={`continue-slide-${index}`}
-              glyph="⇥"
+              icon={<LuArrowRightToLine aria-hidden />}
               onClick={() => continueSlide(index)}
             />
             <IconBtn
@@ -81,12 +91,12 @@ export function SlideStrip() {
               title={`Copy ${
                 slide.name ?? `Slide ${index + 1}`
               } — its objects and what happens on it`}
-              glyph="⧉"
+              icon={<LuCopy aria-hidden />}
               onClick={() => duplicateSlide(index)}
             />
             <IconBtn
               label={`Delete ${slide.name ?? `Slide ${index + 1}`}`}
-              glyph="×"
+              icon={<LuX aria-hidden />}
               disabled={!canDelete}
               onClick={() => deleteSlide(index)}
             />
@@ -98,10 +108,11 @@ export function SlideStrip() {
         type="button"
         onClick={addSlide}
         data-testid="add-slide"
-        title="New empty slide — use ⇥ on a slide to carry its objects forward"
-        className="rounded border border-panelborder px-2 py-1 text-sm hover:border-accent"
+        title="New empty slide — use Continue on a slide to carry its objects forward"
+        className="flex items-center gap-1 rounded border border-panelborder px-2 py-1 text-sm hover:border-accent"
       >
-        + Slide
+        <LuPlus aria-hidden />
+        Slide
       </button>
 
       <span
@@ -124,7 +135,7 @@ function IconBtn({
   label,
   title,
   testId,
-  glyph,
+  icon,
   onClick,
   disabled,
 }: {
@@ -132,7 +143,7 @@ function IconBtn({
   /** Hover text, where the accessible name is too terse to explain the button. */
   title?: string;
   testId?: string;
-  glyph: string;
+  icon: ReactNode;
   onClick: () => void;
   disabled?: boolean;
 }) {
@@ -144,9 +155,9 @@ function IconBtn({
       {...(testId ? { "data-testid": testId } : {})}
       onClick={onClick}
       disabled={disabled}
-      className="px-1 text-xs text-neutral-500 hover:text-accent disabled:opacity-30"
+      className="flex items-center justify-center px-1 text-sm text-neutral-500 hover:text-accent disabled:opacity-30"
     >
-      {glyph}
+      {icon}
     </button>
   );
 }

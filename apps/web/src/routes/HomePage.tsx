@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { LuLoaderCircle } from "react-icons/lu";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { loginUrl, logoutUrl, useSession } from "../api/useSession";
@@ -52,7 +53,12 @@ export function HomePage() {
         </div>
         <div className="ml-auto" data-testid="session">
           {session.status === "loading" && (
-            <span className="text-sm text-neutral-500">…</span>
+            <span role="status" aria-label="Loading">
+              <LuLoaderCircle
+                className="animate-spin text-neutral-500"
+                aria-hidden
+              />
+            </span>
           )}
           {session.status === "unreachable" && (
             <button

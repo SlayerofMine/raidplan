@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { LuPause, LuPlay, LuRepeat, LuSquare } from "react-icons/lu";
 import { formatMs, SPEEDS, usePlayhead } from "./playhead";
 
 /**
@@ -26,14 +28,14 @@ export function PlayheadTransport() {
     >
       <Btn
         label={isPlaying ? "Pause" : "Play"}
-        glyph={isPlaying ? "⏸" : "▶"}
+        icon={isPlaying ? <LuPause aria-hidden /> : <LuPlay aria-hidden />}
         testId="playhead-play"
         disabled={empty}
         onClick={usePlayhead.getState().toggle}
       />
       <Btn
         label="Stop"
-        glyph="⏹"
+        icon={<LuSquare aria-hidden />}
         testId="playhead-stop"
         title="Back to the start — the plan is only editable there"
         disabled={timeMs === 0 && !isPlaying}
@@ -41,7 +43,7 @@ export function PlayheadTransport() {
       />
       <Btn
         label="Loop"
-        glyph="⟲"
+        icon={<LuRepeat aria-hidden />}
         testId="playhead-loop"
         pressed={loop}
         onClick={() => usePlayhead.getState().setLoop(!loop)}
@@ -75,7 +77,7 @@ export function PlayheadTransport() {
 
 function Btn({
   label,
-  glyph,
+  icon,
   onClick,
   disabled,
   pressed,
@@ -83,7 +85,7 @@ function Btn({
   title,
 }: {
   label: string;
-  glyph: string;
+  icon: ReactNode;
   onClick: () => void;
   disabled?: boolean;
   /** Set for toggles, so the state is announced rather than only coloured. */
@@ -100,13 +102,13 @@ function Btn({
       onClick={onClick}
       disabled={disabled}
       data-testid={testId}
-      className={`rounded border px-1.5 py-0.5 text-[11px] leading-none disabled:opacity-30 ${
+      className={`flex items-center justify-center rounded border px-1.5 py-1 text-[11px] leading-none disabled:opacity-30 ${
         pressed
           ? "border-accent text-accent"
           : "border-panelborder text-neutral-300 hover:border-accent"
       }`}
     >
-      {glyph}
+      {icon}
     </button>
   );
 }
