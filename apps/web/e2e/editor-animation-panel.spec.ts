@@ -79,13 +79,15 @@ test.describe("animation panel", () => {
   /**
    * A family offers only its own effects, and lands on the first of them. `fly`
    * is deliberately absent from `exit` — it flies *to* the slide's end state,
-   * which is an entrance's job.
+   * which is an entrance's job. `move` is likewise absent from `motion`: it is
+   * drawn by clicking out its legs, and one picked from a dropdown would have
+   * no path to follow.
    */
   for (const [kind, effects] of [
     ["entrance", ["fade", "appear", "fly"]],
     ["exit", ["fade", "disappear"]],
     ["emphasis", ["pulse", "blink"]],
-    ["motion", ["move", "scale"]],
+    ["motion", ["scale"]],
   ] as const) {
     test(`the ${kind} family offers exactly its own effects`, async ({
       page,
@@ -229,7 +231,9 @@ test.describe("animation panel", () => {
     await page.getByTestId("anim-scale").fill("2.5");
     await expect(page.getByTestId("anim-scale")).toHaveValue("2.5");
 
-    await page.getByTestId("anim-effect").selectOption("move");
+    // Any other effect, and the row is gone. Reached through the family, since
+    // `scale` is the only effect `motion` offers.
+    await page.getByTestId("anim-kind").selectOption("emphasis");
     await expect(page.getByTestId("anim-scale")).toHaveCount(0);
   });
 
