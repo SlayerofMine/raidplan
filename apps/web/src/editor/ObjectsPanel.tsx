@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, type MouseEvent } from "react";
 import { LuEye, LuEyeOff, LuLock, LuLockOpen, LuX } from "react-icons/lu";
 import { objectsOnSlide } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
+import { CollapsiblePanel } from "./CollapsiblePanel";
 import { objectDisplayName } from "./objectName";
 
 /**
@@ -66,18 +67,13 @@ export function ObjectsPanel() {
   );
 
   return (
-    <section
-      aria-label="Objects"
-      data-testid="objects-panel"
-      className="flex max-h-64 shrink-0 flex-col border-b border-panelborder"
+    <CollapsiblePanel
+      id="objects"
+      title="Objects"
+      aside={rows.length}
+      testId="objects-panel"
+      className="max-h-64"
     >
-      <h2 className="flex items-baseline justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
-        Objects
-        <span className="font-normal normal-case tracking-normal text-neutral-500">
-          {rows.length}
-        </span>
-      </h2>
-
       {rows.length === 0 ? (
         <p
           data-testid="no-objects"
@@ -167,7 +163,7 @@ export function ObjectsPanel() {
           })}
         </ul>
       )}
-    </section>
+    </CollapsiblePanel>
   );
 }
 

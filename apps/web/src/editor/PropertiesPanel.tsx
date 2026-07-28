@@ -9,6 +9,7 @@ import { attackFollow } from "@raidplan/shared";
 import type { MechFillStyle, ObjectStyle, PlanObject } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
 import { useSoleSelection } from "../store/useSoleSelection";
+import { CollapsiblePanel } from "./CollapsiblePanel";
 import { FollowFields } from "./FollowFields";
 import { useFollowChoices } from "./useFollowChoices";
 
@@ -44,11 +45,7 @@ export function PropertiesPanel() {
   const sendToBack = useEditorStore((s) => s.sendToBack);
 
   return (
-    <section aria-label="Properties" className="flex flex-col">
-      <h2 className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
-        Properties
-      </h2>
-
+    <CollapsiblePanel id="properties" title="Properties">
       {selectedAttackIds.length > 0 ? (
         <AttackProperties instanceId={selectedAttackIds[0]!} />
       ) : (
@@ -223,7 +220,7 @@ export function PropertiesPanel() {
           </div>
         </div>
       )}
-    </section>
+    </CollapsiblePanel>
   );
 }
 

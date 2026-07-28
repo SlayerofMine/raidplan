@@ -28,6 +28,10 @@ import {
  * canvas / properties in the middle row, slides strip along the bottom. The grid
  * gives the canvas all remaining space while the side panels keep a fixed width.
  *
+ * The right rail is one scroller holding four collapsible panels; each remembers
+ * whether it is shut (see `CollapsiblePanel`), so the rail can be pared back to
+ * the one being worked in without that choice riding along in the plan.
+ *
  * It is also where the editing lock is applied. While the Timeline's playhead is
  * off zero the canvas shows a frame of the slide's animation rather than the
  * slide as stored, so every region that writes to the document is disabled —
