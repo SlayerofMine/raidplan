@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { temporalStore, useEditorStore } from "../store/editorStore";
 import { isEditableTarget } from "./isEditableTarget";
+import { isPlaybackLocked, usePlayhead } from "./timeline/playhead";
 
 const NUDGE: Record<string, [number, number]> = {
   ArrowLeft: [-1, 0],
@@ -13,6 +14,12 @@ const NUDGE: Record<string, [number, number]> = {
  * Global editor shortcuts (plan §2.7). Space-to-pan is owned by the canvas.
  * Everything here is ignored while a text field has focus, so typing a plan
  * title never deletes objects.
+ *
+ * While the Timeline's playhead is off zero, **Escape** stops it and nothing
+ * else runs at all: the board is then showing a frame of an animation rather
+ * than the slide, and undo in particular would step the document out from under
+ * something you aren't looking at. Space stays the canvas's pan key throughout —
+ * looking around a frame is harmless — so the transport doesn't take it.
  */
 export function useEditorHotkeys() {
   useEffect(() => {
@@ -20,6 +27,14 @@ export function useEditorHotkeys() {
       if (isEditableTarget(e.target)) return;
       const store = useEditorStore.getState();
       const mod = e.ctrlKey || e.metaKey;
+
+      if (isPlaybackLocked()) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          usePlayhead.getState().stop();
+        }
+        return;
+      }
 
       if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();

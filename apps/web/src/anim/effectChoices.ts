@@ -14,12 +14,17 @@ import type { AnimEffect, AnimKind } from "@raidplan/shared";
  * This mirrors what `compileStep` actually does. `fly` is deliberately absent
  * from `exit`: it flies *to* the slide's end state, which is an entrance's job —
  * offering it as an exit would be offering something that doesn't exist.
+ *
+ * `move` is likewise absent from `motion`: a move is a drawn path, made by
+ * clicking out its legs on the canvas, and a move picked from a dropdown has no
+ * path to follow. Existing moves still open and edit normally — `effectsForKind`
+ * always keeps `current`.
  */
 const BY_KIND: Record<AnimKind, AnimEffect[]> = {
   entrance: ["fade", "appear", "fly"],
   exit: ["fade", "disappear"],
   emphasis: ["pulse", "blink"],
-  motion: ["move", "scale"],
+  motion: ["scale"],
 };
 
 /** Names that read differently depending on the family they're used in. */

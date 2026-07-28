@@ -28,6 +28,7 @@ import {
   ICON_DATA_TYPE,
   SHAPE_DATA_TYPE,
 } from "../paletteDrag";
+import { selectPlaybackLocked, usePlayhead } from "../timeline/playhead";
 import { screenToNative, type Point } from "./coords";
 import { snapValue } from "./snapping";
 import {
@@ -124,6 +125,16 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
   const drawing = useMoveDraft((s) => s.objectId !== null);
   useMoveDraftKeys();
 
+  /**
+   * The playhead is off zero, so the board is showing a *frame* of the slide
+   * rather than the slide itself (plan §3.4). Every way of changing the document
+   * from the canvas is off while it is: the tweened coordinates under the cursor
+   * belong to an animation, and committing them as an object's layout would
+   * rewrite the slide out of one of its own frames. The camera stays live —
+   * zooming and panning look at the frame without touching the plan.
+   */
+  const locked = usePlayhead(selectPlaybackLocked);
+
   // The sweep lives in state (to draw it) and a ref (to read it from the
   // window-level mouseup without stale-closure games).
   const [marquee, setMarquee] = useState<Marquee | null>(null);
@@ -182,7 +193,7 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
    */
   const handleStageMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     // A sweep during a draw would rubber-band the board instead of drawing.
-    if (isPanning || drawing) return;
+    if (isPanning || drawing || locked) return;
     const stage = e.target.getStage();
     if (!stage || e.target !== stage) return;
     const pointer = stage.getPointerPosition();
@@ -308,7 +319,7 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
   const handleDrop = (e: ReactDragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || locked) return;
     const rect = container.getBoundingClientRect();
     const at = screenToNative(
       { x: e.clientX - rect.left, y: e.clientY - rect.top },
@@ -383,9 +394,10 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
         </Layer>
         <Layer>
           {/* Everything that can normally be clicked or dragged. While a route
-              is being drawn the whole group stops listening, so a click means
-              "corner here" and can't accidentally grab a token instead. */}
-          <Group listening={!drawing}>
+              is being drawn — or the playhead is showing a frame — the whole
+              group stops listening, so a click means "corner here" (or nothing)
+              and can't accidentally grab a token instead. */}
+          <Group listening={!drawing && !locked}>
             {/* One stack: an attack can sit under the token standing on it, and
                 whatever is on top is what a click finds. */}
             {stack.map((item) =>
@@ -393,7 +405,7 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
                 <ObjectNode
                   key={item.id}
                   objectId={item.id}
-                  draggable={!isPanning && !drawing}
+                  draggable={!isPanning && !drawing && !locked}
                 />
               ) : (
                 <PlacedAttackNode key={item.id} instanceId={item.id} />
@@ -401,15 +413,23 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
             )}
             {/* Chrome only one caller wants — the designer's bounding box. */}
             {overlay}
-            <SelectionTransformer
-              selectedIds={selectedIds}
-              selectedAttackIds={selectedAttackIds}
-              attacks={attacks}
-              objectIds={objectIds}
-              selectionSizes={selectionSizes}
-            />
-            <MotionPathLayer />
-            <OriginHandle />
+            {/* Editing chrome describes the *stored* slide, so it would be
+                lying about a board mid-animation. Hidden until the playhead is
+                back at 0, which also stops the transformer from chasing nodes
+                that GSAP is moving under it. */}
+            {!locked && (
+              <>
+                <SelectionTransformer
+                  selectedIds={selectedIds}
+                  selectedAttackIds={selectedAttackIds}
+                  attacks={attacks}
+                  objectIds={objectIds}
+                  selectionSizes={selectionSizes}
+                />
+                <MotionPathLayer />
+                <OriginHandle />
+              </>
+            )}
           </Group>
           <MoveDraftLayer />
           {marquee && (

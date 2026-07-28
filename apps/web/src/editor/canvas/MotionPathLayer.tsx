@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { Circle, Group, Line, Path } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { useShallow } from "zustand/react/shallow";
@@ -14,6 +14,7 @@ import {
   type Point,
 } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
+import { beginGesture, endGesture } from "../../store/gestureHistory";
 
 /**
  * The routes `move` animations follow, drawn on the board (plan §7 "Motion
@@ -152,6 +153,19 @@ function RouteShape({
   const waypoints = points.slice(1, -1);
   const destination = points[points.length - 1];
 
+  // Where the handle stood when the current drag started, so its release can be
+  // recorded as one undo step instead of one per frame (see `gestureHistory`).
+  const before = useRef<(() => void) | null>(null);
+  const startDrag = (rewind: () => void) => {
+    before.current = rewind;
+    beginGesture();
+  };
+  const endDrag = (commit: () => void) => {
+    const rewind = before.current;
+    before.current = null;
+    endGesture({ rewind: rewind ?? (() => {}), commit });
+  };
+
   return (
     <Group>
       <Path
@@ -186,12 +200,17 @@ function RouteShape({
             strokeWidth={2}
             strokeScaleEnabled={false}
             draggable
+            onDragStart={() => {
+              const start = waypoints;
+              startDrag(() => onWaypoints(start));
+            }}
             onDragMove={(e: KonvaEventObject<DragEvent>) =>
               onWaypoints(replaceAt(waypoints, index, e.target.position()))
             }
-            onDragEnd={(e: KonvaEventObject<DragEvent>) =>
-              onWaypoints(replaceAt(waypoints, index, e.target.position()))
-            }
+            onDragEnd={(e: KonvaEventObject<DragEvent>) => {
+              const at = e.target.position();
+              endDrag(() => onWaypoints(replaceAt(waypoints, index, at)));
+            }}
             // Double-click takes a waypoint back out — the inverse of the
             // double-click on the line that put it there.
             onDblClick={() =>
@@ -213,12 +232,17 @@ function RouteShape({
           strokeWidth={2}
           strokeScaleEnabled={false}
           draggable
+          onDragStart={() => {
+            const start = destination;
+            startDrag(() => onDestination(start));
+          }}
           onDragMove={(e: KonvaEventObject<DragEvent>) =>
             onDestination(e.target.position())
           }
-          onDragEnd={(e: KonvaEventObject<DragEvent>) =>
-            onDestination(e.target.position())
-          }
+          onDragEnd={(e: KonvaEventObject<DragEvent>) => {
+            const at = e.target.position();
+            endDrag(() => onDestination(at));
+          }}
         />
       )}
     </Group>

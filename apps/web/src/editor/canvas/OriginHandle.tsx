@@ -15,7 +15,8 @@ import {
   slidePinnedOrigin,
   type Pivoted,
 } from "@raidplan/shared";
-import { temporalStore, useEditorStore } from "../../store/editorStore";
+import { useEditorStore } from "../../store/editorStore";
+import { beginGesture, endGesture } from "../../store/gestureHistory";
 import { useSoleSelection } from "../../store/useSoleSelection";
 import { carryToNode } from "./coords";
 
@@ -182,7 +183,7 @@ export function OriginHandle() {
    * rewound and committed as a single slide when it ends.
    */
   const startOrigin = (e: KonvaEventObject<DragEvent>) => {
-    temporalStore.getState().pause();
+    beginGesture();
     drag.current = {
       pinned,
       anchorAbs: e.target.getAbsolutePosition(),
@@ -223,23 +224,20 @@ export function OriginHandle() {
     updateObject(object.id, d.last);
   };
 
-  /**
-   * End of a drag: fold the whole gesture into one undo slide. Rewind to where
-   * it began while still untracked, resume recording, then apply the final
-   * placement once — so undo takes back the drag in a single press, not frame
-   * by frame. React batches the two writes, so nothing flickers between them.
-   */
+  /** End of a drag: fold the whole gesture into one undo slide. */
   const endOrigin = () => {
     const d = drag.current;
     drag.current = null;
-    const temporal = temporalStore.getState();
-    if (d?.last) {
-      updateObject(object.id, d.start);
-      temporal.resume();
-      updateObject(object.id, d.last);
-    } else {
-      temporal.resume();
-    }
+    const last = d?.last;
+    const start = d?.start;
+    endGesture(
+      last && start
+        ? {
+            rewind: () => updateObject(object.id, start),
+            commit: () => updateObject(object.id, last),
+          }
+        : null,
+    );
   };
 
   // Pinned: keep the crosshair pinned to the anchor so it never chases the

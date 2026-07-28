@@ -14,8 +14,10 @@ import {
   msToPx,
   nudgeValueMs,
   packLanes,
+  pxToMs,
   timelineScale,
 } from "../../anim/stepTimeline";
+import { formatMs, selectPlaybackLocked, usePlayhead } from "./playhead";
 
 /**
  * One slide's Gantt chart (plan §3.4 / §7). Rows are the objects that have an
@@ -36,6 +38,10 @@ const LANE_H = 22;
 const LANE_GAP = 3;
 const BODY_MIN_MS = 0;
 const DURATION_MIN_MS = 50;
+/** Height of the scrub ruler — big enough to be a comfortable grab target. */
+const RULER_H = 16;
+/** How far an Arrow key moves the playhead; Shift makes it ten frames. */
+const PLAYHEAD_STEP_MS = 1000 / 60;
 
 /** Tailwind background per animation family, so kinds read at a glance. */
 const KIND_BG: Record<AnimKind, string> = {
@@ -50,6 +56,9 @@ export function TimelineChart({ slideIndex }: { slideIndex: number }) {
   const objects = useEditorStore((s) => s.objects);
   const selectSlide = useEditorStore((s) => s.selectSlide);
   const currentSlideIndex = useEditorStore((s) => s.currentSlideIndex);
+  // Retiming a bar while the board is showing a frame of that very animation
+  // would fight the playhead, so bars are read-only until the transport stops.
+  const locked = usePlayhead(selectPlaybackLocked);
   // Measure a wrapper that is *always* mounted (present in both the empty and
   // populated states), never the track column itself. `useContainerSize` only
   // observes its element on mount, so a track that appears later — the instant
@@ -140,8 +149,17 @@ export function TimelineChart({ slideIndex }: { slideIndex: number }) {
         </span>
       </div>
 
-      {/* Always mounted, so its width is known before any row appears. */}
-      <div ref={measureRef} data-testid={`timeline-track-${slideIndex}`}>
+      {/* Always mounted, so its width is known before any row appears. It is
+          also the playhead's frame of reference: the marker is drawn over the
+          whole stack of rows, not inside any one of them. */}
+      <div
+        ref={measureRef}
+        data-testid={`timeline-track-${slideIndex}`}
+        className="relative"
+      >
+        {/* Only the slide being edited has a playhead — it is the only one the
+            canvas can be showing a frame of. */}
+        {active && <Playhead pxPerMs={scale.pxPerMs} />}
         {rows.length === 0 && attackRows.length === 0 ? (
           <p
             data-testid={`timeline-empty-${slideIndex}`}
@@ -156,14 +174,11 @@ export function TimelineChart({ slideIndex }: { slideIndex: number }) {
           >
             {/* Ruler: an empty label cell plus the track column. */}
             <div />
-            <div className="relative h-3">
-              <span className="absolute left-0 top-0 text-[10px] text-neutral-600">
-                0
-              </span>
-              <span className="absolute right-0 top-0 text-[10px] text-neutral-600">
-                {Math.round(scale.contentMs)}ms
-              </span>
-            </div>
+            <Ruler
+              contentMs={scale.contentMs}
+              pxPerMs={scale.pxPerMs}
+              active={active}
+            />
 
             {rows.map((objectId) => {
               const spans = timeline.spans.filter(
@@ -177,6 +192,7 @@ export function TimelineChart({ slideIndex }: { slideIndex: number }) {
                   label={objectDisplayName(objects[objectId])}
                   spans={spans}
                   pxPerMs={scale.pxPerMs}
+                  locked={locked}
                 />
               );
             })}
@@ -189,12 +205,132 @@ export function TimelineChart({ slideIndex }: { slideIndex: number }) {
                 spanMs={row.spanMs}
                 naturalMs={row.naturalMs}
                 pxPerMs={scale.pxPerMs}
+                locked={locked}
               />
             ))}
           </div>
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * The scrub ruler — the strip you drag to move the playhead, like the time
+ * ruler above a video editor's tracks.
+ *
+ * A `slider`, not a bare div: that gives it Arrow-key scrubbing and a spoken
+ * position for free, and — since jsdom measures nothing and `pxPerMs` is 0
+ * there — keyboard scrubbing is also the part that can be tested without a
+ * layout engine, exactly as bar dragging already is.
+ *
+ * Pointer positions are read against the strip's own box rather than tracked as
+ * a delta, so a drag that runs off either end pins to 0 or to the slide's length
+ * instead of drifting.
+ *
+ * The scrub *range* comes from the playhead store, not from this chart's own
+ * `totalMs`. They are the same number — both are `layoutStepTimeline` on the
+ * same slide — but only one of them can be the one `seekMs` clamps against, and
+ * a slider whose maximum and whose clamp are computed in two places is a slider
+ * that will one day stop at the wrong end.
+ */
+function Ruler({
+  contentMs,
+  pxPerMs,
+  active,
+}: {
+  /** The span the ruler is drawn against — never shorter than the minimum. */
+  contentMs: number;
+  pxPerMs: number;
+  active: boolean;
+}) {
+  const timeMs = usePlayhead((s) => s.timeMs);
+  const durationMs = usePlayhead((s) => s.durationMs);
+  const seekMs = usePlayhead((s) => s.seekMs);
+
+  // Scrubbing an off-screen slide would move a playhead that isn't shown.
+  const scrub = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!active || pxPerMs <= 0) return;
+    const box = e.currentTarget.getBoundingClientRect();
+    seekMs(pxToMs(e.clientX - box.left, pxPerMs));
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (dir) {
+      e.preventDefault();
+      seekMs(timeMs + dir * PLAYHEAD_STEP_MS * (e.shiftKey ? 10 : 1));
+      return;
+    }
+    if (e.key === "Home") {
+      e.preventDefault();
+      seekMs(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      seekMs(durationMs);
+    }
+  };
+
+  return (
+    <div
+      role="slider"
+      tabIndex={0}
+      aria-label="Playhead"
+      data-testid="timeline-ruler"
+      aria-valuemin={0}
+      aria-valuemax={Math.round(durationMs)}
+      aria-valuenow={Math.round(timeMs)}
+      aria-valuetext={formatMs(timeMs)}
+      title="Drag to scrub through this slide"
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        scrub(e);
+      }}
+      onPointerMove={(e) => {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) scrub(e);
+      }}
+      onKeyDown={onKeyDown}
+      className="relative cursor-ew-resize touch-none border-b border-panelborder focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent"
+      style={{ height: RULER_H }}
+    >
+      <span className="pointer-events-none absolute left-0 top-0 text-[10px] text-neutral-600">
+        0
+      </span>
+      <span className="pointer-events-none absolute right-0 top-0 text-[10px] text-neutral-600">
+        {Math.round(contentMs)}ms
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The playhead marker: one line down the whole chart at the time the canvas is
+ * currently showing, with a grab head sitting in the ruler.
+ *
+ * Its own component so that the 60 fps `timeMs` subscription lands *here* and
+ * nowhere else — re-rendering a two-element marker each frame is nothing, while
+ * re-rendering the chart (and its bars, and their drag handlers) would not be.
+ */
+function Playhead({ pxPerMs }: { pxPerMs: number }) {
+  const timeMs = usePlayhead((s) => s.timeMs);
+  // A slide with nothing to play has no moment to point at.
+  const durationMs = usePlayhead((s) => s.durationMs);
+  if (durationMs <= 0) return null;
+
+  return (
+    <div
+      data-testid="timeline-playhead"
+      data-time-ms={Math.round(timeMs)}
+      aria-hidden="true"
+      // Near-white rather than the accent: the playhead has to read on top of
+      // whatever bar it crosses, and the accent is a blue that disappears into
+      // a `motion` bar — the one kind it will cross most often.
+      className="pointer-events-none absolute bottom-0 top-0 z-10 w-px bg-neutral-100"
+      style={{ left: LABEL_W + msToPx(timeMs, pxPerMs) }}
+    >
+      {/* A downward triangle, so the head reads as a grip in the ruler. */}
+      <span className="absolute -left-[3px] top-0 border-x-[3px] border-t-[5px] border-x-transparent border-t-neutral-100" />
+    </div>
   );
 }
 
@@ -215,6 +351,7 @@ function AttackRow({
   spanMs,
   naturalMs,
   pxPerMs,
+  locked,
 }: {
   instance: AttackInstance;
   name: string;
@@ -223,6 +360,8 @@ function AttackRow({
   /** How long the definition runs on its own. */
   naturalMs: number;
   pxPerMs: number;
+  /** The playhead is off zero: show the bar, but don't let it be retimed. */
+  locked: boolean;
 }) {
   const updateAttack = useEditorStore((s) => s.updateAttack);
   const selectAttack = useEditorStore((s) => s.selectAttack);
@@ -246,6 +385,7 @@ function AttackRow({
     min: number,
     apply: (ms: number) => void,
   ) => {
+    if (locked) return;
     e.preventDefault();
     e.stopPropagation();
     const startX = e.clientX;
@@ -282,7 +422,7 @@ function AttackRow({
           onKeyDown={(e) => {
             const dir =
               e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-            if (!dir) return;
+            if (!dir || locked) return;
             e.preventDefault();
             setStart(
               nudgeValueMs(instance.startMs, dir * (e.shiftKey ? 5 : 1)),
@@ -310,7 +450,7 @@ function AttackRow({
             onKeyDown={(e) => {
               const dir =
                 e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-              if (!dir) return;
+              if (!dir || locked) return;
               e.preventDefault();
               e.stopPropagation();
               setDuration(
@@ -335,12 +475,14 @@ function ObjectRow({
   label,
   spans,
   pxPerMs,
+  locked,
 }: {
   slideIndex: number;
   objectId: string;
   label: string;
   spans: AnimSpan[];
   pxPerMs: number;
+  locked: boolean;
 }) {
   const select = useEditorStore((s) => s.select);
 
@@ -372,6 +514,7 @@ function ObjectRow({
             span={span}
             pxPerMs={pxPerMs}
             top={(lane.get(span.animId) ?? 0) * (LANE_H + LANE_GAP)}
+            locked={locked}
           />
         ))}
       </div>
@@ -384,11 +527,13 @@ function Bar({
   span,
   pxPerMs,
   top,
+  locked,
 }: {
   slideIndex: number;
   span: AnimSpan;
   pxPerMs: number;
   top: number;
+  locked: boolean;
 }) {
   const updateAnimation = useEditorStore((s) => s.updateAnimation);
   const select = useEditorStore((s) => s.select);
@@ -423,6 +568,7 @@ function Bar({
     min: number,
     commit: (ms: number) => void,
   ) => {
+    if (locked) return;
     e.preventDefault();
     e.stopPropagation();
     const startX = e.clientX;
@@ -437,7 +583,7 @@ function Bar({
   };
 
   const keyStep = (e: React.KeyboardEvent) =>
-    e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    locked ? 0 : e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
 
   return (
     <div

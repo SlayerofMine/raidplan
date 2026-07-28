@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useEditorStore } from "../../store/editorStore";
+import { usePlayhead } from "./playhead";
+import { PlayheadTransport } from "./PlayheadTransport";
 import { TimelineChart } from "./TimelineChart";
 
 /**
@@ -9,9 +11,14 @@ import { TimelineChart } from "./TimelineChart";
  * Showing every slide at once ate too much vertical space; switch slides in the
  * strip to move the timeline. Collapsed by default so it never steals canvas
  * space until asked for.
+ *
+ * The transport sits in the header rather than in the tray, so playback is one
+ * click away whether or not the chart is showing — and so Stop, the way out of
+ * the editing lock, can never be hidden behind a collapsed panel.
  */
 export function TimelineDock() {
   const [open, setOpen] = useState(false);
+  const isPlaying = usePlayhead((s) => s.isPlaying);
   const currentSlideIndex = useEditorStore((s) => s.currentSlideIndex);
   // There is always a slide to be on, so the dock has no empty state left to
   // guard: the "Select a slide" placeholder existed only for the Base layout.
@@ -20,24 +27,34 @@ export function TimelineDock() {
       s.slides[s.currentSlideIndex]?.name ?? `Slide ${s.currentSlideIndex + 1}`,
   );
 
+  // Pressing play with the tray shut is a fair request to see what's playing.
+  useEffect(() => {
+    if (isPlaying) setOpen(true);
+  }, [isPlaying]);
+
   return (
     <div
       data-testid="timeline-dock"
       className="border-t border-panelborder bg-panel"
     >
-      <button
-        type="button"
-        data-testid="timeline-toggle"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-1 text-xs text-neutral-300 hover:text-accent"
-      >
-        <span aria-hidden="true" className="text-neutral-500">
-          {open ? "▾" : "▸"}
-        </span>
-        Timeline
-        <span className="text-neutral-500">· {slideName}</span>
-      </button>
+      <div className="flex items-center gap-2 px-3 py-1">
+        <button
+          type="button"
+          data-testid="timeline-toggle"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className="flex min-w-0 items-center gap-2 text-xs text-neutral-300 hover:text-accent"
+        >
+          <span aria-hidden="true" className="text-neutral-500">
+            {open ? "▾" : "▸"}
+          </span>
+          Timeline
+          <span className="truncate text-neutral-500">· {slideName}</span>
+        </button>
+        <div className="ml-auto">
+          <PlayheadTransport />
+        </div>
+      </div>
 
       {open && (
         <div className="max-h-72 overflow-y-auto px-3 pb-2">
