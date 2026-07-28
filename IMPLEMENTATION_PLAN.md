@@ -583,6 +583,17 @@ write the whole gesture in a single `set`; `moveObject` delegates to the former.
 recorded when a gesture moved nothing, because immer leaves an unchanged slice referentially
 equal and the `partialize`/`shallow` pair upstream never sees a change.
 
+Writing the gesture in one `set` is only half of it, though, because a **drag** is asked for more
+than once. Konva's `Transformer` watches the grabbed node move and calls `startDrag` on each of
+the others (`_proxyDrag`), which makes them real drags rather than nodes being pushed along — so
+every member fires its own `dragstart`/`dragend`, and each was calling `moveObjects` for the whole
+selection. Three objects, three identical writes, three undo steps. So one node speaks for the
+gesture: `claimDrag` hands the lead to whoever starts first, which is the one the pointer actually
+grabbed (the rest only start later, from inside *its* first drag event) and the one already
+tracking where every selected node began. The others hold no drag state and commit nothing.
+`releaseDrag` runs on `dragend` and again on unmount, so an object deleted mid-drag can't strand
+the lead and silence every drag after it.
+
 A **hidden** member is never attached to the transformer — it keeps its node so playback can
 reveal it, but handles drawn round something invisible would lie about what you can grab — so it
 is settled from the store instead. `SelectionTransformer.onTransformEnd` fires *before* the

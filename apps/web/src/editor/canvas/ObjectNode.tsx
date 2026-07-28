@@ -1,4 +1,4 @@
-import { memo, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { Group, Rect } from "react-konva";
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
 import { useShallow } from "zustand/react/shallow";
@@ -6,6 +6,7 @@ import { useEditorStore } from "../../store/editorStore";
 import { selectObjectState } from "../../store/selectors";
 import { useIconSrc } from "../iconSrc";
 import { MIN_OBJECT_SIZE, pivotCorrection } from "./coords";
+import { claimDrag, releaseDrag } from "./dragGesture";
 import { DEFAULT_TINT, ObjectContent } from "./ObjectVisual";
 import { TetherNode } from "./TetherNode";
 import { useImageElement } from "./useImageElement";
@@ -56,6 +57,11 @@ export const ObjectNode = memo(function ObjectNode({
     others: { node: KonvaNode; x: number; y: number }[];
   } | null>(null);
 
+  // Going away mid-drag — deleted, or the slide changed under the pointer —
+  // would otherwise leave the lead held by a node that can never release it,
+  // and every later drag would find it taken and commit nothing.
+  useEffect(() => () => releaseDrag(objectId), [objectId]);
+
   if (!object || !state) return null;
   // A tether has no transform of its own — it's drawn from its endpoints.
   if (object.type === "tether") return <TetherNode objectId={objectId} />;
@@ -81,6 +87,10 @@ export const ObjectNode = memo(function ObjectNode({
   const handleDragStart = (e: KonvaEventObject<DragEvent>) => {
     const stage = e.target.getStage();
     if (!stage) return;
+    // Only the node the pointer grabbed follows the gesture through; the rest
+    // of the selection is dragged *by* it and has nothing of its own to say
+    // (see `claimDrag`).
+    if (!claimDrag(objectId)) return;
     const others = useEditorStore
       .getState()
       .selectedIds.filter((id) => id !== objectId)
@@ -101,15 +111,18 @@ export const ObjectNode = memo(function ObjectNode({
   };
 
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
+    releaseDrag(objectId);
     const state = drag.current;
-    const dx = state ? e.target.x() - state.origin.x : 0;
-    const dy = state ? e.target.y() - state.origin.y : 0;
+    // Carried along by the node that *is* leading — it commits this object too.
+    if (!state) return;
+    const dx = e.target.x() - state.origin.x;
+    const dy = e.target.y() - state.origin.y;
     // Everything that moved, in one action: dragging a group of three is one
     // thing the author did, and undoing it must not take three presses — nor
     // walk the group back apart, a member at a time, on the way.
     moveObjects([
       { id: objectId, x: e.target.x(), y: e.target.y() },
-      ...(state?.others ?? []).map((other) => ({
+      ...state.others.map((other) => ({
         id: other.node.id(),
         x: other.x + dx,
         y: other.y + dy,
