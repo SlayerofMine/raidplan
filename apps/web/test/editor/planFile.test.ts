@@ -12,6 +12,7 @@ function plan(): Plan {
     attacks: [],
     // A plan always has at least one slide; `PlanSchema` rejects none.
     slides: [{ id: "s1", states: {}, animations: [] }],
+    groups: {},
     schemaVersion: SCHEMA_VERSION,
   };
 }

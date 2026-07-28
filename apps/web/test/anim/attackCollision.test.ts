@@ -203,6 +203,7 @@ const plan: Plan = {
       animations: [],
     },
   ],
+  groups: {},
   schemaVersion: SCHEMA_VERSION,
 };
 

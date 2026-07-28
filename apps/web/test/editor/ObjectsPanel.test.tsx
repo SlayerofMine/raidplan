@@ -126,3 +126,128 @@ describe("ObjectsPanel", () => {
     expect(rowNames()).toHaveLength(2);
   });
 });
+
+/** A member's row inside an open group — its own title, its own click meaning. */
+const memberRow = (name: string) =>
+  screen.getByTitle(
+    `${name} — on its own, out of its group. Double-click to rename`,
+  );
+
+/** Group A and B, leaving C loose. Returns their ids and the group's. */
+function groupAB(): { a: string; b: string; c: string; groupId: string } {
+  const [a, b, c] = threeObjects();
+  act(() => {
+    state().select([a, b]);
+    state().groupSelected();
+    state().clearSelection();
+  });
+  // Read the id back off a member rather than from `groupSelected` — `act`
+  // returns a thenable of its own, not the callback's value.
+  return { a, b, c, groupId: state().objects[a]!.groupId! };
+}
+
+describe("ObjectsPanel groups", () => {
+  it("shows a group as one row, shut, with its members folded away", () => {
+    const { c } = groupAB();
+    render(<ObjectsPanel />);
+
+    expect(screen.getAllByTestId("group-row")).toHaveLength(1);
+    expect(screen.queryByTestId("group-members")).not.toBeInTheDocument();
+    // The group stands in for both its members; only C is still a row.
+    expect(rowNames()).toEqual([c]);
+
+    fireEvent.click(screen.getByTestId("group-toggle"));
+    expect(screen.getByTestId("group-members")).toBeInTheDocument();
+    expect(screen.getAllByTestId("object-row")).toHaveLength(3);
+  });
+
+  it("selects the whole group from its header", () => {
+    const { a, b } = groupAB();
+    render(<ObjectsPanel />);
+
+    fireEvent.click(screen.getByTitle(/^Group — selects all 2/));
+    expect([...state().selectedIds].sort()).toEqual([a, b].sort());
+    expect(screen.getByTestId("group-row")).toHaveAttribute(
+      "data-selected",
+      "true",
+    );
+  });
+
+  it("picks one member on its own, and says so", () => {
+    const { a, b } = groupAB();
+    render(<ObjectsPanel />);
+    fireEvent.click(screen.getByTestId("group-toggle"));
+
+    fireEvent.click(memberRow("A"));
+    expect(state().selectedIds).toEqual([a]);
+    // Still a group — and the header shows it is only partly picked.
+    expect(state().objects[a]!.groupId).toBe(state().objects[b]!.groupId);
+    const header = screen.getByTestId("group-row");
+    expect(header).toHaveAttribute("data-selected", "false");
+    expect(header).toHaveAttribute("data-partial", "true");
+
+    // Ctrl-click adds the other member alone rather than toggling all of it.
+    fireEvent.click(memberRow("B"), { ctrlKey: true });
+    expect([...state().selectedIds].sort()).toEqual([a, b].sort());
+    fireEvent.click(memberRow("B"), { ctrlKey: true });
+    expect(state().selectedIds).toEqual([a]);
+  });
+
+  it("names the group, and falls back to Group when cleared", () => {
+    const { groupId } = groupAB();
+    render(<ObjectsPanel />);
+
+    fireEvent.doubleClick(screen.getByTitle(/^Group — selects all 2/));
+    fireEvent.change(screen.getByTestId("object-rename"), {
+      target: { value: "Melee" },
+    });
+    fireEvent.keyDown(screen.getByTestId("object-rename"), { key: "Enter" });
+    expect(state().groups[groupId]).toBe("Melee");
+    expect(screen.getByTitle(/^Melee — selects all 2/)).toBeInTheDocument();
+  });
+
+  it("hides and locks the whole group from its header", () => {
+    const { a, b } = groupAB();
+    render(<ObjectsPanel />);
+
+    fireEvent.click(screen.getByLabelText("Hide Group"));
+    expect(state().slides[0]!.states[a]!.visible).toBe(false);
+    expect(state().slides[0]!.states[b]!.visible).toBe(false);
+    // The header now offers the way back.
+    fireEvent.click(screen.getByLabelText("Show Group"));
+    expect(state().slides[0]!.states[a]!.visible).toBe(true);
+
+    fireEvent.click(screen.getByLabelText("Lock Group"));
+    expect(state().objects[a]!.locked).toBe(true);
+    expect(state().objects[b]!.locked).toBe(true);
+  });
+
+  it("reads locked only when every member is", () => {
+    const { a } = groupAB();
+    act(() => state().setLocked(a, true));
+    render(<ObjectsPanel />);
+
+    // One locked member doesn't make the group locked — the header offers to
+    // lock it rather than claiming it already is.
+    expect(screen.getByLabelText("Lock Group")).toBeInTheDocument();
+  });
+
+  it("ungroups from the header, leaving the objects behind", () => {
+    const { a, b, c } = groupAB();
+    render(<ObjectsPanel />);
+
+    fireEvent.click(screen.getByTestId("group-ungroup"));
+    expect(screen.queryByTestId("group-row")).not.toBeInTheDocument();
+    expect(rowNames()).toEqual([c, b, a]);
+    expect(state().objects[a]!.groupId).toBeUndefined();
+  });
+
+  it("deletes the whole group from the header", () => {
+    const { c } = groupAB();
+    render(<ObjectsPanel />);
+
+    fireEvent.click(screen.getByLabelText("Delete Group"));
+    expect(screen.queryByTestId("group-row")).not.toBeInTheDocument();
+    expect(rowNames()).toEqual([c]);
+  });
+});

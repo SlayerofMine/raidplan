@@ -4,10 +4,11 @@ import type { AttackInstance } from "@raidplan/shared";
 import type { Node as KonvaNode } from "konva/lib/Node";
 import type { Transformer as TransformerNode } from "konva/lib/shapes/Transformer";
 import { useEditorStore } from "../../store/editorStore";
+import { selectObjectState } from "../../store/selectors";
+import { carryBox, MIN_OBJECT_SIZE } from "./coords";
 
 /** Rotation handles snap to 45° increments (plan §2.2). */
 const ROTATION_SNAPS = [0, 45, 90, 135, 180, 225, 270, 315];
-const MIN_SIZE = 8;
 
 /**
  * Resize/rotate handles for the current selection (plan §2.2). Konva's
@@ -99,6 +100,67 @@ export function SelectionTransformer({
     transformer.getLayer()?.batchDraw();
   }, [selectionSizes]);
 
+  /**
+   * Settle a transform of **several** objects — the whole selection, in one
+   * action (plan §18.1).
+   *
+   * Two things make this the right place rather than the object nodes. It is
+   * one undo: each node settling itself left an entry per member, so taking a
+   * turn back meant pressing undo three times and watching the group come apart
+   * a piece at a time. And it is the only place that can see the members the
+   * handles never reached — a hidden object keeps its node so playback can
+   * reveal it, but is deliberately never attached here, and one left behind
+   * while the rest of its group turned would be out of place the moment the
+   * slide that shows it played. The nodes that *were* moved say what happened:
+   * one of them, read against the state it had before, gives the transform to
+   * carry the others by.
+   *
+   * All of which works because this fires **before** the nodes' own
+   * `transformend` (Konva's `Transformer._removeEvents` fires its own first),
+   * so the store still holds the pre-gesture document while the nodes already
+   * carry their final placement — including the scale each one folds away into
+   * `w`/`h` a moment later.
+   *
+   * A lone object settles itself, in `ObjectNode`: it alone turns about its own
+   * origin rather than the selection's centre, which is a correction only it can
+   * make (see `pivotCorrection`).
+   */
+  const settleSelection = () => {
+    const store = useEditorStore.getState();
+    if (store.selectedIds.length < 2) return;
+
+    const held = ref.current?.nodes() ?? [];
+    // Where each node the handles moved has ended up. A placed attack's frame
+    // is not an object and settles through its own handler; a selection is
+    // never both kinds at once, so this simply leaves it alone.
+    const settled = held.flatMap((node) => {
+      const before = selectObjectState(store, node.id());
+      if (!before) return [];
+      return [
+        {
+          id: node.id(),
+          x: node.x(),
+          y: node.y(),
+          w: before.w * node.scaleX(),
+          h: before.h * node.scaleY(),
+          rotation: node.rotation(),
+          before,
+        },
+      ];
+    });
+    const reference = settled[0];
+    if (!reference) return;
+
+    const holding = new Set(settled.map((box) => box.id));
+    const carried = store.selectedIds.flatMap((id) => {
+      if (holding.has(id)) return [];
+      const box = selectObjectState(store, id);
+      return box ? [{ id, ...carryBox(box, reference.before, reference) }] : [];
+    });
+
+    store.applyTransforms([...settled, ...carried]);
+  };
+
   return (
     <Transformer
       ref={ref}
@@ -109,8 +171,11 @@ export function SelectionTransformer({
       anchorSize={8}
       borderStroke="#4f9dff"
       anchorStroke="#4f9dff"
+      onTransformEnd={settleSelection}
       boundBoxFunc={(oldBox, newBox) =>
-        newBox.width < MIN_SIZE || newBox.height < MIN_SIZE ? oldBox : newBox
+        newBox.width < MIN_OBJECT_SIZE || newBox.height < MIN_OBJECT_SIZE
+          ? oldBox
+          : newBox
       }
     />
   );

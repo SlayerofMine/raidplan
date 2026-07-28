@@ -17,6 +17,7 @@ const planWith = (attacks: Plan["attacks"]): Plan => ({
   objects: [],
   attacks,
   slides: [{ id: "s0", states: {}, animations: [] }],
+  groups: {},
   schemaVersion: 2,
 });
 

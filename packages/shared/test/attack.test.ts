@@ -121,6 +121,7 @@ const makePlan = (
   background: { assetId: "arena", width: 1600, height: 900 },
   objects,
   attacks,
+  groups: {},
   slides,
   schemaVersion: SCHEMA_VERSION,
 });

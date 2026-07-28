@@ -134,6 +134,7 @@ const plan: Plan = {
     },
   ],
   slides: [{ id: "s0", states: {}, animations: [] }],
+  groups: {},
   schemaVersion: SCHEMA_VERSION,
 };
 

@@ -557,11 +557,57 @@ unit space; and there is **no migration** — the schema changes outright (bump 
 
 ### 18.1 Grouping
 
-`PlanObject.groupId?` — a group exists when ≥2 objects share one; an optional `Plan.groups`
-record holds names. The feature is mostly **selection resolution**: clicking a member selects
-every member, and because `selectedIds` already drives the multi-node transformer, rigid
-move/scale/rotate comes for free. Group/ungroup are two store actions; members stay contiguous
-in z-order. Double-click-to-enter is a later nicety.
+`PlanObject.groupId?` — a group exists when ≥2 objects share one; `Plan.groups` maps that id to
+a **name**, and holds nothing else. The feature is mostly **selection resolution**: clicking a
+member selects every member, and because `selectedIds` already drives the multi-node
+transformer, rigid move/scale/rotate comes for free. Animating a group needs no new action
+either — `animateSelection` already gives every selected object the same animation, and the
+Animation panel already collapses identical ones into a single row that edits all of them.
+
+Group/ungroup are store actions; `groupSelected` gathers the members contiguous in z-order at
+their front-most one, so nothing is left drawn *inside* a group. A group worn down to one member
+(by deleting, or by a merge into another group) is dissolved rather than left as a group of one
+— `pruneGroups`, which the load path runs too.
+
+**Rotation is about the point the members share.** Konva's transformer already swings a
+multi-node selection rigidly about its bounding-box centre, so `pivotCorrection` (in `coords.ts`)
+applies the §18.17 turn-about-your-own-origin correction *only* to a lone object and leaves the
+transformer's placement alone otherwise. Correcting each member individually pinned every one of
+them back where it started and spun it on the spot, which took a group apart the moment it was
+turned.
+
+**A gesture over several objects is one action, and so one undo.** Settling each object as its
+own write left an entry per member, so taking a group drag back meant pressing undo once per
+object and watching the group come apart on the way. `moveObjects` and `applyTransforms` each
+write the whole gesture in a single `set`; `moveObject` delegates to the former. Nothing is
+recorded when a gesture moved nothing, because immer leaves an unchanged slice referentially
+equal and the `partialize`/`shallow` pair upstream never sees a change.
+
+A **hidden** member is never attached to the transformer — it keeps its node so playback can
+reveal it, but handles drawn round something invisible would lie about what you can grab — so it
+is settled from the store instead. `SelectionTransformer.onTransformEnd` fires *before* the
+nodes' own (Konva's `Transformer._removeEvents` order), so there the store still holds the
+pre-gesture document while the nodes carry their final placement, scale included. That one
+handler therefore settles the **whole** multi-selection: the boxes the attached nodes ended up
+in, plus the unattached members put where `carryBox` says the same transform takes them.
+`ObjectNode` then commits only when it is the lone selection — the case that needs the
+turn-about-your-own-origin correction, which is the one thing a shared handler cannot do. It
+still resets the node's Konva scale either way, since React's props say 1 and would never write
+it back. Dragging needed none of this: `handleDragStart` already finds hidden nodes by id.
+**Locked** members are deliberately left behind: "don't move this" is a thing the author said on
+purpose.
+
+**Lock and visibility fan out onto the members** rather than living on the group: everything
+already asks `object.locked` and the slide's `visible`, and a second, group-level answer could
+only disagree with the first. So a group's row reads them back — locked when every member is,
+visible when any member is.
+
+Reaching **one member** of a group: alt-click it on the canvas, or pick its row in the Objects
+panel, both of which route through `selectOnly` (selection without group expansion). Ctrl/cmd
+and shift are already the additive modifiers on the canvas, so alt is what was left — and it is
+the deep-select modifier design tools use anyway. Narrowing to a member never takes the group
+apart. The Objects panel is where a group is a **container**: one row, members folded away
+underneath, with rename, ungroup, lock, hide and delete on the header.
 
 ### 18.2 Attacks in unit space; instances as rects
 

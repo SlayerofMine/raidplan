@@ -37,6 +37,7 @@ const plan = (objects: PlanObject[]): Plan => ({
   objects,
   attacks: [],
   slides: [],
+  groups: {},
   schemaVersion: SCHEMA_VERSION,
 });
 

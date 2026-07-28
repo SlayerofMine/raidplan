@@ -71,6 +71,7 @@ function planDoc(over: Partial<Plan> = {}): Plan {
     raid: "",
     background: BACKGROUND,
     attacks: [],
+    groups: {},
     // A slide's `states` is its cast list, so the fixture's objects have to be
     // *on* the opening slide to be drawn — placed at their creation transform,
     // which is what the editor does when one is added.

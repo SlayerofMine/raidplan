@@ -31,6 +31,7 @@ const plan = (encounterId?: string): Plan => ({
   objects: [],
   attacks: [],
   slides: [{ id: "s0", states: {}, animations: [] }],
+  groups: {},
   schemaVersion: SCHEMA_VERSION,
 });
 

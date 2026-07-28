@@ -33,6 +33,12 @@ export interface PlanDoc {
    * than to a slide; each names the slide it fires on.
    */
   attacks: AttackInstance[];
+  /**
+   * What each group is called, by `groupId` (plan §18.1). Membership lives on
+   * the objects; this holds only the name, so an entry with no members left is
+   * merely litter rather than a broken group — see the store's `pruneGroups`.
+   */
+  groups: Record<string, string>;
   slides: Slide[];
 }
 
@@ -57,6 +63,7 @@ const DOC_SLICES: Record<keyof PlanDoc, true> = {
   objects: true,
   objectIds: true,
   attacks: true,
+  groups: true,
   slides: true,
 };
 
@@ -79,6 +86,37 @@ export function pickPlanDoc(state: PlanDoc): PlanDoc {
   ) as unknown as PlanDoc;
 }
 
+/**
+ * Bring group membership and group names back into agreement (plan §18.1).
+ *
+ * A group exists precisely when **two or more** objects share a `groupId`, so a
+ * group that deleting or ungrouping has worn down to one member is not a group
+ * any more: its last member is set loose rather than left in a group of one,
+ * where "select the group" would be indistinguishable from selecting the object
+ * and the panel would show a container holding a single thing. Names whose group
+ * has gone go with it, so a later group can never inherit a stranger's name.
+ *
+ * Mutates in place, which is what lets the store call it on an immer draft and
+ * `fromPlan` call it on a freshly built document.
+ */
+export function pruneGroups(doc: {
+  objects: Record<string, PlanObject>;
+  groups: Record<string, string>;
+}): void {
+  const counts = new Map<string, number>();
+  for (const object of Object.values(doc.objects)) {
+    const groupId = object.groupId;
+    if (groupId) counts.set(groupId, (counts.get(groupId) ?? 0) + 1);
+  }
+  for (const object of Object.values(doc.objects)) {
+    const groupId = object.groupId;
+    if (groupId && (counts.get(groupId) ?? 0) < 2) delete object.groupId;
+  }
+  for (const groupId of Object.keys(doc.groups)) {
+    if ((counts.get(groupId) ?? 0) < 2) delete doc.groups[groupId];
+  }
+}
+
 /** Normalized editor document → the shared `Plan` document. */
 export function toPlan(doc: PlanDoc): Plan {
   return {
@@ -91,6 +129,7 @@ export function toPlan(doc: PlanDoc): Plan {
       .map((id) => doc.objects[id])
       .filter((o): o is PlanObject => o !== undefined),
     attacks: doc.attacks,
+    groups: doc.groups,
     slides: doc.slides,
     schemaVersion: SCHEMA_VERSION,
   };
@@ -111,7 +150,7 @@ export function fromPlan(plan: Plan): PlanDoc {
     objects[object.id] = object;
     objectIds.push(object.id);
   }
-  return {
+  const doc: PlanDoc = {
     id: plan.id,
     title: plan.title,
     raid: plan.raid,
@@ -120,6 +159,11 @@ export function fromPlan(plan: Plan): PlanDoc {
     objects,
     objectIds,
     attacks: plan.attacks,
+    groups: { ...plan.groups },
     slides: normalizeSlides(plan.objects, plan.slides),
   };
+  // The same load-time repair `normalizeSlides` does for the slides: a document
+  // from outside the store can name groups that its objects no longer join.
+  pruneGroups(doc);
+  return doc;
 }

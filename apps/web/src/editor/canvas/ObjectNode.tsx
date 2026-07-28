@@ -2,10 +2,10 @@ import { memo, useRef } from "react";
 import { Group, Rect } from "react-konva";
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
 import { useShallow } from "zustand/react/shallow";
-import { rotateAboutPivot } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { selectObjectState } from "../../store/selectors";
 import { useIconSrc } from "../iconSrc";
+import { MIN_OBJECT_SIZE, pivotCorrection } from "./coords";
 import { DEFAULT_TINT, ObjectContent } from "./ObjectVisual";
 import { TetherNode } from "./TetherNode";
 import { useImageElement } from "./useImageElement";
@@ -33,9 +33,18 @@ export const ObjectNode = memo(function ObjectNode({
     useShallow((s) => selectObjectState(s, objectId)),
   );
   const isSelected = useEditorStore((s) => s.selectedIds.includes(objectId));
+  /**
+   * Is this object the *whole* selection? Turning about the object's own origin
+   * is only meaningful then — see `pivotCorrection`, which is skipped otherwise
+   * so several objects turn about the one point they share.
+   */
+  const turnsAlone = useEditorStore(
+    (s) => s.selectedIds.length === 1 && s.selectedIds[0] === objectId,
+  );
   const select = useEditorStore((s) => s.select);
+  const selectOnly = useEditorStore((s) => s.selectOnly);
   const toggleSelect = useEditorStore((s) => s.toggleSelect);
-  const moveObject = useEditorStore((s) => s.moveObject);
+  const moveObjects = useEditorStore((s) => s.moveObjects);
   const updateObject = useEditorStore((s) => s.updateObject);
   // Resolves bundled *and* synced WoW icons (plan §11.1) — a synced token
   // stores its stable id, and this re-renders once the palette or plan-load
@@ -57,7 +66,14 @@ export const ObjectNode = memo(function ObjectNode({
 
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     const additive = e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey;
-    if (additive) toggleSelect(objectId);
+    // Alt reaches *into* a group and takes hold of the one object under the
+    // cursor (plan §18.1). Alt rather than ctrl/cmd because those three are
+    // already the additive modifier here, and a key can't mean two things; it
+    // also matches the deep-select modifier design tools use. Unconditional —
+    // an object already selected as part of its group is exactly the one an
+    // alt-click is asking to narrow down to.
+    if (e.evt.altKey) selectOnly([objectId]);
+    else if (additive) toggleSelect(objectId);
     // Keep an existing multi-selection intact so it can be dragged as a group.
     else if (!isSelected) select([objectId]);
   };
@@ -88,37 +104,37 @@ export const ObjectNode = memo(function ObjectNode({
     const state = drag.current;
     const dx = state ? e.target.x() - state.origin.x : 0;
     const dy = state ? e.target.y() - state.origin.y : 0;
-    moveObject(objectId, e.target.x(), e.target.y());
-    for (const other of state?.others ?? []) {
-      moveObject(other.node.id(), other.x + dx, other.y + dy);
-    }
+    // Everything that moved, in one action: dragging a group of three is one
+    // thing the author did, and undoing it must not take three presses — nor
+    // walk the group back apart, a member at a time, on the way.
+    moveObjects([
+      { id: objectId, x: e.target.x(), y: e.target.y() },
+      ...(state?.others ?? []).map((other) => ({
+        id: other.node.id(),
+        x: other.x + dx,
+        y: other.y + dy,
+      })),
+    ]);
     drag.current = null;
   };
 
   /**
-   * Konva's Transformer always turns the selection about its bounding box's
-   * centre, and offers no way to move that. So the object turns about its own
-   * **origin** by correction: whatever rotation the handle produced is kept, and
-   * `x/y` are re-derived so the origin is the point that didn't move (§18.17).
-   *
-   * Applied during the gesture, not just on release, or the shape would swing
-   * about its middle under the cursor and jump on drop. It is measured from the
-   * *document's* transform each time rather than the last frame's, so repeated
-   * events in one gesture settle on the same answer instead of drifting.
-   *
-   * A resize is left alone — `x/y` then belong to the handle being dragged, and
-   * there is no rotation delta to correct anyway.
+   * Where the handle's work belongs in the document — see `pivotCorrection`,
+   * which owns the rule. Applied during the gesture and not only on release, or
+   * a lone shape would swing about its middle under the cursor and jump on
+   * drop. It is measured from the *document's* transform each time rather than
+   * the last frame's, so repeated events in one gesture settle on the same
+   * answer instead of drifting.
    */
-  const pivotCorrection = (node: KonvaNode) => {
-    if (node.rotation() === rotation) return null;
-    return rotateAboutPivot(
+  const correction = (node: KonvaNode) =>
+    pivotCorrection(
       { x, y, w, h, rotation, ox: object.base.ox, oy: object.base.oy },
-      node.rotation() - rotation,
+      node,
+      turnsAlone,
     );
-  };
 
   const handleTransform = (e: KonvaEventObject<Event>) => {
-    const placed = pivotCorrection(e.target);
+    const placed = correction(e.target);
     if (placed) e.target.position({ x: placed.x, y: placed.y });
   };
 
@@ -127,14 +143,22 @@ export const ObjectNode = memo(function ObjectNode({
     const node = e.target;
     const scaleX = node.scaleX();
     const scaleY = node.scaleY();
+    // Always reset the scale, committed here or not: the node's props say 1, so
+    // React will never write it back, and a scale left on would compound into
+    // the next gesture.
     node.scaleX(1);
     node.scaleY(1);
-    const placed = pivotCorrection(node);
+    // Several objects moving together are settled as **one** action by
+    // `SelectionTransformer`, whose own `transformend` runs before this — this
+    // object's new box is already in the document, and committing it again here
+    // would only add an undo step per member.
+    if (!turnsAlone) return;
+    const placed = correction(node);
     updateObject(objectId, {
       x: placed?.x ?? node.x(),
       y: placed?.y ?? node.y(),
-      w: Math.max(8, w * scaleX),
-      h: Math.max(8, h * scaleY),
+      w: Math.max(MIN_OBJECT_SIZE, w * scaleX),
+      h: Math.max(MIN_OBJECT_SIZE, h * scaleY),
       rotation: node.rotation(),
     });
   };

@@ -38,6 +38,8 @@ import {
   fitView,
   screenToNative,
   zoomAt,
+  MIN_OBJECT_SIZE,
+  type Box,
   type Point,
   type Size,
   type View,
@@ -52,6 +54,7 @@ import {
 import {
   fromPlan,
   pickPlanDoc,
+  pruneGroups,
   toPlan,
   type PlanDoc,
 } from "./planSerialization";
@@ -107,8 +110,29 @@ export interface EditorState extends PlanDoc {
   /** Merge a patch into an object's visual style (fill/outline/edge/line). */
   updateStyle: (id: string, patch: Partial<ObjectStyle>) => void;
   moveObject: (id: string, x: number, y: number) => void;
+  /**
+   * Move several objects at once. **One action, so one undo** — dragging a
+   * group of three is a single thing the author did, and taking it back should
+   * not mean pressing undo three times and watching the group come apart on the
+   * way. Locked objects are skipped, exactly as in {@link moveObject}.
+   */
+  moveObjects: (moves: readonly { id: string; x: number; y: number }[]) => void;
   nudgeSelected: (dx: number, dy: number, big?: boolean) => void;
   setLocked: (id: string, locked: boolean) => void;
+  /**
+   * Settle a finished transform gesture — **the whole of it, in one action**,
+   * so turning a group of three is one undo rather than three that take it
+   * apart on the way back.
+   *
+   * Given the boxes the objects have ended up in, whoever the handles reached
+   * and whoever they didn't: a hidden member keeps its node so playback can
+   * reveal it but never gets handles, and a group whose hidden member stayed
+   * behind while the rest turned would be deformed the moment the slide
+   * revealed it (see `SelectionTransformer`, which works out where it goes).
+   * Locked objects are skipped, because "don't move this" is a thing the author
+   * said on purpose.
+   */
+  applyTransforms: (boxes: readonly ({ id: string } & Box)[]) => void;
   /**
    * Say what an object follows — its origin pinned to one object, its direction
    * aimed at another (plan §18.17). Slide-independent, like style and lock: what
@@ -139,6 +163,17 @@ export interface EditorState extends PlanDoc {
 
   // --- selection ---
   select: (ids: string[]) => void;
+  /**
+   * Select exactly these objects, **without** pulling their groups in — the one
+   * way to get at a single member of a group (plan §18.1).
+   *
+   * Grouping is a claim about what a click means, not a weld: a group of six
+   * still has six things in it, and nudging one of them two pixels left should
+   * not mean taking the group apart and putting it back together. Alt-clicking
+   * on the canvas and picking a member's row in the Objects panel both land
+   * here; everything else goes through {@link select} and gets the whole group.
+   */
+  selectOnly: (ids: string[]) => void;
   toggleSelect: (id: string) => void;
   selectAll: () => void;
   clearSelection: () => void;
@@ -157,6 +192,28 @@ export interface EditorState extends PlanDoc {
   groupSelected: () => string | undefined;
   /** Dissolve the groups any selected object belongs to. */
   ungroupSelected: () => void;
+  /** Dissolve one group by id, from the Objects panel. */
+  ungroup: (groupId: string) => void;
+  /** Select every member of a group that is in this scene. */
+  selectGroup: (groupId: string) => void;
+  /** Name a group. Blank clears it, and the panel falls back to "Group". */
+  renameGroup: (groupId: string, name: string) => void;
+  /**
+   * Lock or unlock a whole group in one action (plan §18.1).
+   *
+   * Fanned out onto the members rather than stored on the group, so the canvas,
+   * the transformer and every hotkey keep answering the one question they
+   * already ask — `object.locked` — and there is no second opinion for them to
+   * disagree with. It also means unlocking a group and then locking one member
+   * is a thing you can say.
+   */
+  setGroupLocked: (groupId: string, locked: boolean) => void;
+  /**
+   * Show or hide a whole group **on the slide being edited**, for the same
+   * reason and in the same way. Visibility is per-slide (it is part of a
+   * slide's state), so this is one slide's answer, not the group's.
+   */
+  setGroupVisible: (groupId: string, visible: boolean) => void;
 
   // --- slides (plan §3.2) ---
   /** Add an **empty** slide at the end and edit it. */
@@ -460,6 +517,35 @@ function withGroupMembers(
   return objectIds.filter((id) => wanted.has(id));
 }
 
+/**
+ * Pull a group's members together in the z-order, at their front-most member
+ * (plan §18.1: "members stay contiguous in z-order").
+ *
+ * Grouping says these things are one thing, and one thing cannot have another
+ * object sandwiched inside it — a stranger drawn between two members would sit
+ * in front of half a group and behind the other half. Gathering at the
+ * front-most member means the group ends up where its most forward part already
+ * was, so nothing that was in front of the group falls behind it.
+ */
+function gatherMembers(
+  s: { objects: Record<string, PlanObject>; objectIds: string[] },
+  groupId: string,
+): void {
+  const isMember = (id: string) => s.objects[id]?.groupId === groupId;
+  const members = s.objectIds.filter(isMember);
+  if (members.length < 2) return;
+  const frontIndex = s.objectIds.indexOf(members[members.length - 1]!);
+  // Where the run lands once the members are lifted out: after every non-member
+  // that was already behind the front-most one.
+  const below = s.objectIds.slice(0, frontIndex).filter((id) => !isMember(id));
+  const rest = s.objectIds.filter((id) => !isMember(id));
+  s.objectIds = [
+    ...rest.slice(0, below.length),
+    ...members,
+    ...rest.slice(below.length),
+  ];
+}
+
 /** One item on the board — an object or an attack — and where it is drawn. */
 interface StackItem {
   kind: "object" | "attack";
@@ -593,6 +679,7 @@ export const useEditorStore = create<EditorState>()(
       background: DEFAULT_BACKGROUND,
       objects: {},
       objectIds: [],
+      groups: {},
       slides: [makeFirstSlide()],
       selectedIds: [],
       selectedAttackIds: [],
@@ -691,15 +778,19 @@ export const useEditorStore = create<EditorState>()(
           object.style = { ...object.style, ...patch };
         }),
 
-      moveObject: (id, x, y) =>
+      moveObject: (id, x, y) => get().moveObjects([{ id, x, y }]),
+
+      moveObjects: (moves) =>
         set((s) => {
-          const object = s.objects[id];
-          if (!object || object.locked) return;
           const grid = s.snapEnabled ? s.gridSize : 0;
-          writeSlideState(s, id, {
-            x: snapValue(x, grid),
-            y: snapValue(y, grid),
-          });
+          for (const { id, x, y } of moves) {
+            const object = s.objects[id];
+            if (!object || object.locked) continue;
+            writeSlideState(s, id, {
+              x: snapValue(x, grid),
+              y: snapValue(y, grid),
+            });
+          }
         }),
 
       nudgeSelected: (dx, dy, big = false) =>
@@ -726,6 +817,25 @@ export const useEditorStore = create<EditorState>()(
         set((s) => {
           const object = s.objects[id];
           if (object) object.locked = locked;
+        }),
+
+      applyTransforms: (boxes) =>
+        set((s) => {
+          for (const { id, ...box } of boxes) {
+            const object = s.objects[id];
+            // A tether has no transform of its own — it is drawn from its
+            // endpoints, which are being transformed themselves.
+            if (!object || object.locked || object.type === "tether") continue;
+            writeSlideState(s, id, {
+              x: box.x,
+              y: box.y,
+              // The same floor the handles enforce, so a member carried by a
+              // resize cannot be squashed to nothing.
+              w: Math.max(MIN_OBJECT_SIZE, box.w),
+              h: Math.max(MIN_OBJECT_SIZE, box.h),
+              rotation: box.rotation,
+            });
+          }
         }),
 
       setFollow: (id, follow) =>
@@ -796,6 +906,8 @@ export const useEditorStore = create<EditorState>()(
               }
             }
           }
+          // Deleting members can wear a group down to one, which is not a group.
+          pruneGroups(s);
           reindexZ(s);
         }),
 
@@ -935,6 +1047,17 @@ export const useEditorStore = create<EditorState>()(
           s.selectedAttackIds = [];
         }),
 
+      selectOnly: (ids) =>
+        set((s) => {
+          const here = new Set(
+            objectsOnSlide(s.objectIds, s.slides, s.currentSlideIndex),
+          );
+          s.selectedIds = s.objectIds.filter(
+            (id) => here.has(id) && ids.includes(id),
+          );
+          s.selectedAttackIds = [];
+        }),
+
       selectAttack: (ids) =>
         set((s) => {
           s.selectedAttackIds = ids;
@@ -981,22 +1104,74 @@ export const useEditorStore = create<EditorState>()(
             const object = s.objects[id];
             if (object) object.groupId = groupId;
           }
+          gatherMembers(s, groupId);
+          // Taking members out of an older group can leave it with one, which
+          // is no longer a group at all.
+          pruneGroups(s);
+          reindexZ(s);
         });
         return groupId;
       },
 
-      ungroupSelected: () =>
+      ungroupSelected: () => {
+        const state = get();
+        const groups = new Set<string>();
+        for (const id of state.selectedIds) {
+          const groupId = state.objects[id]?.groupId;
+          if (groupId) groups.add(groupId);
+        }
+        for (const groupId of groups) get().ungroup(groupId);
+      },
+
+      ungroup: (groupId) =>
         set((s) => {
-          const groups = new Set<string>();
-          for (const id of s.selectedIds) {
-            const groupId = s.objects[id]?.groupId;
-            if (groupId) groups.add(groupId);
-          }
           for (const id of s.objectIds) {
             const object = s.objects[id];
-            if (object?.groupId && groups.has(object.groupId)) {
-              delete object.groupId;
-            }
+            if (object?.groupId === groupId) delete object.groupId;
+          }
+          // The name goes with the group. Keeping it would leave a label with
+          // nothing to label, ready to attach itself to a later group that
+          // happened to be handed the same id.
+          delete s.groups[groupId];
+        }),
+
+      selectGroup: (groupId) =>
+        set((s) => {
+          // Only the part of the group in this scene, exactly as `select` does:
+          // a group can span slides, and a member that isn't here has nothing
+          // on screen to put handles on.
+          s.selectedIds = objectsOnSlide(
+            s.objectIds,
+            s.slides,
+            s.currentSlideIndex,
+          ).filter((id) => s.objects[id]?.groupId === groupId);
+          s.selectedAttackIds = [];
+        }),
+
+      renameGroup: (groupId, name) =>
+        set((s) => {
+          const trimmed = name.trim();
+          // Blank is "no name of its own", not an empty name — the panel then
+          // falls back to "Group", which is what clearing the box asks for.
+          if (trimmed) s.groups[groupId] = trimmed;
+          else delete s.groups[groupId];
+        }),
+
+      setGroupLocked: (groupId, locked) =>
+        set((s) => {
+          for (const id of s.objectIds) {
+            const object = s.objects[id];
+            if (object?.groupId === groupId) object.locked = locked;
+          }
+        }),
+
+      setGroupVisible: (groupId, visible) =>
+        set((s) => {
+          for (const id of s.objectIds) {
+            if (s.objects[id]?.groupId !== groupId) continue;
+            // Through the same choke point every other transform write uses, so
+            // it lands on the slide being edited and on no other.
+            writeSlideState(s, id, { visible });
           }
         }),
 
@@ -1430,6 +1605,7 @@ export const useEditorStore = create<EditorState>()(
           s.objects = doc.objects;
           s.objectIds = doc.objectIds;
           s.attacks = doc.attacks;
+          s.groups = doc.groups;
           s.slides = doc.slides;
           s.selectedIds = [];
           s.selectedAttackIds = [];
@@ -1443,6 +1619,7 @@ export const useEditorStore = create<EditorState>()(
           s.objects = {};
           s.objectIds = [];
           s.attacks = [];
+          s.groups = {};
           s.selectedIds = [];
           s.selectedAttackIds = [];
           s.title = "Untitled plan";

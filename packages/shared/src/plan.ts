@@ -398,6 +398,18 @@ export const PlanSchema = z.object({
    * exactly the thing slides replaced.
    */
   slides: z.array(StepSchema).min(1),
+  /**
+   * What each group is **called**, keyed by the `groupId` its members share
+   * (plan §18.1). Names only: a group still *exists* precisely because two or
+   * more objects share an id, so this record can never be the thing that says
+   * whether one is there — losing it costs a name, not a group.
+   *
+   * Lock and visibility are deliberately **not** here. Both are fanned out onto
+   * the members instead, because every part of the app that already honours
+   * `object.locked` and a slide's `visible` would otherwise have to learn to
+   * ask a second question, and the two answers could then disagree.
+   */
+  groups: z.record(z.string().min(1), z.string()).default({}),
   schemaVersion: z.number().int().positive(),
 });
 export type Plan = z.infer<typeof PlanSchema>;
@@ -426,6 +438,7 @@ export function makeEmptyPlan(params: {
     background: params.background,
     objects: [],
     attacks: [],
+    groups: {},
     // Never empty: `PlanSchema` requires a slide, because a plan with no layout
     // is not a thing the editor can put a cursor in.
     slides: [makeFirstSlide()],
