@@ -90,6 +90,29 @@ export function pivotPoint(t: Pivoted): Point {
 export const facingDeg = (t: Pivoted): number => t.rotation + (t.dir ?? 0);
 
 /**
+ * The middle of the box, in the space it is placed in.
+ *
+ * Emphatically **not** `x + w/2`: rotation is about the top-left, so a turned
+ * box's middle swings away from that sum — which is exactly how a motion path
+ * came to be drawn detached from the object it belongs to.
+ *
+ * The centre rather than the {@link pivotPoint}, because a route is about where
+ * the *body* travels: an origin parked off the shape (a cone's apex, a beam's
+ * back) must not drag the drawn line off the token with it.
+ */
+export const centrePoint = (t: Pivoted): Point =>
+  pivotPoint({ ...t, ox: 0.5, oy: 0.5 });
+
+/**
+ * The top-left this box needs so its centre lands on `at` — the inverse of
+ * {@link centrePoint}, for turning a route's points back into stored positions.
+ */
+export function topLeftForCentre(t: Pivoted, at: Point): Point {
+  const centre = centrePoint(t);
+  return { x: t.x + (at.x - centre.x), y: t.y + (at.y - centre.y) };
+}
+
+/**
  * The origin, recovered from a point in the parent's space — the inverse of
  * {@link pivotPoint}, for dragging the handle.
  */

@@ -5,6 +5,7 @@ import { immer } from "zustand/middleware/immer";
 import {
   attackSlots,
   attackZ,
+  centrePoint,
   isDeferredTrigger,
   isFollowing,
   isOnSlide,
@@ -14,6 +15,7 @@ import {
   resolveObjectState,
   seedState,
   stateBeforeAnim,
+  topLeftForCentre,
   type Anim,
   type AttackDef,
   type AttackInstance,
@@ -340,8 +342,56 @@ function writeSlideState(
   patch: Partial<ObjectState>,
 ): void {
   if (Object.keys(patch).length === 0) return;
-  const state = s.slides[s.currentSlideIndex]?.states[id];
-  if (state) Object.assign(state, patch);
+  const slide = s.slides[s.currentSlideIndex];
+  const state = slide?.states[id];
+  if (!slide || !state) return;
+  const before = { ...state };
+  Object.assign(state, patch);
+  reanchorRoutes(slide, id, before, state);
+}
+
+/** How far the box's middle sits from its stored top-left. */
+const centreOffset = (t: ObjectState): Point =>
+  centrePoint({ ...t, x: 0, y: 0 });
+
+/**
+ * Keep a drawn route where it was drawn when the object it belongs to is turned
+ * or resized.
+ *
+ * A move stores its destination as the object's **top-left**, but a route is a
+ * line between **centres** — and a box turns about its top-left, so the centre a
+ * given top-left implies swings with rotation and slides with size. Left to
+ * itself, turning a token a quarter turn drags every destination after it clear
+ * across the board, though nothing about the journey it describes has changed.
+ *
+ * So the stored top-left is re-derived to leave the destination's *centre*
+ * exactly where the author put it. Interior waypoints are already centres and
+ * need none of this — repairing that asymmetry is the whole job here.
+ *
+ * Only this slide's animations: a route belongs to the slide it was drawn on,
+ * and so does the rotation being written.
+ */
+function reanchorRoutes(
+  slide: Slide,
+  id: string,
+  before: ObjectState,
+  after: ObjectState,
+): void {
+  const was = centreOffset(before);
+  const now = centreOffset(after);
+  const dx = was.x - now.x;
+  const dy = was.y - now.y;
+  // A plain move or nudge changes neither, which is the overwhelmingly common
+  // call and must stay a no-op rather than a rewrite of every animation.
+  if (dx === 0 && dy === 0) return;
+  for (const anim of slide.animations) {
+    if (anim.objectId !== id || anim.effect !== "move" || !anim.params)
+      continue;
+    // Each end independently: a move with no destination has not been drawn
+    // yet, and there is nothing to hold still.
+    if (anim.params.toX !== undefined) anim.params.toX += dx;
+    if (anim.params.toY !== undefined) anim.params.toY += dy;
+  }
 }
 
 /**
@@ -1177,9 +1227,10 @@ export const useEditorStore = create<EditorState>()(
           existing?.id,
         );
         // The route is drawn in centres, because that is what a drawn line
-        // means; the document stores an object's top-left. Converted with the
-        // size the object has *here*, matching how the player places it.
-        const half = { x: start.w / 2, y: start.h / 2 };
+        // means; the document stores an object's top-left. Converted through
+        // the box the object has *here* — rotation included, since a turned
+        // box's middle is not `x + w/2` — matching how the player places it.
+        const toTopLeft = (at: Point) => topLeftForCentre(start, at);
         const corners = route.map((p) => ({ x: p.x, y: p.y }));
         const last = corners[corners.length - 1]!;
 
@@ -1192,15 +1243,15 @@ export const useEditorStore = create<EditorState>()(
             params: {
               ...existing.params,
               path: corners.slice(0, -1),
-              toX: last.x - half.x,
-              toY: last.y - half.y,
+              toX: toTopLeft(last).x,
+              toY: toTopLeft(last).y,
             },
           });
           return existing.id;
         }
 
         const legs = splitLegs(
-          { x: start.x + half.x, y: start.y + half.y },
+          centrePoint(start),
           corners,
           existing?.durationMs ?? DRAWN_MOVE_MS,
         );
@@ -1240,8 +1291,8 @@ export const useEditorStore = create<EditorState>()(
               // A leg is a straight hop, so it carries no waypoints of its own
               // — the corners *are* the joins between legs now. Bending one is
               // still possible per leg (double-click its route on the board).
-              toX: leg.to.x - half.x,
-              toY: leg.to.y - half.y,
+              toX: toTopLeft(leg.to).x,
+              toY: toTopLeft(leg.to).y,
             },
           };
         });

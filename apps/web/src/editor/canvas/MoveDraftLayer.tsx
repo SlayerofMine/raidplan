@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Circle, Group, Path } from "react-konva";
 import {
   buildMotionPath,
+  centrePoint,
   pathToSvgD,
   resolveObjectState,
   stateBeforeAnim,
@@ -47,8 +48,7 @@ export function MoveDraftLayer() {
       object.id,
       animId,
     );
-    const start = { x: from.x + from.w / 2, y: from.y + from.h / 2 };
-    return [start, ...points, ...(cursor ? [cursor] : [])];
+    return [centrePoint(from), ...points, ...(cursor ? [cursor] : [])];
   }, [object, slides, slideIndex, animId, points, cursor]);
 
   const path = useMemo(

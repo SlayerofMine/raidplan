@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { ICONS } from "@raidplan/shared";
+import { centrePoint, ICONS } from "@raidplan/shared";
 import {
   clearHistory,
   temporalStore,
@@ -26,6 +26,18 @@ const animOf = (slideIndex: number, index = 0) => anims(slideIndex)[index]!;
 const centreOf = (slideIndex: number, id: string) => {
   const s = state().slides[slideIndex]!.states[id]!;
   return { x: s.x + s.w / 2, y: s.y + s.h / 2 };
+};
+/**
+ * Where this object's moves *land on the board*: the destination centres, which
+ * is what the route overlay draws and what a turn of the object must not move.
+ */
+const destinations = (slideIndex: number, id: string) => {
+  const s = state().slides[slideIndex]!.states[id]!;
+  return anims(slideIndex)
+    .filter((a) => a.objectId === id && a.effect === "move")
+    .map((a) =>
+      centrePoint({ ...s, x: a.params?.toX ?? s.x, y: a.params?.toY ?? s.y }),
+    );
 };
 
 beforeEach(() => {
@@ -193,6 +205,52 @@ describe("drawMove", () => {
     expect(state().drawMove(1, id, [{ x: 1, y: 1 }])).toBeUndefined();
     expect(anims(0)).toEqual([]);
     expect(anims(1)).toEqual([]);
+  });
+
+  it("holds a drawn route still when the object is turned", () => {
+    // A destination is stored as the object's top-left, but the route is a line
+    // between centres — and a box turns about its top-left, so leaving the
+    // stored number alone swings every destination after it across the board.
+    // Turning a token says nothing about where its journey goes.
+    const id = state().addIcon(iconId, { x: 100, y: 100 });
+    state().drawMove(0, id, [
+      { x: 400, y: 200 },
+      { x: 900, y: 600 },
+    ]);
+    const drawn = destinations(0, id);
+    const stored = animOf(0).params?.toX;
+
+    state().updateObject(id, { rotation: 90 });
+
+    expect(destinations(0, id)).toEqual(drawn);
+    // Held still by *re-deriving* the stored top-left, not by ignoring rotation:
+    // the number in the document has to change for the point on the board not to.
+    expect(animOf(0).params?.toX).not.toBe(stored);
+  });
+
+  it("holds it still when the object is resized too", () => {
+    // Same asymmetry, reached by the other handle: half the size is half of the
+    // centre offset.
+    const id = state().addIcon(iconId, { x: 100, y: 100 });
+    state().drawMove(0, id, [{ x: 900, y: 600 }]);
+    const drawn = destinations(0, id);
+
+    state().updateObject(id, { w: 300, h: 120, rotation: 25 });
+
+    expect(destinations(0, id)).toEqual(drawn);
+  });
+
+  it("leaves the animations alone when the object merely moves", () => {
+    // The common call by a wide margin: dragging a token must not rewrite its
+    // route. Only the start of the line follows the object.
+    const id = state().addIcon(iconId, { x: 100, y: 100 });
+    state().drawMove(0, id, [{ x: 900, y: 600 }]);
+    const before = structuredClone(anims(0));
+
+    state().moveObject(id, 500, 500);
+    state().nudgeSelected(1, 1);
+
+    expect(anims(0)).toEqual(before);
   });
 
   it("undoes in one press, however many corners were clicked", () => {

@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   aimAt,
   angleDeg,
+  centrePoint,
   facingDeg,
   pinTo,
   pivotFraction,
   pivotPoint,
   rotateAboutPivot,
   slidePinnedOrigin,
+  topLeftForCentre,
   type Pivoted,
 } from "../src/transform.js";
 
@@ -189,6 +191,37 @@ describe("slidePinnedOrigin", () => {
     const fraction = pivotFraction(t, pointer);
     near(slid.ox, fraction.ox);
     near(slid.oy, fraction.oy);
+  });
+});
+
+describe("centrePoint", () => {
+  it("is the plain middle when the box is not turned", () => {
+    expect(centrePoint(box())).toEqual({ x: 50, y: 20 });
+  });
+
+  it("swings with the rotation — the bug that detached motion paths", () => {
+    // A quarter turn about the top-left puts the middle below and to the left
+    // of it, nowhere near the `x + w/2, y + h/2` a route used to be drawn at.
+    const c = centrePoint(box({ rotation: 90 }));
+    near(c.x, -20);
+    near(c.y, 50);
+  });
+
+  it("ignores the origin — a route follows the body, not the pivot", () => {
+    // An apex parked off the shape must not drag the drawn line off the token.
+    for (const o of [{ ox: 0, oy: 0 }, { ox: -0.5, oy: 2 }, {}]) {
+      const t = box({ ...o, rotation: 33 });
+      expect(centrePoint(t)).toEqual(centrePoint(box({ rotation: 33 })));
+    }
+  });
+
+  it("round-trips through topLeftForCentre", () => {
+    const t = box({ x: 17, y: -4, rotation: 41, ox: 0.2, oy: 0.9 });
+    const at = { x: 300, y: 120 };
+    const placed = topLeftForCentre(t, at);
+    const landed = centrePoint({ ...t, ...placed });
+    near(landed.x, at.x);
+    near(landed.y, at.y);
   });
 });
 

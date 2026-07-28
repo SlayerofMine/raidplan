@@ -4,12 +4,15 @@ import type { KonvaEventObject } from "konva/lib/Node";
 import { useShallow } from "zustand/react/shallow";
 import {
   buildMotionPath,
+  centrePoint,
   isFollowing,
   pathTangent,
   pathToSvgD,
   resolveObjectState,
   stateBeforeAnim,
+  topLeftForCentre,
   type Anim,
+  type ObjectState,
   type MotionPath,
   type Point,
 } from "@raidplan/shared";
@@ -44,8 +47,8 @@ interface Route {
   /** The full route in centre coordinates: start, interior waypoints, end. */
   points: Point[];
   curve: number;
-  /** The object's half-size where the move starts — centres <-> top-left. */
-  half: Point;
+  /** The box the move starts from — what converts centres <-> stored top-left. */
+  box: ObjectState;
   selected: boolean;
   /** A followed object is placed every frame *after* its tween, so its route is a lie. */
   followed: boolean;
@@ -78,14 +81,17 @@ export function MotionPathLayer() {
         anim.id,
       );
       const waypoints = anim.params?.path ?? [];
-      // Half-size from the *start* state, matching how `compileStep` converts
-      // the route's centres back to the document's top-left coordinates.
-      const half = { x: from.w / 2, y: from.h / 2 };
-      const start = { x: from.x + half.x, y: from.y + half.y };
-      const end = {
-        x: (anim.params?.toX ?? from.x) + half.x,
-        y: (anim.params?.toY ?? from.y) + half.y,
-      };
+      // Centres from the *start* state, matching how `compileStep` converts the
+      // route's centres back to the document's top-left coordinates. A rotated
+      // box turns about its top-left, so its middle is not `x + w/2` — taking
+      // it that way is what used to draw the route beside the token instead of
+      // through it.
+      const start = centrePoint(from);
+      const end = centrePoint({
+        ...from,
+        x: anim.params?.toX ?? from.x,
+        y: anim.params?.toY ?? from.y,
+      });
       // A move that goes nowhere and bends nowhere is a dot, not a route — an
       // undrawn one, which the panel prompts for rather than the board.
       if (waypoints.length === 0 && start.x === end.x && start.y === end.y) {
@@ -95,7 +101,7 @@ export function MotionPathLayer() {
         anim,
         points: [start, ...waypoints, end],
         curve: anim.params?.curve ?? 0,
-        half,
+        box: from,
         selected: selectedIds.includes(anim.objectId),
         followed: isFollowing(object.follow),
       });
@@ -116,16 +122,17 @@ export function MotionPathLayer() {
               params: { ...route.anim.params, path },
             })
           }
-          onDestination={(at) =>
+          onDestination={(at) => {
+            // Handles are dragged as centres; the document stores top-left.
+            const placed = topLeftForCentre(route.box, at);
             updateAnimation(slideIndex, route.anim.id, {
               params: {
                 ...route.anim.params,
-                // Handles are dragged as centres; the document stores top-left.
-                toX: at.x - route.half.x,
-                toY: at.y - route.half.y,
+                toX: placed.x,
+                toY: placed.y,
               },
-            })
-          }
+            });
+          }}
         />
       ))}
     </Group>
