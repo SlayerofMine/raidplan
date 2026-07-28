@@ -43,8 +43,7 @@ const def = (over: Partial<AttackDef> = {}): AttackDef => ({
       },
     },
   ],
-  overrides: {},
-  animations: [],
+  slides: [{ id: "end", name: "End", states: {}, animations: [] }],
 
   params: [],
   bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },

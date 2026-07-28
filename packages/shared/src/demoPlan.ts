@@ -6,7 +6,6 @@ import {
   type PlanObject,
   type Slide,
   type SlideState,
-  type StepOverride,
 } from "./plan.js";
 import { seedState } from "./resolve.js";
 import type { ObjectStyle } from "./mechanics.js";
@@ -31,7 +30,7 @@ const BOARD = { assetId: "arena", width: 1600, height: 900 } as const;
 interface AuthoredSlide {
   id: string;
   name: string;
-  changes?: Record<string, StepOverride>;
+  changes?: Record<string, Partial<SlideState>>;
   animations: Anim[];
   autoAdvanceMs?: number;
 }

@@ -29,8 +29,15 @@ import { ObjectStyleSchema } from "./mechanics.js";
  * has an entry — which is a change of *meaning* within 4, not of shape. Every
  * document written before it listed every object on every slide, which still
  * says exactly what it always did: they are all in every scene.
+ *
+ * **5** finished that job for attacks (plan §19.2). An
+ * {@link ./attack.js AttackDef} carried the pre-slides model — a base state plus
+ * a sparse `overrides` map — for one release longer than a plan did, which left
+ * two state models in the codebase and one of them with a single user. A def now
+ * carries `slides: [Slide]` like everything else. Plan documents are unaffected
+ * in shape; stored attack definitions written at 4 do not parse.
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /** Opacity is always normalised to 0..1. */
 const OpacitySchema = z.number().min(0).max(1);
@@ -49,9 +56,9 @@ const OpacitySchema = z.number().min(0).max(1);
  *    when a new slide entry is minted, and are otherwise stale. Read the slide,
  *    never the seed.
  *
- * They stay on one schema because an {@link ../attack.js AttackDef} is genuinely
- * two-state (a start shape and an end shape) and still uses `base` + a single
- * `overrides` map as its live model.
+ * They stay on one schema because an {@link ./attack.js AttackDef} is genuinely
+ * two-state — a start shape, and the one slide its animations reach — and reads
+ * `base` as that start.
  */
 export const ObjectBaseSchema = TransformSchema.extend({
   opacity: OpacitySchema,
@@ -289,29 +296,6 @@ export const AttackInstanceSchema = z.object({
 export type AttackInstance = z.infer<typeof AttackInstanceSchema>;
 
 /**
- * The end-state delta of a single object inside an **attack definition**, whose
- * two-state model (a `base` shape and one set of overrides reached by its
- * animations) predates slides and is deliberately kept — see
- * {@link ./attack.js AttackDef}. Every field is optional; absent means "the
- * definition's base value".
- *
- * Plans no longer use this. A plan's slides each carry a complete
- * {@link SlideStateSchema}, precisely so that nothing inherits along a chain.
- */
-export const StepOverrideSchema = z
-  .object({
-    x: z.number().finite(),
-    y: z.number().finite(),
-    w: z.number().finite().nonnegative(),
-    h: z.number().finite().nonnegative(),
-    rotation: z.number().finite(),
-    opacity: OpacitySchema,
-    visible: z.boolean(),
-  })
-  .partial();
-export type StepOverride = z.infer<typeof StepOverrideSchema>;
-
-/**
  * One object's **complete** visual state on one slide.
  *
  * Every field is required: an entry is whole or it is absent, never partial.
@@ -339,7 +323,7 @@ export type SlideState = z.infer<typeof SlideStateSchema>;
  * entrances and emphasis play, but a `move` has nowhere to move from (see
  * {@link ./resolve.js resolveSlideTransition}).
  */
-export const StepSchema = z.object({
+export const SlideSchema = z.object({
   id: z.string().min(1),
   name: z.string().optional(),
   /**
@@ -353,7 +337,7 @@ export const StepSchema = z.object({
   /** Optional autoplay dwell before advancing to the next slide. */
   autoAdvanceMs: z.number().finite().nonnegative().optional(),
 });
-export type Slide = z.infer<typeof StepSchema>;
+export type Slide = z.infer<typeof SlideSchema>;
 
 /** The background map the plan is drawn on, in native pixel dimensions. */
 export const BackgroundSchema = z.object({
@@ -380,7 +364,7 @@ export const PlanSchema = z.object({
    * The **registry** of objects the slides draw from: what each one is (icon,
    * shape, tint, style, what it follows), under an id. Whether a given object
    * appears in a given scene, and where, is the slide's business — see
-   * {@link StepSchema}'s `states`.
+   * {@link SlideSchema}'s `states`.
    *
    * Plan-level rather than per-slide because identity is what makes a `move`
    * possible: the same id on two slides is what says "this token, then there".
@@ -397,7 +381,7 @@ export const PlanSchema = z.object({
    * layout to show, and the old "base layout, plus zero or more slides" split is
    * exactly the thing slides replaced.
    */
-  slides: z.array(StepSchema).min(1),
+  slides: z.array(SlideSchema).min(1),
   /**
    * What each group is **called**, keyed by the `groupId` its members share
    * (plan §18.1). Names only: a group still *exists* precisely because two or

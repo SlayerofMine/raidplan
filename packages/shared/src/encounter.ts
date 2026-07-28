@@ -3,7 +3,7 @@ import {
   BackgroundSchema,
   makeEmptyPlan,
   PlanObjectSchema,
-  StepSchema,
+  SlideSchema,
   type Plan,
 } from "./plan.js";
 import { normalizeSlides, seedState } from "./resolve.js";
@@ -33,7 +33,7 @@ export const EncounterPresetSchema = z.object({
    * Pre-authored slides, if any. A preset with none seeds the plan's own opening
    * slide instead, so an encounter is free to be nothing but a background.
    */
-  slides: z.array(StepSchema).default([]),
+  slides: z.array(SlideSchema).default([]),
 });
 export type EncounterPreset = z.infer<typeof EncounterPresetSchema>;
 

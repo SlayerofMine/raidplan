@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  ATTACK_END_SLIDE,
   defToPlan,
   planToAttackContent,
   type AttackBindings,
@@ -45,8 +46,9 @@ function blankDef(encounterId: string): AttackDef {
     version: 1,
     defaultSize: DEFAULT_SIZE,
     objects: [],
-    overrides: {},
-    animations: [],
+    // A def's one slide, empty: nothing settles anywhere until something is
+    // drawn. `defToPlan` gives it the designer's End identity either way.
+    slides: [{ id: ATTACK_END_SLIDE, name: "End", states: {}, animations: [] }],
     params: [],
     bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
   };

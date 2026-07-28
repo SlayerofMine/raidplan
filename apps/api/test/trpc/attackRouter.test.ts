@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TRPCError } from "@trpc/server";
-import type { AttackDef } from "@raidplan/shared";
+import type { AttackDef, Slide } from "@raidplan/shared";
 import type { Db } from "../../src/db/client.js";
 import { users } from "../../src/db/schema.js";
 import { createTestDb } from "../../src/db/testDb.js";
@@ -18,8 +18,7 @@ const content = {
   name: "Cone",
   defaultSize: { w: 100, h: 100 },
   objects: [],
-  animations: [],
-
+  slides: [{ id: "end", name: "End", states: {}, animations: [] }] as [Slide],
   params: [],
   bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
 };
@@ -36,8 +35,7 @@ const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   version: 1,
   defaultSize: { w: 100, h: 100 },
   objects: [],
-  overrides: {},
-  animations: [],
+  slides: [{ id: "end", name: "End", states: {}, animations: [] }],
 
   params: [],
   bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },

@@ -948,3 +948,189 @@ selection about its bounding box and offers no way to move that, so `ObjectNode`
 it keeps whatever rotation the handle produced and re-derives `x/y` so the origin is the point that
 did not move. The document still says top-left plus degrees, so every renderer, exporter and
 hit-test reads the same three numbers it always did. [DONE]
+---
+
+## 19. Attacks after slides: anyone may author one, a plan may keep its own
+
+§17 and §18 built the attack library for a world with two properties it no longer has. Steps
+became **slides**, and objects learned to be **grouped**. Both changes landed underneath attacks
+without touching them, and what they left behind is two pieces of drift and one wrong default.
+
+**The drift.** A definition is still `objects` (a base state) plus `overrides` — a
+`Record<id, StepOverride>` naming the settled end — plus `animations`. Plans stopped working that
+way: a slide carries a *complete* `SlideState` per object precisely so nothing inherits along a
+chain. `StepOverride` now has exactly one user left in the codebase, and it is this. So
+`defToPlan`/`planToAttackContent` are not merely loading a definition into the editor, they are
+translating between two state models, and every future change to how a slide resolves has to be
+made twice or it silently doesn't apply to attacks.
+
+The second piece is smaller and is a matter of vocabulary: §18.2 codified "a definition is exactly
+base state + one step", which is still the right constraint and is now written in a word the rest
+of the document no longer uses.
+
+**The wrong default.** Authoring an attack is gated to site admins — `attack.create/update/remove`
+and even `attack.get` sit behind `adminProcedure`. That gate was drawn to protect a *shared,
+curated* thing: an encounter's attack list is seen by every planner working that fight, and one
+person's half-finished cone should not appear in it. That reasoning is sound and survives. But it
+was applied to the **act of authoring** rather than to the **library**, and the two are not the
+same, so a planner who wants a mechanic nobody has drawn yet has no move at all — not even a
+private one. The whole of the designer, the palette, unit space, parameters and follow, is
+unreachable to the people the tool is for.
+
+**Decisions taken (user):**
+
+- A definition's scope is a **column, not a document**: `attacks` gains a nullable `plan_id`
+  beside its now-nullable `encounter_id`, and exactly one is set. Keeping defs out of the plan blob
+  means a plan-local attack can later be lifted, shared or promoted without a document migration,
+  at the price of a real authorization surface — which §19.1 draws explicitly.
+- A definition's content is re-expressed in **slide vocabulary**: `objects` plus `slides: [Slide]`,
+  a one-element array. `StepOverride` is deleted. Same expressive power as today, one state model.
+- Authoring is un-gated; the **encounter library** stays admin-only. A user authors into their own
+  plan, from a blank designer or from a selection they have already assembled.
+- Reads become **public**, because a public plan's share link is already public.
+
+### 19.1 Who may do what
+
+The gate moves off the verb and onto the noun. Every question about an attack is answered by which
+of its two owning columns is set, and both answers reuse decisions the codebase has already made —
+`canView`/`canEdit` in `access.ts` for a plan, the admin allowlist for an encounter. No third
+notion of ownership is invented.
+
+| | read | create / update / delete |
+|---|---|---|
+| `encounter_id` set | **anyone**, signed in or not | site admin (`adminProcedure`) |
+| `plan_id` set | anyone who `canView` that plan | anyone who `canEdit` that plan |
+
+Public reads are not a loosening, they are a **bug fix**. `plan.get` is `publicProcedure` and
+`attack.byIds` is `protectedProcedure`, so a logged-out visitor opening a share link to a plan that
+uses attacks has `expandForViewing` reject and watches the plan render with its mechanics missing.
+A definition is drawing, not a secret; the thing worth protecting is the *plan*, and `canView`
+already protects it. So `byIds` becomes public and filters what it returns: encounter defs always,
+plan defs only for plans the caller may see. Filtering inside the resolver rather than trusting the
+id list is the point — ids are supplied by the caller.
+
+The plan-scoped procedures take a `planId` and check it against the plan's ACL on every call.
+Deriving the plan from the *def* on update and delete (rather than from an argument the client
+sends alongside) is what stops a caller editing someone else's attack by naming their own plan.
+
+Deleting a plan takes its attacks with it (`plan_id` references `plans.id` with cascade); a
+soft-deleted plan keeps them, since a soft delete is reversible and `canView` already returns false
+for one.
+
+### 19.2 A definition is a base state and one slide
+
+`AttackDefSchema` loses `overrides: Record<string, StepOverride>` and gains `slides: [Slide]` —
+`z.tuple([SlideSchema])`, so "exactly one" is the schema's job rather than a comment. The end state
+of a part is a `SlideState` like every other end state in the app, and the definition's animations
+move into that slide where a slide's animations live.
+
+This is a rename plus a shape change, not a new capability, and it deletes more than it adds:
+
+- `StepOverride` and `mapOverride` go. `defToPlan`/`planToAttackContent` stop being translators and
+  become what their names claim — a def *is* a two-slide mini-plan (§18.2's
+  `ATTACK_START_SLIDE`/`ATTACK_END_SLIDE` already say so), so loading one is now closer to a copy.
+  `mapOverride`'s replacement, `mapSlideState`, is strictly simpler: a complete state has nothing to
+  borrow from `base` before a rotation can mix its axes.
+- `expandInstance` writes into the using plan's slide with the same `SlideState` shape it reads,
+  instead of merging a partial override onto a base.
+- `attackContentBox` and `authoredPlacements` measure a def's extent across "where its parts start,
+  where they settle, and everywhere a motion carries them" — the settling half currently walks
+  overrides and now walks slide states. Unit space is unchanged, so no saved def's *geometry*
+  changes meaning; the rows still need rewriting, which is why this rides a `SCHEMA_VERSION` bump.
+
+**No migration, again.** §18 set the precedent and the reason still holds: the `doc` column is
+JSON re-validated on read (`parseDef`), a def that no longer parses is skipped rather than crashing
+a render, and the attack library is small and admin-authored. `SCHEMA_VERSION` → 5, seeds re-run,
+and any def authored against v4 is dropped by its own schema rather than half-read.
+
+### 19.3 Making one
+
+Two entry points, because they answer two different questions.
+
+**From a selection.** You have already dragged four circles into a cone and animated them; that is
+an attack, and §18.1 already gave you the word for the assembled thing. "Save as attack" over a
+selection runs `planToAttackContent` across *that subset* — the objects, their states on the
+current slide, and the animations that name them — normalises it into unit space via
+`attackContentBox`, and writes a plan-scoped def. This is the path that makes the feature feel
+free, because the work is already done by the time the user asks for it.
+
+Two things it must get right. The subset's animations are the ones whose targets are all inside the
+selection; an animation reaching out of it (a tether to the boss) cannot come along, because the
+thing it points at is not part of what is being saved — the selection is offered `placeholder`
+substitution for those targets or the animation is left behind, and the dialog says which. And the
+original objects stay exactly as they are: saving is not converting. Replacing the selection with
+an instance of the new def is a separate, offered action, because it is destructive in the specific
+way that matters — the parts stop being individually editable.
+
+**From nothing.** The existing designer, reachable from the plan editor rather than only from
+`/admin`. The page already loads a def onto the shared store and authors it with the ordinary
+canvas, palette and panels; what changes is where "save" sends it and where "back" returns to. The
+route carries the scope (`/plans/:planId/attacks/new` against
+`/admin/encounters/:encounterId/attacks/:id`), so the same component knows which mutation to call
+and which list it belongs to without a mode flag threaded through it.
+
+**Promotion.** An admin can lift a plan-local def into an encounter's library: clear `plan_id`, set
+`encounter_id`. The instances that already point at it keep working untouched, because auto-follow
+resolves by `attackId` and the id does not change — the def simply becomes visible to everyone
+working that fight. This is the intended path for a good attack to become a curated one, and it is
+why scope is a column: promoting is an `UPDATE`, not a copy with a broken reference behind it.
+
+*Deferred:* forking an encounter attack into your own plan to retune it. It is the natural third
+member of this set and needs a decision about what the copy does when the original changes; it is
+not needed to make authoring reachable, which is what this section is for.
+
+### 19.4 The palette says where an attack came from
+
+The Attacks tab acquires two sections — the encounter's, and this plan's — because "who else sees
+this" is a fact the author needs continuously and cannot infer from a thumbnail. A plan with no
+encounter, which today has no attacks at all and no way to get any, now has its own section and the
+whole feature.
+
+`AttackDefResolver` currently fetches by encounter and stops. It becomes: the plan's own defs, plus
+the encounter's when there is one, merged into the same `attackDefs` map the store already keeps.
+Ids are UUIDs, so the two sets cannot collide, and every consumer downstream of the map —
+`expandPlan`, the canvas preview, the WebM export, `useFollowing` — is unchanged.
+
+### 19.5 Stages
+
+Each is independently shippable and green on its own commit.
+
+1. **Def content in slide vocabulary** [DONE] — `AttackDefSchema.slides: z.tuple([SlideSchema])`
+   replaces `overrides` *and* the def's top-level `animations`, which now live on the slide they
+   arrive at like every other animation in the app. `StepOverride` and `mapOverride` deleted;
+   `expandInstance`, `attackContentBox`, `defToPlan`, `planToAttackContent` follow.
+   `SCHEMA_VERSION` → 5, and `StepSchema` finally renamed to `SlideSchema` — the last piece of the
+   old word in the shared package.
+
+   **One thing did not survive contact.** `diffState` was to be deleted with the rest; instead it
+   moved, as `changedFields`, from the *save* path to the *expansion* path. Sparseness was carrying
+   meaning that had nothing to do with storage: an animation with no target of its own takes one
+   from where the def's slide leaves the part (`withDerivedTarget`), and "the slide doesn't say"
+   was expressed as a missing key. A complete state always says, so a `move` on a part the author
+   never moved would have been handed a target identical to its own start. The difference is now
+   computed at expansion against the part's base — which is what the sparse map was recording all
+   along, just written down instead of derived.
+
+   Two bits of dead weight fell out on the way: the settled `visible` that `expandInstance`
+   computed for every part was read by nothing (`withDerivedTarget` consults x/y/w/opacity), and
+   the def's own `animations` array was a second place to look for what its slide already held.
+
+   The 82 attack tests pass **unchanged in substance** — only the fixture's vocabulary moved, which
+   is the evidence that this is a re-expression and not a behaviour change.
+2. **Scope on the row.** Migration: `encounter_id` nullable, `plan_id` added with a cascade to
+   `plans`, a `CHECK` that exactly one is set, and an index on `plan_id`. `attacksRepo` grows
+   `listAttacksForPlan` and takes a scope on create. No behaviour change yet — every existing row is
+   encounter-scoped and stays that way.
+3. **The gate moves.** `byIds` becomes public and filters by `canView`; plan-scoped
+   create/update/delete behind a `canEdit` check that derives the plan from the def; encounter-scoped
+   ones stay on `adminProcedure`; `attack.get` stops being admin-only and answers per scope. This is
+   the security-critical stage, so it is its own commit with the access-control tests §13 asks for —
+   including the negative cases: another user's plan, an anonymous caller, a mixed id list.
+4. **Authoring reachable.** The designer routes under a plan and saves to it; the palette grows its
+   two sections; `AttackDefResolver` fetches both. An e2e as a **non-admin**: author an attack, place
+   it, see it resolve on the editor canvas.
+5. **Save as attack.** Selection → def, with the reaching-animation rule and the separate
+   "replace selection with an instance" action. Rides on §18.1's group selection, so the common case
+   is "select group, save".
+6. **Promote.** Admin action on a plan-scoped def; an `UPDATE` of the two columns and a test that
+   existing instances still resolve.

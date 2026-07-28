@@ -45,8 +45,7 @@ const def: AttackDef = {
       },
     },
   ],
-  overrides: {},
-  animations: [],
+  slides: [{ id: "end", states: {}, animations: [] }],
   params: [],
   bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
 };

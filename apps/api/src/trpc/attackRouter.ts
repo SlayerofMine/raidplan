@@ -1,12 +1,11 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
-  AnimSchema,
   AttackBindingsSchema,
   AttackParamSchema,
   FollowSchema,
   PlanObjectSchema,
-  StepOverrideSchema,
+  SlideSchema,
 } from "@raidplan/shared";
 import {
   createAttack,
@@ -33,8 +32,8 @@ const attackContent = {
     })
     .default({ w: 400, h: 400 }),
   objects: z.array(PlanObjectSchema),
-  overrides: z.record(z.string().min(1), StepOverrideSchema).default({}),
-  animations: z.array(AnimSchema),
+  /** The def's one slide — where its parts settle, and what takes them there. */
+  slides: z.tuple([SlideSchema]),
   ox: z.number().finite().optional(),
   oy: z.number().finite().optional(),
   dir: z.number().finite().optional(),

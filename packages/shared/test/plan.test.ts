@@ -3,7 +3,6 @@ import {
   makeEmptyPlan,
   PlanSchema,
   SCHEMA_VERSION,
-  StepOverrideSchema,
   type Plan,
 } from "../src/plan.js";
 
@@ -296,21 +295,5 @@ describe("PlanObjectSchema — tethers", () => {
     expect(tether.type).toBe("tether");
     expect(tether.fromId).toBe("obj_1");
     expect(tether.toId).toBe("obj_2");
-  });
-});
-
-// Still the shape an *attack definition* uses for its single end state; plans
-// carry a complete `SlideState` per slide instead.
-describe("StepOverrideSchema", () => {
-  it("accepts an empty override (no-op slide for an object)", () => {
-    expect(StepOverrideSchema.safeParse({}).success).toBe(true);
-  });
-
-  it("accepts a partial override touching only one field", () => {
-    expect(StepOverrideSchema.safeParse({ x: 42 }).success).toBe(true);
-  });
-
-  it("rejects an out-of-range opacity override", () => {
-    expect(StepOverrideSchema.safeParse({ opacity: 2 }).success).toBe(false);
   });
 });

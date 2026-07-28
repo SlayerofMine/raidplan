@@ -44,18 +44,33 @@ const def: AttackDef = {
       },
     },
   ],
-  // It sweeps to the right edge over the slide.
-  overrides: { cone: { x: 0.5, y: -1 } },
-  animations: [
+  // Its one slide: it sweeps to the right edge, and this is what takes it there.
+  slides: [
     {
-      id: "sweep",
-      objectId: "cone",
-      kind: "motion",
-      effect: "move",
-      trigger: "onEnter",
-      delayMs: 0,
-      durationMs: 500,
-      easing: "none",
+      id: "end",
+      states: {
+        cone: {
+          x: 0.5,
+          y: -1,
+          w: 0.5,
+          h: 2,
+          rotation: 0,
+          opacity: 1,
+          visible: true,
+        },
+      },
+      animations: [
+        {
+          id: "sweep",
+          objectId: "cone",
+          kind: "motion",
+          effect: "move",
+          trigger: "onEnter",
+          delayMs: 0,
+          durationMs: 500,
+          easing: "none",
+        },
+      ],
     },
   ],
   params: [],

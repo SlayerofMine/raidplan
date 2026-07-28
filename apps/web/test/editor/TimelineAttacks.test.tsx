@@ -18,17 +18,22 @@ const def: AttackDef = {
   version: 1,
   defaultSize: { w: 100, h: 100 },
   objects: [],
-  overrides: {},
-  animations: [
+  slides: [
     {
-      id: "a1",
-      objectId: "o1",
-      kind: "motion",
-      effect: "move",
-      trigger: "onEnter",
-      delayMs: 0,
-      durationMs: 800,
-      easing: "none",
+      id: "end",
+      states: {},
+      animations: [
+        {
+          id: "a1",
+          objectId: "o1",
+          kind: "motion",
+          effect: "move",
+          trigger: "onEnter",
+          delayMs: 0,
+          durationMs: 800,
+          easing: "none",
+        },
+      ],
     },
   ],
   params: [],

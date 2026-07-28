@@ -11,6 +11,7 @@ import {
   slotsFilled,
   AttackDefSchema,
   attackIdsInPlan,
+  ATTACK_END_SLIDE,
   defToPlan,
   expandPlan,
   planToAttackContent,
@@ -25,8 +26,9 @@ import {
   type Plan,
   type PlanObject,
   type Slide,
-  type StepOverride,
+  type SlideState,
 } from "../src/plan.js";
+import { seedState } from "../src/resolve.js";
 
 /**
  * Attacks are stored in **unit space**: -1..1 centred, where (0,0) is the middle
@@ -70,19 +72,41 @@ const defAnim = (over: Partial<Anim> = {}): Anim => ({
   ...over,
 });
 
-const makeDef = (over: Partial<AttackDef> = {}): AttackDef => ({
-  id: "atk",
-  encounterId: "enc",
-  name: "Cone",
-  version: 1,
-  defaultSize: { w: 400, h: 400 },
-  objects: [defObj("o1")],
-  overrides: {},
-  animations: [],
-  params: [],
-  bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
-  ...over,
-});
+/**
+ * A definition as it is *written* here (plan §19.2): its animations, and only
+ * what its slide **changes** about each part.
+ *
+ * The document itself carries a complete {@link SlideState} per part, like every
+ * slide in every plan — but a fixture that spelled all seven fields out for
+ * every object would bury the one field a test is actually about. So the
+ * cascade lives here, exactly as `demoPlan`'s authoring shape does for plans.
+ */
+type DefOver = Omit<Partial<AttackDef>, "slides"> & {
+  animations?: Anim[];
+  settles?: Record<string, Partial<SlideState>>;
+};
+
+const makeDef = ({
+  animations = [],
+  settles = {},
+  ...over
+}: DefOver = {}): AttackDef => {
+  const objects = over.objects ?? [defObj("o1")];
+  const states: Record<string, SlideState> = {};
+  for (const o of objects) states[o.id] = { ...seedState(o), ...settles[o.id] };
+  return {
+    id: "atk",
+    encounterId: "enc",
+    name: "Cone",
+    version: 1,
+    defaultSize: { w: 400, h: 400 },
+    params: [],
+    bindings: { collideWith: {}, durationMs: {}, delayMs: {}, tint: {} },
+    ...over,
+    objects,
+    slides: [{ id: ATTACK_END_SLIDE, name: "End", states, animations }],
+  };
+};
 
 /**
  * The default instance covers (0,0)‥(200,200): centre (100,100), half-extents
@@ -137,17 +161,38 @@ const expandOne = (def: AttackDef, instance: AttackInstance) =>
   expandPlan(makePlan([slide()], [], [instance]), { atk: def });
 
 describe("AttackDefSchema", () => {
-  it("defaults version, placement hint and end state", () => {
+  const oneSlide = [{ id: "end", states: {}, animations: [] }];
+
+  it("defaults version and placement hint", () => {
     const def = AttackDefSchema.parse({
       id: "a",
       encounterId: "e",
       name: "n",
       objects: [],
-      animations: [],
+      slides: oneSlide,
     });
     expect(def.version).toBe(1);
     expect(def.defaultSize).toEqual({ w: 400, h: 400 });
-    expect(def.overrides).toEqual({});
+    expect(def.slides[0].states).toEqual({});
+  });
+
+  // The tuple is where §18.2's "a definition is exactly base state + one slide"
+  // stopped being a comment (§19.2). A def with two slides is a def that has
+  // grown a timeline of its own, which is what a *plan* is for.
+  it("takes exactly one slide, never none and never two", () => {
+    const def = (slides: unknown) =>
+      AttackDefSchema.safeParse({
+        id: "a",
+        encounterId: "e",
+        name: "n",
+        objects: [],
+        slides,
+      }).success;
+    expect(def(oneSlide)).toBe(true);
+    expect(def([])).toBe(false);
+    expect(def([...oneSlide, { id: "b", states: {}, animations: [] }])).toBe(
+      false,
+    );
   });
 });
 
@@ -361,7 +406,7 @@ describe("expandPlan — end-state overrides", () => {
     // rectangle covers the whole sweep.
     const def = makeDef({
       objects: [defObj("c", { x: -1, y: -1, w: 1, h: 2 })],
-      overrides: { c: { x: 0 } },
+      settles: { c: { x: 0 } },
       animations: [defAnim({ id: "m", objectId: "c", effect: "move" })],
     });
     const out = expandOne(def, inst());
@@ -376,7 +421,7 @@ describe("expandPlan — end-state overrides", () => {
   it("honours a def end state that hides the object (a disappear)", () => {
     const def = makeDef({
       objects: [defObj("c")],
-      overrides: { c: { visible: false } },
+      settles: { c: { visible: false } },
     });
     const out = expandOne(def, inst());
     expect(out.slides[0]!.states["i1::c"]).toMatchObject({ visible: false });
@@ -1113,16 +1158,11 @@ describe("attackContentBox — parts that follow other parts", () => {
 
   const boxOf = (
     objects: PlanObject[],
-    over: Partial<{
-      overrides: Record<string, StepOverride>;
-      animations: Anim[];
-    }> = {},
-  ) =>
-    attackContentBox({
-      objects,
-      overrides: over.overrides ?? {},
-      animations: over.animations ?? [],
-    });
+    over: {
+      settles?: Record<string, Partial<SlideState>>;
+      animations?: Anim[];
+    } = {},
+  ) => attackContentBox(makeDef({ objects, ...over }));
 
   it("measures a pinned part where the pin puts it, not where it was drawn", () => {
     // Centred origin, so the pin lands the part's middle on (50,50): 40‥60.
@@ -1299,7 +1339,7 @@ describe("defToPlan / planToAttackContent", () => {
     // 0‥400 across, 0‥100 down: the rectangle covers everywhere it goes.
     expect(content.defaultSize).toEqual({ w: 400, h: 100 });
     expect(content.objects[0]!.base).toMatchObject({ x: -1, y: -1, w: 0.5 });
-    expect(content.overrides["o1"]).toMatchObject({ x: 0.5 });
+    expect(content.slides[0].states["o1"]).toMatchObject({ x: 0.5 });
   });
 
   it("keeps the default rectangle for an attack with nothing in it", () => {
@@ -1314,7 +1354,7 @@ describe("defToPlan / planToAttackContent", () => {
     const def = makeDef({
       defaultSize: { w: 300, h: 200 },
       objects: [defObj("o1", { x: -1, y: -1, w: 1, h: 2 })],
-      overrides: { o1: { x: 0, y: -1 } },
+      settles: { o1: { x: 0, y: -1 } },
       animations: [defAnim({ objectId: "o1", params: { toX: 0, toY: -1 } })],
     });
 
@@ -1325,8 +1365,11 @@ describe("defToPlan / planToAttackContent", () => {
     // and saving it unchanged must not drift.
     expect(content.defaultSize).toEqual({ w: 300, h: 200 });
     expect(content.objects[0]!.base).toMatchObject(def.objects[0]!.base);
-    expect(content.overrides["o1"]).toMatchObject({ x: 0, y: -1 });
-    expect(content.animations[0]!.params).toEqual({ toX: 0, toY: -1 });
+    expect(content.slides[0].states["o1"]).toMatchObject({ x: 0, y: -1 });
+    expect(content.slides[0].animations[0]!.params).toEqual({
+      toX: 0,
+      toY: -1,
+    });
   });
 });
 

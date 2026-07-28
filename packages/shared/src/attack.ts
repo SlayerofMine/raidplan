@@ -9,10 +9,9 @@ import {
 } from "./follow.js";
 import { isDeferredTrigger, layoutStepTimeline } from "./timeline.js";
 import {
-  AnimSchema,
   PlanObjectSchema,
   SCHEMA_VERSION,
-  StepOverrideSchema,
+  SlideSchema,
   type Anim,
   type AnimParams,
   type AttackInstance,
@@ -21,7 +20,6 @@ import {
   type PlanObject,
   type Slide,
   type SlideState,
-  type StepOverride,
 } from "./plan.js";
 import { seedState } from "./resolve.js";
 
@@ -51,8 +49,11 @@ import { seedState } from "./resolve.js";
  * fixing a def improves every plan using it. (`version` is kept for a future
  * "this attack changed" marker and opt-in pinning.)
  *
- * A def is exactly a **base state plus one slide** (§18.2) — objects are the start,
- * `overrides` the settled end, `animations` the transition.
+ * A def is exactly a **base state plus one slide** (§18.2), and since §19.2 it
+ * says so in the schema: `objects` are the start, `slides` is a one-element tuple
+ * carrying where they settle and the animations that take them there. That slide
+ * is an ordinary {@link ./plan.js SlideSchema}, so an attack's internals and a
+ * plan's own scenes are one state model rather than two.
  */
 /**
  * What a definition can be *told* by the plan that uses it (plan §18.4).
@@ -132,11 +133,19 @@ export const AttackDefSchema = z.object({
       h: z.number().finite().positive(),
     })
     .default({ w: 400, h: 400 }),
-  /** Start state, in unit space. */
+  /** Start state, in unit space — each part's `base` is where it begins. */
   objects: z.array(PlanObjectSchema),
-  /** Settled end state, in unit space (the def's single slide). */
-  overrides: z.record(z.string().min(1), StepOverrideSchema).default({}),
-  animations: z.array(AnimSchema),
+  /**
+   * The def's **one slide**, in unit space: where its parts settle, and the
+   * animations that carry them there (plan §19.2).
+   *
+   * A tuple, so "exactly one" is the schema's job rather than a comment — §18.2
+   * codified the constraint and this is where it is now enforced. The slide is
+   * an ordinary {@link SlideSchema}, carrying a *complete* state per part like
+   * every slide in every plan, which is the whole point: one state model, so a
+   * change to how a slide resolves cannot apply to plans and miss attacks.
+   */
+  slides: z.tuple([SlideSchema]),
   /**
    * The whole bundle's **origin and direction**, in unit space (plan §18.17).
    *
@@ -176,6 +185,24 @@ export type AttackDef = z.infer<typeof AttackDefSchema>;
 export type AttackContent = Omit<AttackDef, "id" | "encounterId" | "version">;
 
 /**
+ * The geometric half of a definition: its parts and its slide, and nothing about
+ * its identity, name or parameters. What {@link attackContentBox} measures, so
+ * the designer can measure a body it has not saved yet.
+ */
+export interface AttackBody {
+  objects: PlanObject[];
+  slides: readonly [Slide];
+}
+
+/** A definition's one slide: where its parts settle, and what carries them there. */
+export const defSlide = (def: { slides: readonly [Slide] }): Slide =>
+  def.slides[0];
+
+/** A definition's animations — the ones on its single slide. */
+export const defAnims = (def: { slides: readonly [Slide] }): Anim[] =>
+  def.slides[0].animations;
+
+/**
  * The distinct attack ids a plan references, so a renderer can fetch just the
  * definitions it needs before calling {@link expandPlan}.
  */
@@ -194,7 +221,7 @@ export function attackIdsInPlan(plan: Plan): string[] {
  * plays.
  */
 export function attackNaturalMs(def: AttackDef): number {
-  return layoutStepTimeline(def.animations).totalMs;
+  return layoutStepTimeline(defAnims(def)).totalMs;
 }
 
 /** How long a *placed* attack runs: its own duration if stretched, else the def's. */
@@ -338,14 +365,14 @@ function rectCentre(t: Pivoted): Point {
  * accounted for: where it starts, where the slide leaves it, and everywhere a
  * motion carries it.
  */
-function authoredPlacements(
-  o: PlanObject,
-  content: { overrides: Record<string, StepOverride>; animations: Anim[] },
-): Pivoted[] {
+function authoredPlacements(o: PlanObject, content: AttackBody): Pivoted[] {
   const base = o.base;
-  const placements: Pivoted[] = [base, { ...base, ...content.overrides[o.id] }];
+  const slide = defSlide(content);
+  // The slide states what the part settles as, completely — but a part the
+  // slide doesn't carry simply isn't in the settled scene, and stays put.
+  const placements: Pivoted[] = [base, { ...base, ...slide.states[o.id] }];
 
-  for (const anim of content.animations) {
+  for (const anim of slide.animations) {
     if (anim.objectId !== o.id || !anim.params) continue;
     const { toX, toY, path } = anim.params;
     // A motion target is a *position* for the object, so the whole footprint
@@ -457,11 +484,7 @@ function solvedPlacements(
  * Tethers are skipped: their geometry comes from their endpoints, so their own
  * transform is degenerate and would drag the box to the origin.
  */
-export function attackContentBox(content: {
-  objects: PlanObject[];
-  overrides: Record<string, StepOverride>;
-  animations: Anim[];
-}): AttackBox | null {
+export function attackContentBox(content: AttackBody): AttackBox | null {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -563,7 +586,7 @@ export function slotsFilled(
  */
 function entranceTargets(def: AttackDef): Set<string> {
   const ids = new Set<string>();
-  for (const anim of def.animations) {
+  for (const anim of defAnims(def)) {
     if (anim.kind === "entrance") ids.add(anim.objectId);
   }
   return ids;
@@ -588,31 +611,31 @@ function mapBase(
 }
 
 /**
- * Move a slide override's spatial fields (its end-state position/size).
+ * Move a slide state — a part's settled position and size — from one box to
+ * another.
  *
- * A missing coordinate is filled in from `base`, because a rotated placement
- * mixes the axes: "ends 30 to the right" can't be expressed as an x alone once
- * the attack is turned, so both come out together or neither does.
+ * The same arithmetic as {@link mapBase}, and now genuinely the same shape:
+ * every field is present, so there is nothing to fill in from elsewhere. That is
+ * the drift §19.2 removed. A sparse override had to borrow its missing
+ * coordinate from `base` before it could be turned, because a rotation mixes the
+ * axes — "ends 30 to the right" stops being an x alone the moment the attack is
+ * rotated — and getting that borrow wrong moved a part to the origin.
  */
-function mapOverride(
-  ov: StepOverride,
-  base: ObjectBase | undefined,
+function mapSlideState(
+  state: SlideState,
   from: AttackBox,
   to: AttackBox,
   rotation = 0,
-): StepOverride {
-  const out: StepOverride = { ...ov };
-  const x = ov.x ?? base?.x;
-  const y = ov.y ?? base?.y;
-  if (x !== undefined && y !== undefined) {
-    const p = mapPoint({ x, y }, from, to, rotation);
-    out.x = p.x;
-    out.y = p.y;
-  }
-  if (ov.w !== undefined) out.w = (ov.w / from.hx) * to.hx;
-  if (ov.h !== undefined) out.h = (ov.h / from.hy) * to.hy;
-  if (ov.rotation !== undefined) out.rotation = ov.rotation + rotation;
-  return out;
+): SlideState {
+  const p = mapPoint({ x: state.x, y: state.y }, from, to, rotation);
+  return {
+    ...state,
+    x: p.x,
+    y: p.y,
+    w: (state.w / from.hx) * to.hx,
+    h: (state.h / from.hy) * to.hy,
+    rotation: state.rotation + rotation,
+  };
 }
 
 /** Move an animation's spatial params (motion targets and paths). */
@@ -647,6 +670,7 @@ function expandInstance(
   const from = defBox(def);
   const to = instanceBox(instance);
   const spin = instance.rotation;
+  const slide = defSlide(def);
   const entrances = entranceTargets(def);
 
   /** An argument the plan supplied, else the parameter's declared default. */
@@ -697,7 +721,7 @@ function expandInstance(
 
   // A parameter can change when a part runs and for how long, so bound timings
   // are settled first — the chain below lays out against the result.
-  const effective: Anim[] = def.animations.map((a) => {
+  const effective: Anim[] = defAnims(def).map((a) => {
     const duration = argOf(def.bindings.durationMs[a.id] ?? "");
     const delay = argOf(def.bindings.delayMs[a.id] ?? "");
     return {
@@ -772,30 +796,47 @@ function expandInstance(
     });
   }
 
-  const overrides: Record<string, StepOverride> = {};
+  // What the def's slide actually *changes* about each part, placed. An
+  // animation that states no target of its own takes one from here, so only a
+  // real change may supply it: a part the slide leaves exactly where it started
+  // must not hand a `move` a target identical to its own start.
+  //
+  // The old sparse `overrides` map stored that difference directly. A complete
+  // slide state says what the settled scene *is* rather than how it differs, so
+  // the difference is recovered here — which is the one thing §19.2 costs, and
+  // is worth a single comparison to have one state model.
+  const settledOf = new Map<string, Partial<SlideState>>();
   for (const o of def.objects) {
     if (o.type === "placeholder") continue;
-    const id = scopedId(instance.id, o.id);
-    const end = def.overrides[o.id];
-    // The settled state: the def's placed end state, present unless the def
-    // says otherwise — an object the author left hidden and never brings on
-    // stays hidden.
-    overrides[id] = {
-      ...(end ? mapOverride(end, o.base, from, to, spin) : {}),
-      visible: end?.visible ?? (o.base.visible || entrances.has(o.id)),
-    };
+    const end = slide.states[o.id];
+    // A part the slide doesn't carry isn't in the settled scene at all, so
+    // there is nothing for it to settle as.
+    if (!end) continue;
+    const changed = changedFields(seedState(o), end);
+    if (changed.length === 0) continue;
+
+    const placed = mapSlideState(end, from, to, spin);
+    const delta: Partial<SlideState> = {};
+    for (const key of changed) Object.assign(delta, { [key]: placed[key] });
+    // x and y travel together: a rotation mixes the axes, so "ends 30 to the
+    // right" stops being an x alone the moment the attack is turned.
+    if (changed.includes("x") || changed.includes("y")) {
+      delta.x = placed.x;
+      delta.y = placed.y;
+    }
+    settledOf.set(scopedId(instance.id, o.id), delta);
   }
 
-  // The adapter, in one place. A def is still authored as two states — a start
-  // shape and the `overrides` its animations reach — because that is what an
-  // AttackDef is. A *plan's* animations state their own targets. So the end
-  // state is handed to the animations that are supposed to produce it, here, at
-  // the seam: nothing downstream has to know the def ever worked differently.
+  // The adapter, in one place. A def is authored as two states — a start shape
+  // and the one slide its animations reach. A *plan's* animations state their
+  // own targets. So the settled state is handed to the animations that are
+  // supposed to produce it, here, at the seam: nothing downstream has to know a
+  // def says it the other way round.
   const startOf = new Map(objects.map((o) => [o.id, o.base]));
   return {
     objects,
     animations: animations.map((a) =>
-      withDerivedTarget(a, startOf.get(a.objectId), overrides[a.objectId]),
+      withDerivedTarget(a, startOf.get(a.objectId), settledOf.get(a.objectId)),
     ),
   };
 }
@@ -810,7 +851,7 @@ function expandInstance(
 function withDerivedTarget(
   anim: Anim,
   start: ObjectBase | undefined,
-  end: StepOverride | undefined,
+  end: Partial<SlideState> | undefined,
 ): Anim {
   if (!end || !start) return anim;
   const params = anim.params ?? {};
@@ -940,10 +981,14 @@ export const ATTACK_END_SLIDE = "attack-end";
  * Present an {@link AttackDef} as a **two-slide** {@link Plan} the editor store
  * can load, so the attack designer *is* the editor (plan §17 stage 4 / §18.2).
  *
- * A def stays two-state — a `base` shape and one set of `overrides` its
- * animations reach — because that is genuinely what an attack is, and a planner
- * never sees its internals as slides. Slide 0 is the def's base, slide 1 its
- * settled end; the designer labels them **Start** and **End**.
+ * A def is two-state — a `base` shape and the one slide its animations reach —
+ * because that is genuinely what an attack is, and a planner never sees its
+ * internals as slides. Slide 0 is the def's base, slide 1 its own slide; the
+ * designer labels them **Start** and **End**.
+ *
+ * Since §19.2 the second slide is the def's slide *itself*, moved into pixels
+ * and otherwise passed through. This function and its inverse used to translate
+ * between two state models on the way past; now they only change coordinates.
  *
  * The def is laid out at the size a fresh instance gets, centred on the canvas:
  * what the author draws is life-size, so "how big is this attack" is answered by
@@ -959,24 +1004,22 @@ export function defToPlan(def: AttackDef): Plan {
     hy: def.defaultSize.h / 2,
   };
 
-  const baseById = new Map(def.objects.map((o) => [o.id, o.base]));
-  const overrides: Record<string, StepOverride> = {};
-  for (const [id, ov] of Object.entries(def.overrides)) {
-    overrides[id] = mapOverride(ov, baseById.get(id), from, to);
-  }
+  const slide = defSlide(def);
   const objects = def.objects.map((o) => ({
     ...o,
     base: mapBase(o.base, from, to),
   }));
 
   // A def is one scene in two states, so both slides carry every part: Start is
-  // the mapped base, End is that same state with the def's overrides merged on.
-  // (The designer sets `sharedCast` so editing keeps it that way.)
+  // the mapped base, End the mapped slide. A part the def's slide doesn't carry
+  // is put on End where it started, because the designer edits both slides as
+  // one cast (`sharedCast`) and a part missing from End would read as deleted.
   const start: Record<string, SlideState> = {};
   const end: Record<string, SlideState> = {};
   for (const o of objects) {
     start[o.id] = seedState(o);
-    end[o.id] = { ...seedState(o), ...overrides[o.id] };
+    const settled = slide.states[o.id];
+    end[o.id] = settled ? mapSlideState(settled, from, to) : seedState(o);
   }
 
   return {
@@ -994,8 +1037,9 @@ export function defToPlan(def: AttackDef): Plan {
         name: "End",
         states: end,
         // The animations are what carries Start into End, so they belong to the
-        // slide they arrive at — the same rule every other plan follows.
-        animations: def.animations.map((a) => mapAnim(a, from, to)),
+        // slide they arrive at — the same rule every other plan follows, and
+        // since §19.2 the very slide they are stored on.
+        animations: slide.animations.map((a) => mapAnim(a, from, to)),
       },
     ],
     schemaVersion: SCHEMA_VERSION,
@@ -1003,45 +1047,40 @@ export function defToPlan(def: AttackDef): Plan {
 }
 
 /**
- * Read the designer's two slides back as a def's two-state body — the inverse of
- * the Start/End split {@link defToPlan} made.
+ * Read the designer's two slides back as a def's body — the inverse of the
+ * Start/End split {@link defToPlan} made.
  *
- * Slide 0's layout *is* each object's base, and the overrides are what slide 1
- * changed about it. Diffing rather than copying keeps `overrides` sparse, so a
- * def still says only what its animations actually do.
+ * Slide 0's layout *is* each object's base; slide 1 *is* the def's slide. Since
+ * §19.2 that second half is a copy rather than a diff: both models say the same
+ * thing in the same shape, so there is nothing left to translate.
  *
  * Exported because the designer's bounds overlay has to measure exactly what a
  * save would store, and rebuilding this by hand there is how the outline and the
  * saved `defaultSize` drift apart.
  */
-export function attackContentOf(plan: Plan): {
-  objects: PlanObject[];
-  overrides: Record<string, StepOverride>;
-  animations: Anim[];
-} {
+export function attackContentOf(plan: Plan): AttackBody {
   const start = plan.slides[0];
   const end = plan.slides[1];
   const objects = plan.objects.map((o) => {
     const state = start?.states[o.id];
     return state ? { ...o, base: { ...o.base, ...state } } : o;
   });
-  const overrides: Record<string, StepOverride> = {};
-  for (const o of objects) {
-    const settled = end?.states[o.id];
-    if (!settled) continue;
-    const delta = diffState(seedState(o), settled);
-    if (Object.keys(delta).length > 0) overrides[o.id] = delta;
-  }
-  return { objects, overrides, animations: end?.animations ?? [] };
+  // A def's slide keeps the designer's End slide identity, so a round trip
+  // through the store leaves the same document it loaded.
+  const slide: Slide = end ?? {
+    id: ATTACK_END_SLIDE,
+    name: "End",
+    states: {},
+    animations: [],
+  };
+  return { objects, slides: [slide] };
 }
 
-/** Which fields of `to` actually differ from `from` — a def's `overrides` shape. */
-function diffState(from: SlideState, to: SlideState): StepOverride {
-  const delta: Record<string, unknown> = {};
-  for (const key of Object.keys(to) as (keyof SlideState)[]) {
-    if (to[key] !== from[key]) delta[key] = to[key];
-  }
-  return delta as StepOverride;
+/** Which fields of `to` actually differ from `from`. */
+function changedFields(from: SlideState, to: SlideState): (keyof SlideState)[] {
+  return (Object.keys(to) as (keyof SlideState)[]).filter(
+    (key) => to[key] !== from[key],
+  );
 }
 
 /**
@@ -1072,27 +1111,26 @@ export function planToAttackContent(
     ? { w: from.hx * 2, h: from.hy * 2 }
     : { w: 400, h: 400 };
 
-  const baseById = new Map(content.objects.map((o) => [o.id, o.base]));
-  const overrides: Record<string, StepOverride> = {};
-  for (const [id, ov] of Object.entries(content.overrides)) {
-    overrides[id] = mapOverride(
-      ov,
-      baseById.get(id),
-      from ?? UNIT_BOX,
-      UNIT_BOX,
-    );
+  const box = from ?? UNIT_BOX;
+  const slide = defSlide(content);
+  const states: Record<string, SlideState> = {};
+  for (const [id, state] of Object.entries(slide.states)) {
+    states[id] = mapSlideState(state, box, UNIT_BOX);
   }
   return {
     name: meta.name,
     defaultSize,
     objects: content.objects.map((o) => ({
       ...o,
-      base: mapBase(o.base, from ?? UNIT_BOX, UNIT_BOX),
+      base: mapBase(o.base, box, UNIT_BOX),
     })),
-    overrides,
-    animations: content.animations.map((a) =>
-      mapAnim(a, from ?? UNIT_BOX, UNIT_BOX),
-    ),
+    slides: [
+      {
+        ...slide,
+        states,
+        animations: slide.animations.map((a) => mapAnim(a, box, UNIT_BOX)),
+      },
+    ],
     // Parameters and bindings aren't spatial, so they pass straight through from
     // the designer rather than round-tripping via the canvas. The origin and
     // direction *are* spatial but already box-relative — `ox`/`oy` are fractions
