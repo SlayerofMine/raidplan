@@ -6,6 +6,7 @@ import { CanvasStage } from "./canvas/CanvasStage";
 import { EmptySlideHint } from "./EmptySlideHint";
 import { IconPalette } from "./IconPalette";
 import { isLocalPlan, LOCAL_PLAN_ID } from "./planScope";
+import { ObjectsPanel } from "./ObjectsPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { SaveStatus } from "./SaveStatus";
 import { SyncedIconResolver } from "./SyncedIconResolver";
@@ -86,6 +87,7 @@ export function EditorLayout({ planId }: { planId: string }) {
         style={{ gridArea: "props" }}
         className="flex min-h-0 flex-col overflow-y-auto border-l border-panelborder bg-panel"
       >
+        <ObjectsPanel />
         <PropertiesPanel />
         <AnimationPanel />
         <AttacksPanel />
