@@ -1,4 +1,5 @@
 import type { Anim, Plan, PlanObject, Slide, SlideState } from "./plan.js";
+import { centrePoint, topLeftForCentre } from "./transform.js";
 
 /**
  * State resolution (plan §5 "State resolution" / §7 playback).
@@ -201,15 +202,13 @@ function effectResult(anim: Anim, from: ObjectState): Partial<ObjectState> {
         ? { opacity: 0 }
         : { visible: true, opacity: params.toOpacity ?? from.opacity };
     case "scale": {
+      // Grows about its own middle. Via `topLeftForCentre` rather than half the
+      // growth off the corner, because a box turns about its top-left: on a
+      // rotated object the growth runs along the turned axes, and the same
+      // reasoning (and the same helpers) drive it during playback.
       const factor = params.scale ?? 1;
-      const w = from.w * factor;
-      const h = from.h * factor;
-      return {
-        w,
-        h,
-        x: from.x - (w - from.w) / 2,
-        y: from.y - (h - from.h) / 2,
-      };
+      const grown = { ...from, w: from.w * factor, h: from.h * factor };
+      return { ...grown, ...topLeftForCentre(grown, centrePoint(from)) };
     }
     // Pulse and blink return to exactly where they started.
     default:

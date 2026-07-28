@@ -1,12 +1,15 @@
 import gsap from "gsap";
 import {
   buildMotionPath,
+  centrePoint,
   isDeferredTrigger,
   samplePath,
+  topLeftForCentre,
   layoutStepTimeline,
   stateBeforeAnim,
   type Anim,
   type ObjectState,
+  type Point,
   type ResolvedStates,
   type Slide,
 } from "@raidplan/shared";
@@ -197,6 +200,31 @@ interface TweenParams {
   apply: (objectId: string, props: Partial<ObjectState>) => void;
 }
 
+/**
+ * The top-left a box of size `to` needs so that its centre lands where a box of
+ * size `from`, standing at `at`, has its centre.
+ *
+ * The one statement of "grows about its own middle", used both to fold the size
+ * channel into the position on the way out and to undo it on the way in. It
+ * goes through `centrePoint` rather than a bare `w / 2` because a box turns
+ * about its top-left: on a rotated object the growth runs along the turned axes,
+ * so the shift that keeps it in place has to be turned with them.
+ */
+function recentre(
+  at: Pick<ObjectState, "x" | "y" | "rotation">,
+  from: Pick<ObjectState, "w" | "h">,
+  to: Pick<ObjectState, "w" | "h">,
+): Point {
+  // `from`/`to` are read a field at a time rather than spread: the callers pass
+  // whole states, and spreading one would carry its *own* `x`/`y` in and
+  // silently move the box to wherever that state stood.
+  const box = { x: at.x, y: at.y, rotation: at.rotation };
+  return topLeftForCentre(
+    { ...box, w: to.w, h: to.h },
+    centrePoint({ ...box, w: from.w, h: from.h }),
+  );
+}
+
 /** Properties of the shared proxy, as GSAP tween vars name them. */
 const STATE_KEYS = [
   "x",
@@ -229,11 +257,51 @@ function addTween({
   duration,
   apply,
 }: TweenParams): void {
+  /**
+   * Push the proxy out, folding the size channel's centring into the position.
+   *
+   * `proxy.x`/`proxy.y` hold where the object would stand **at the size the
+   * slide drew it**; the shift that keeps a growing object swelling about its
+   * own centre is derived here from `w`/`h` instead of being written into
+   * `x`/`y` by the size animation. That separation is what lets `scale` and
+   * `move` run at the same time: they own different channels, so neither
+   * overwrites the other's frame. Before, the scale re-asserted an absolute
+   * `x`/`y` computed at compile time, and a travelling object was dragged back
+   * to wherever the slide opened.
+   *
+   * A size push therefore carries `x`/`y` with it — the corner is a function of
+   * the size, so the two can never be a frame apart.
+   *
+   * Stated as "hold the centre still" rather than as half the growth off the
+   * corner, because a box turns about its **top-left**: on a rotated object the
+   * growth runs along the turned axes, and taking it off `x`/`y` straight sent
+   * the thing sliding away as it swelled.
+   */
   const push = (keys: readonly (keyof ObjectState)[]) => {
     const patch: Partial<ObjectState> = {};
     for (const key of keys) patch[key] = proxy[key] as never;
+    if (patch.w !== undefined || patch.h !== undefined) {
+      patch.x = proxy.x;
+      patch.y = proxy.y;
+    }
+    if (patch.x !== undefined && patch.y !== undefined) {
+      Object.assign(patch, recentre(proxy, initial, proxy));
+    }
     apply(anim.objectId, patch);
   };
+
+  /**
+   * A top-left as everything outside this function states it — slides, settled
+   * states, drawn routes — moved into the position channel's frame.
+   *
+   * Those all speak the object's *displayed* corner, which an earlier scale has
+   * already shifted; `push` re-applies that shift on the way out, so it has to
+   * come off on the way in or it would count twice. `origin` supplies the size
+   * in force when this animation starts, which is the size those coordinates
+   * were stated against.
+   */
+  const anchorFor = (p: Point) =>
+    recentre({ ...p, rotation: origin.rotation }, origin, initial);
 
   // `visible` is a boolean: GSAP can't tween it, so it's flipped by a callback
   // and carried out with the next push.
@@ -276,7 +344,7 @@ function addTween({
     case "fly":
       // Flies *in* to where the slide puts it, from the origin `entranceOffset`
       // parked it at. Entrance-only, so there is no "flies away" reading.
-      tweenTo({ x: state.x, y: state.y, opacity: state.opacity });
+      tweenTo({ ...anchorFor(state), opacity: state.opacity });
       return;
 
     case "move": {
@@ -295,22 +363,24 @@ function addTween({
       // two-property tween — GSAP interpolates `x` and `y` directly, exactly as
       // it did before routes existed.
       if (waypoints.length === 0) {
-        tweenTo(destination);
+        tweenTo(anchorFor(destination));
         return;
       }
 
       // A route's waypoints are *centres* (see `AnimParams.path`) and only the
       // interior ones are stored, so the ends come from the states the slides
-      // already agree on. Half-size is taken once, from where the move starts:
-      // an object that is also being scaled has no single centre offset, and
-      // recomputing it per tick would make the drawn route and the travelled
-      // one disagree.
-      const half = { x: origin.w / 2, y: origin.h / 2 };
+      // already agree on. `centrePoint` rather than a half-size offset: the box
+      // turns about its top-left, so a rotated object's middle is not
+      // `x + w/2` and a route built that way runs alongside the token instead
+      // of under it. Measured once, from where the move starts: an object that
+      // is also being scaled has no single centre offset, and recomputing it
+      // per tick would make the drawn route and the travelled one disagree.
+      const box = { ...origin };
       const path = buildMotionPath(
         [
-          { x: origin.x + half.x, y: origin.y + half.y },
+          centrePoint(box),
           ...waypoints,
-          { x: destination.x + half.x, y: destination.y + half.y },
+          centrePoint({ ...box, x: destination.x, y: destination.y }),
         ],
         anim.params?.curve ?? 0,
       );
@@ -327,9 +397,11 @@ function addTween({
           duration,
           ease: anim.easing,
           onUpdate: () => {
-            const point = samplePath(path, walker.t);
-            proxy.x = point.x - half.x;
-            proxy.y = point.y - half.y;
+            const at = anchorFor(
+              topLeftForCentre(box, samplePath(path, walker.t)),
+            );
+            proxy.x = at.x;
+            proxy.y = at.y;
             push(["x", "y"]);
           },
         },
@@ -342,37 +414,25 @@ function addTween({
       // A multiple of the object's own size, about its centre — so "grow to
       // 150%" is one number the animation carries, not a size difference
       // between two slides that only exists if there is a slide after this one.
+      // Only the size channel moves. Where the growth carries the top-left is
+      // `push`'s business, derived from the size on the frame it is drawn — so
+      // an object that is also being moved keeps travelling and simply swells
+      // about wherever its centre has got to.
       const factor = anim.params?.scale ?? 1;
-      const w = initial.w * factor;
-      const h = initial.h * factor;
-      tweenTo({
-        w,
-        h,
-        x: initial.x - (w - initial.w) / 2,
-        y: initial.y - (h - initial.h) / 2,
-      });
+      tweenTo({ w: initial.w * factor, h: initial.h * factor });
       return;
     }
 
     case "pulse": {
-      // Swell about the centre, then settle back to exactly where it started.
-      const dx = (initial.w * (PULSE_SCALE - 1)) / 2;
-      const dy = (initial.h * (PULSE_SCALE - 1)) / 2;
+      // Swell about the centre, then settle back to exactly the size it
+      // started at — and, like `scale`, about whatever centre the object has by
+      // then, so a pulse can play over a move.
       tweenTo(
-        {
-          w: initial.w * PULSE_SCALE,
-          h: initial.h * PULSE_SCALE,
-          x: initial.x - dx,
-          y: initial.y - dy,
-        },
+        { w: initial.w * PULSE_SCALE, h: initial.h * PULSE_SCALE },
         at,
         duration / 2,
       );
-      tweenTo(
-        { w: initial.w, h: initial.h, x: initial.x, y: initial.y },
-        at + duration / 2,
-        duration / 2,
-      );
+      tweenTo({ w: initial.w, h: initial.h }, at + duration / 2, duration / 2);
       return;
     }
 

@@ -5,6 +5,7 @@ import type {
   ResolvedStates,
   Slide,
 } from "@raidplan/shared";
+import { centrePoint } from "@raidplan/shared";
 import { compileStep, isDeferred } from "../../src/anim/compileStep";
 
 function state(over: Partial<ObjectState> = {}): ObjectState {
@@ -206,6 +207,44 @@ describe("compileStep — an animation states its own target", () => {
     expect(applied.a).toMatchObject({ x: 400, y: 400 });
   });
 
+  it("a rotated object's centre walks the route it was drawn", () => {
+    // A route's waypoints are centres, and a box turns about its top-left — so
+    // a rotated object placed by `x + w/2` travels a copy of the route shifted
+    // sideways, which on the board reads as the path being detached from the
+    // token. The centre, not the corner, is what has to touch the waypoint.
+    const waypoint = { x: 600, y: 600 };
+    const s = slide([
+      anim({
+        effect: "move",
+        params: { toX: 400, toY: 0, path: [waypoint] },
+      }),
+    ]);
+    const start = state({ x: 0, y: 0, w: 100, h: 40, rotation: 90 });
+    const { timeline, applied } = harness(s, { a: start });
+
+    let closest = Infinity;
+    const SAMPLES = 2000;
+    for (let i = 0; i <= SAMPLES; i++) {
+      timeline.progress(i / SAMPLES);
+      const centre = centrePoint({ ...start, ...applied.a });
+      closest = Math.min(
+        closest,
+        Math.hypot(centre.x - waypoint.x, centre.y - waypoint.y),
+      );
+    }
+    // The route passes through its waypoint; only the sampling misses it. The
+    // old top-left maths put the centre ~76px off — a whole box away.
+    expect(closest).toBeLessThan(1);
+
+    // And the ends are still stored as plain top-left positions.
+    timeline.progress(0);
+    expect(applied.a?.x).toBeCloseTo(0);
+    expect(applied.a?.y).toBeCloseTo(0);
+    timeline.progress(1);
+    expect(applied.a?.x).toBeCloseTo(400);
+    expect(applied.a?.y).toBeCloseTo(0);
+  });
+
   it("is mid-way at half progress (it really tweens)", () => {
     const s = slide([
       anim({ effect: "move", easing: "none", params: { toX: 100 } }),
@@ -274,6 +313,54 @@ describe("compileStep — an animation states its own target", () => {
     timeline.progress(1);
     // 150×150, and offset by half the growth so it swells in place.
     expect(applied.a).toMatchObject({ w: 150, h: 150, x: 75, y: 75 });
+  });
+
+  it("a rotated scale holds its centre, turning the growth with the box", () => {
+    const s = slide([
+      anim({ kind: "motion", effect: "scale", params: { scale: 1.5 } }),
+    ]);
+    // Turned a quarter turn, so the box grows down-and-left in screen terms and
+    // the corner has to travel the other way — not up-and-left as an unrotated
+    // half-the-growth shift would have it.
+    const before = state({ x: 100, y: 100, w: 100, h: 100, rotation: 90 });
+    const { timeline, applied } = harness(s, { a: before });
+    timeline.progress(1);
+    const after = { ...before, ...applied.a } as ObjectState;
+    expect(after).toMatchObject({ w: 150, h: 150 });
+    expect(centrePoint(after).x).toBeCloseTo(centrePoint(before).x);
+    expect(centrePoint(after).y).toBeCloseTo(centrePoint(before).y);
+    // The unrotated shift would have parked it here; the rotated one must not.
+    expect(after.x).not.toBeCloseTo(75);
+  });
+
+  it("a scale running with a move swells about the travelling centre", () => {
+    const s = slide([
+      anim({
+        id: "1",
+        effect: "move",
+        params: { toX: 500, toY: 300 },
+        durationMs: 500,
+      }),
+      anim({
+        id: "2",
+        kind: "motion",
+        effect: "scale",
+        trigger: "withPrevious",
+        params: { scale: 1.5 },
+        durationMs: 500,
+      }),
+    ]);
+    const { timeline, applied } = harness(s, {
+      a: state({ x: 100, y: 100, w: 100, h: 100 }),
+    });
+    // Halfway: half the journey covered, and the growth so far taken off the
+    // corner — the scale must not drag the object back towards where it began.
+    timeline.progress(0.5);
+    expect(applied.a!.x).toBeGreaterThan(200);
+    expect(applied.a!.y).toBeGreaterThan(150);
+    // The move lands where it was drawn, offset only by half the growth.
+    timeline.progress(1);
+    expect(applied.a).toMatchObject({ w: 150, h: 150, x: 475, y: 275 });
   });
 
   it("a scale with no factor leaves the size alone", () => {
