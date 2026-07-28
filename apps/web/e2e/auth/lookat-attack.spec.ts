@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signIn } from "../support/auth";
+import { planReady, signIn } from "../support/auth";
 
 /** Just enough of a Konva node to read its id and rotation from the page. */
 interface KonvaNodeLike {
@@ -65,6 +65,7 @@ test("an internal indicator turns to follow the attack's own moving part", async
   await page.getByTestId("start-choice").selectOption(encounterOption!);
   await page.getByTestId("new-plan").click();
   await expect(page).toHaveURL(/\/plan\/.+\/edit/);
+  await planReady(page);
 
   await page.getByRole("tab", { name: "Attacks" }).click();
   await page.getByRole("button", { name: "Place Homing Arrow" }).click();

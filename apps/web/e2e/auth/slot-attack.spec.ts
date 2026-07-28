@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signIn } from "../support/auth";
+import { planReady, signIn } from "../support/auth";
 
 /**
  * A **placeholder** end to end (plan §18.14): a definition with a hole in it,
@@ -46,6 +46,7 @@ test("an attack tethers itself to an object the plan puts in its slot", async ({
   await page.getByTestId("start-choice").selectOption(encounterOption!);
   await page.getByTestId("new-plan").click();
   await expect(page).toHaveURL(/\/plan\/.+\/edit/);
+  await planReady(page);
 
   await page.getByRole("tab", { name: "Attacks" }).click();
   const place = page.getByRole("button", { name: "Place Leash" });

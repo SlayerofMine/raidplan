@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signIn } from "../support/auth";
+import { planReady, signIn } from "../support/auth";
 
 /**
  * Protected flows, exercised end-to-end without Discord (plan §13). Requires the
@@ -30,5 +30,6 @@ test.describe("signed-in", () => {
     await page.goto("/");
     await page.getByTestId("new-plan").click();
     await expect(page).toHaveURL(/\/plan\/.+\/edit/);
+    await planReady(page);
   });
 });

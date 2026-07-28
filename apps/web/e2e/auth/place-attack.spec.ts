@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signIn } from "../support/auth";
+import { planReady, signIn } from "../support/auth";
 
 /**
  * The whole epic end-to-end (plan §17): an admin authors an attack for an
@@ -39,6 +39,7 @@ test("author an attack, then place it in a plan seeded from its encounter", asyn
   await page.getByTestId("start-choice").selectOption(encounterOption!);
   await page.getByTestId("new-plan").click();
   await expect(page).toHaveURL(/\/plan\/.+\/edit/);
+  await planReady(page);
 
   // The library lives in the palette, beside tokens and shapes. A fresh plan
   // opens on slide 1, and that is the slide the attack fires on.

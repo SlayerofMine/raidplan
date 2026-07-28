@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signIn } from "../support/auth";
+import { planReady, signIn } from "../support/auth";
 
 /**
  * Authoring an attack **without being an admin** (plan §19.3), end-to-end: a
@@ -26,6 +26,7 @@ test("a planner who is not an admin draws an attack in their own plan", async ({
   await page.goto("/");
   await page.getByTestId("new-plan").click();
   await expect(page).toHaveURL(/\/plan\/.+\/edit/);
+  await planReady(page);
   const planUrl = page.url();
 
   // The palette has a section of its own — the one a planner may write to
@@ -71,6 +72,7 @@ test("a group becomes a reusable attack, and the originals stay put", async ({
   await page.goto("/");
   await page.getByTestId("new-plan").click();
   await expect(page).toHaveURL(/\/plan\/.+\/edit/);
+  await planReady(page);
   const planUrl = page.url();
 
   // Two markers, grouped — the "four circles dragged into a cone" case.

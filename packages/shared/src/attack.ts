@@ -697,6 +697,8 @@ function expandInstance(
 ): {
   objects: PlanObject[];
   animations: Anim[];
+  /** Each part's state on the attack's own slide — where it comes to rest. */
+  settled: Record<string, SlideState>;
 } {
   // The def's own extent is mapped onto the instance's rectangle, so the frame
   // hugs the attack whatever coordinates it happens to be authored in.
@@ -839,16 +841,41 @@ function expandInstance(
   // the difference is recovered here — which is the one thing §19.2 costs, and
   // is worth a single comparison to have one state model.
   const settledOf = new Map<string, Partial<SlideState>>();
+  /** Where each part comes to rest, complete — the state its slide shows. */
+  const settled: Record<string, SlideState> = {};
+  const placedOf = new Map(objects.map((o) => [o.id, o]));
+
   for (const o of def.objects) {
     if (o.type === "placeholder") continue;
+    const id = scopedId(instance.id, o.id);
     const end = slide.states[o.id];
+    const placed = end ? mapSlideState(end, from, to, spin) : undefined;
+
+    // The state this part is *parked* in: where the def's slide leaves it, and
+    // visible unless the author meant it hidden. A part authored hidden that
+    // has an entrance ends up on screen — the entrance is how it arrives — but
+    // one the author hid on purpose (an exit, a part that never comes on) stays
+    // hidden, which is why this reads `end.visible` first.
+    const part = placedOf.get(id);
+    if (part) {
+      // No entry on the def's slide means the part isn't in the settled scene,
+      // so it rests where it started — the mapped start geometry it was
+      // materialised with.
+      settled[id] = {
+        ...(placed ?? seedState(part)),
+        visible:
+          (placed?.visible ?? o.base.visible) ||
+          (!o.base.visible && entrances.has(o.id)),
+      };
+    }
+
     // A part the slide doesn't carry isn't in the settled scene at all, so
-    // there is nothing for it to settle as.
-    if (!end) continue;
+    // there is nothing for it to settle *as*, and nothing for an animation with
+    // no target of its own to take from it.
+    if (!end || !placed) continue;
     const changed = changedFields(seedState(o), end);
     if (changed.length === 0) continue;
 
-    const placed = mapSlideState(end, from, to, spin);
     const delta: Partial<SlideState> = {};
     for (const key of changed) Object.assign(delta, { [key]: placed[key] });
     // x and y travel together: a rotation mixes the axes, so "ends 30 to the
@@ -857,7 +884,7 @@ function expandInstance(
       delta.x = placed.x;
       delta.y = placed.y;
     }
-    settledOf.set(scopedId(instance.id, o.id), delta);
+    settledOf.set(id, delta);
   }
 
   // The adapter, in one place. A def is authored as two states — a start shape
@@ -868,6 +895,7 @@ function expandInstance(
   const startOf = new Map(objects.map((o) => [o.id, o.base]));
   return {
     objects,
+    settled,
     animations: animations.map((a) =>
       withDerivedTarget(a, startOf.get(a.objectId), settledOf.get(a.objectId)),
     ),
@@ -1321,4 +1349,33 @@ export function selectionToAttackPlan(
       ],
     },
   };
+}
+
+/**
+ * A placed attack's parts, in the state a renderer should draw them **at rest**
+ * (plan §18.3).
+ *
+ * Distinct from {@link expandPlan}, and the difference is the whole point.
+ * `expandPlan` prepares a plan for *playback*: every part opens hidden, because
+ * a slide states where things start and an attack starts un-fired, and the
+ * animations are what bring it on. A canvas that is not playing has no
+ * animations to run, so reading a stored slide there draws nothing at all —
+ * which is why the editor preview needs its own answer rather than slide 0 of
+ * an expansion.
+ *
+ * The answer is the def's own slide: where its parts settle, which is what the
+ * designer's End slide shows and what the attack *is*. Visible unless the author
+ * meant otherwise — a part authored hidden that has an entrance arrives during
+ * the attack, so it belongs in the picture; one hidden with no entrance was put
+ * away on purpose.
+ */
+export function attackPartsAtRest(
+  def: AttackDef,
+  instance: AttackInstance,
+): { object: PlanObject; state: SlideState }[] {
+  const { objects, settled } = expandInstance(def, instance);
+  return objects.map((object) => ({
+    object,
+    state: settled[object.id] ?? { ...seedState(object), visible: true },
+  }));
 }

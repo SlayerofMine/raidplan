@@ -5,6 +5,7 @@ import {
   attackContentBox,
   attackFollow,
   attackNaturalMs,
+  attackPartsAtRest,
   attackPlacement,
   attackSlots,
   attackSpanMs,
@@ -1506,5 +1507,56 @@ describe("selectionToAttackPlan — the assembly is already the attack (§19.3)"
     // 100..300 across, 0..100 down — the selection's own extent becomes -1..1.
     expect(content.defaultSize).toEqual({ w: 200, h: 100 });
     expect(content.objects[0]!.base).toMatchObject({ x: -1, y: -1 });
+  });
+});
+
+describe("attackPartsAtRest — what a canvas that isn't playing draws", () => {
+  it("shows the parts, where expandPlan leaves them hidden", () => {
+    const def = makeDef({ objects: [defObj("cone")] });
+    // The expansion opens every part hidden and relies on the animations to
+    // bring it on. A canvas that is not playing has no animations to run, so
+    // reading that state drew a placed attack as nothing at all (§18.3).
+    const played = expandOne(def, inst());
+    expect(played.slides[0]!.states["i1::cone"]).toMatchObject({
+      visible: false,
+    });
+
+    const parts = attackPartsAtRest(def, inst());
+    expect(parts.map((p) => p.object.id)).toEqual(["i1::cone"]);
+    expect(parts[0]!.state).toMatchObject({ visible: true });
+  });
+
+  it("draws each part where its slide settles it, in the instance's rect", () => {
+    const def = makeDef({
+      objects: [defObj("span"), defObj("orb", { x: -1, y: -1, w: 1, h: 1 })],
+      settles: { orb: { x: 1 } },
+    });
+    const parts = attackPartsAtRest(def, inst());
+    const orb = parts.find((p) => p.object.id === "i1::orb")!;
+    // The part rests where the def's slide leaves it, not where it was drawn —
+    // and where it settles is *part of the attack's extent* (§18.2), so unit
+    // space covers -1‥2 here and the settled x lands two thirds across.
+    expect(orb.state.x).toBeCloseTo(133.33, 1);
+    expect(orb.state.x).not.toBeCloseTo(0);
+  });
+
+  it("keeps a part the author hid, and shows one an entrance brings on", () => {
+    const def = makeDef({
+      objects: [
+        defObj("span"),
+        defObj("away", { visible: false }),
+        defObj("arrives", { visible: false }),
+      ],
+      animations: [
+        defAnim({ id: "in", objectId: "arrives", kind: "entrance" }),
+      ],
+    });
+    const byId = new Map(
+      attackPartsAtRest(def, inst()).map((p) => [p.object.id, p.state]),
+    );
+    // Hidden with an entrance means "arrives during the attack", so it belongs
+    // in the picture; hidden with none was put away on purpose.
+    expect(byId.get("i1::arrives")).toMatchObject({ visible: true });
+    expect(byId.get("i1::away")).toMatchObject({ visible: false });
   });
 });

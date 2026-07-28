@@ -1,10 +1,12 @@
 import { useState } from "react";
 import {
+  ATTACK_END_SLIDE,
   ATTACK_PARAM_TYPES,
   type AttackBindings,
   type AttackParam,
   type AttackParamType,
   type Follow,
+  type Slide,
 } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
 import { FollowFields } from "./FollowFields";
@@ -12,6 +14,14 @@ import { FollowFields } from "./FollowFields";
 /** Stable empty list: defaulting *inside* a selector returns a fresh array
  * every call, which never compares equal and re-renders forever. */
 const NO_ANIMATIONS: never[] = [];
+
+/**
+ * The designer's **End** slide — the def's own slide, holding everything it
+ * animates (§19.2). By id rather than by index, because "the one animations are
+ * on" is the fact this panel depends on; an index is only a guess at it.
+ */
+const defSlideOf = (slides: readonly Slide[]): Slide | undefined =>
+  slides.find((s) => s.id === ATTACK_END_SLIDE) ?? slides.at(-1);
 
 /**
  * Declaring an attack's parameters, in the designer (plan §18.4).
@@ -82,8 +92,13 @@ export function AttackParamsPanel({
   onParamsChange: (next: AttackParam[]) => void;
   onBindingsChange: (next: AttackBindings) => void;
 }) {
+  // A definition's animations live on its **End** slide, which is where
+  // `defToPlan` puts them and where "Animate" adds them: they are what carries
+  // Start into End (§19.2). Reading slide 0 — the Start layout, which is
+  // deliberately animation-free — meant this panel never saw one, so every
+  // binding in §18.4 was unreachable from the designer.
   const animations =
-    useEditorStore((s) => s.slides[0]?.animations) ?? NO_ANIMATIONS;
+    useEditorStore((s) => defSlideOf(s.slides)?.animations) ?? NO_ANIMATIONS;
   const objectIds = useEditorStore((s) => s.objectIds);
   const objects = useEditorStore((s) => s.objects);
 

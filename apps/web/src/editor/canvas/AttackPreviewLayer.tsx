@@ -7,15 +7,10 @@ import type { Group as GroupNode } from "konva/lib/Group";
 import {
   attackFollow,
   attackGroupId,
-  expandPlan,
+  attackPartsAtRest,
   isFollowing,
-  resolveObjectState,
-  SCHEMA_VERSION,
   type AttackDef,
   type AttackInstance,
-  type Background,
-  type Plan,
-  type PlanObject,
 } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { ObjectVisual } from "./ObjectVisual";
@@ -23,8 +18,8 @@ import { ObjectVisual } from "./ObjectVisual";
 /**
  * Placed attacks on the canvas (plan §18.3).
  *
- * An attack is drawn from its definition by `expandPlan` and is **indivisible**,
- * so its parts are inert: all interaction goes through one invisible **frame**
+ * An attack is drawn from its definition and is **indivisible**, so its parts
+ * are inert: all interaction goes through one invisible **frame**
  * covering the instance's rectangle. The frame is what you click, drag and
  * transform, and it's what `SelectionTransformer` attaches to — so resizing an
  * attack is just resizing that rectangle, which is exactly what the model stores.
@@ -57,7 +52,6 @@ export function PlacedAttackNode({ instanceId }: { instanceId: string }) {
   const def = useEditorStore((s) =>
     instance ? s.attackDefs[instance.attackId] : undefined,
   );
-  const background = useEditorStore((s) => s.background);
   const currentStepId = useEditorStore(
     (s) => s.slides[s.currentSlideIndex]?.id,
   );
@@ -67,7 +61,6 @@ export function PlacedAttackNode({ instanceId }: { instanceId: string }) {
     <PlacedAttack
       instance={instance}
       def={def}
-      background={background}
       dimmed={instance.slideId !== currentStepId}
     />
   );
@@ -76,12 +69,10 @@ export function PlacedAttackNode({ instanceId }: { instanceId: string }) {
 function PlacedAttack({
   instance,
   def,
-  background,
   dimmed,
 }: {
   instance: AttackInstance;
   def: AttackDef;
-  background: Background;
   /** It fires on another slide: still placeable, just not this moment. */
   dimmed: boolean;
 }) {
@@ -92,46 +83,24 @@ function PlacedAttack({
   const selected = useEditorStore((s) =>
     s.selectedAttackIds.includes(instance.id),
   );
-  const objects = useEditorStore((s) => s.objects);
-  const objectIds = useEditorStore((s) => s.objectIds);
-  const planObjects = useMemo(
-    () =>
-      objectIds
-        .map((id) => objects[id])
-        .filter((o): o is PlanObject => o !== undefined),
-    [objectIds, objects],
-  );
   const selectAttack = useEditorStore((s) => s.selectAttack);
   const updateAttack = useEditorStore((s) => s.updateAttack);
   const partsRef = useRef<GroupNode>(null);
 
-  /** The attack's parts, already placed into the instance's rectangle. */
-  const parts = useMemo(() => {
-    const shell: Plan = {
-      id: "attack-preview",
-      title: "",
-      raid: "",
-      background,
-      // The plan's own objects come along so a tether into one of them expands
-      // to a real id; they aren't drawn from here (their own nodes do that).
-      objects: planObjects,
-      attacks: [{ ...instance, slideId: "s" }],
-      // `expandPlan` fills in the attack's own parts; the plan's objects are
-      // only here so a tether into one of them resolves, and are never drawn
-      // from this shell.
-      slides: [{ id: "s", states: {}, animations: [] }],
-      groups: {},
-      schemaVersion: SCHEMA_VERSION,
-    };
-    const expanded = expandPlan(shell, { [instance.attackId]: def });
-    const own = new Set(planObjects.map((o) => o.id));
-    return expanded.objects
-      .filter((object) => !own.has(object.id))
-      .map((object) => ({
-        object,
-        state: resolveObjectState(object, expanded.slides, 0),
-      }));
-  }, [instance, def, background, planObjects]);
+  /**
+   * The attack's parts, already placed into the instance's rectangle and in the
+   * state they rest in.
+   *
+   * `attackPartsAtRest` rather than `expandPlan`, because this canvas is not
+   * playing: an expansion opens every part **hidden** and relies on the
+   * animations to bring it on, so a stored slide read here drew a placed attack
+   * as nothing at all. Same expansion underneath, so ids, tether ends and filled
+   * placeholders resolve exactly as they do at playback.
+   */
+  const parts = useMemo(
+    () => attackPartsAtRest(def, instance),
+    [instance, def],
+  );
 
   // The frame rotates about its centre, matching how a def's unit space is
   // mapped (§18.2) — so its position is the centre, offset by half its size.

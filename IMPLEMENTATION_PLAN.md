@@ -1194,3 +1194,43 @@ Each is independently shippable and green on its own commit.
    scope so the id survives; a plan attack in the palette grows a *publish* control for admins only.
    Tested for what makes it worth doing: the id is unchanged, the def has joined the encounter's
    listing and left the plan's, a plan owner may not do it, and one already in a library is refused.
+
+### 19.6 Three red end-to-end tests, and the two bugs behind them
+
+The signed-in suite had three failures, all of them older than §19 (reproduced at `31ccaed`, before
+any of this section landed). Neither was a flaky test; each was a real defect that only an
+end-to-end test was in a position to see.
+
+**Nothing could be bound to a parameter.** `AttackParamsPanel` listed the animations a parameter
+could drive by reading `slides[0]`. A definition's animations are on its **End** slide — that is
+where `defToPlan` puts them and where "Animate" adds them — so the list was always empty and the
+panel always said "add an animation for it to drive". The whole of §18.4's binding UI was
+unreachable from the designer. It now finds the slide *by id* rather than by index, because "the one
+the animations are on" is the fact it depends on and an index is only a guess at it.
+
+The unit test agreed with the bug: its fixture added animations to slide 0 as well, so panel and
+test were consistently wrong and the app was the only thing that disagreed. That is the argument for
+the e2e existing at all.
+
+**A placed attack was invisible on the editor canvas.** `expandPlan` prepares a plan for *playback*:
+every part opens hidden, because a slide states where things start and an attack starts un-fired,
+and the animations are what bring it on. That is deliberate and tested. But the editor canvas is not
+playing — it has no animations to run — so reading a stored slide there drew nothing at all, and
+every placed attack was a grab frame around empty space.
+
+The fix is not to change what expansion stores, which would change what playback does; it is that
+**a canvas at rest needs its own answer**. `attackPartsAtRest` gives it: the def's own slide, where
+its parts settle, visible unless the author meant otherwise — a part authored hidden that has an
+entrance arrives during the attack and belongs in the picture, one hidden with no entrance was put
+away on purpose. Same expansion underneath, so ids, tether ends and filled placeholders resolve
+exactly as they do at playback.
+
+**Two test bugs surfaced behind those.** A freshly placed attack stays selected, so its transformer
+sits over the board — and a drag aimed at the token underneath grabs a resize anchor instead. The
+spec now drops the selection before it touches the board, which is what a person would do. And every
+spec that opened a server-backed plan started clicking before the document had loaded: the editor
+mounts, *then* fetches and `loadPlan`s, replacing whatever is on the store. Under load the fetch won
+and the test's objects vanished. `planReady` waits for the save indicator to read "Saved", and every
+signed-in spec now uses it.
+
+*Still red, and untouched:* `editor-groups` in the hermetic suite, failing at `31ccaed` too.

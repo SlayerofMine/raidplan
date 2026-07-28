@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signIn } from "../support/auth";
+import { planReady, signIn } from "../support/auth";
 
 /**
  * A parameterised collision, end to end (plan §18.4): an attack whose part
@@ -60,6 +60,7 @@ test("an attack's onCollision fires against an object the plan nominated", async
   await page.getByTestId("start-choice").selectOption(encounterOption!);
   await page.getByTestId("new-plan").click();
   await expect(page).toHaveURL(/\/plan\/.+\/edit/);
+  await planReady(page);
 
   await page.getByRole("tab", { name: "Attacks" }).click();
   await page.getByRole("button", { name: "Place Vanishing Cone" }).click();

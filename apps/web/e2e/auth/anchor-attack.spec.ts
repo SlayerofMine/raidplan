@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signIn } from "../support/auth";
+import { planReady, signIn } from "../support/auth";
 
 /**
  * An attack that follows the board (plan §18.17): a frontal whose **origin** is
@@ -52,6 +52,7 @@ test("a pinned frontal follows the board as its target is dragged", async ({
   await page.getByTestId("start-choice").selectOption(encounterOption!);
   await page.getByTestId("new-plan").click();
   await expect(page).toHaveURL(/\/plan\/.+\/edit/);
+  await planReady(page);
 
   await page.getByRole("button", { name: /Add Marker 1/ }).click();
   await page.getByRole("button", { name: /Add Marker 2/ }).click();
@@ -60,6 +61,12 @@ test("a pinned frontal follows the board as its target is dragged", async ({
   await page.getByRole("tab", { name: "Attacks" }).click();
   await page.getByRole("button", { name: "Place Aimed Frontal" }).click();
   await expect(page.getByLabel("target is")).toHaveValue(/.+/);
+
+  // Drop the selection before touching the board. A freshly placed attack is
+  // still selected, so its transformer is sitting exactly where these drags
+  // start — and an anchor handle grabs the pointer before the token under it
+  // does, which resizes the attack instead of moving what it follows.
+  await page.keyboard.press("Escape");
 
   // --- drag the target: the cone must swing round to keep pointing at it ---
   const canvas = (await page.getByTestId("canvas-container").boundingBox())!;
@@ -93,6 +100,11 @@ test("a pinned frontal follows the board as its target is dragged", async ({
   const rightOfCaster = () => page.screenshot({ clip: strip });
   const aimedRight = await rightOfCaster();
 
+  // Deselect again: the token this is about to grab is the one the last drag
+  // left selected, so its transformer's left-middle anchor is sitting right
+  // where this press lands — and an anchor resizes the token instead of moving
+  // it, which is a change no attack follows.
+  await page.keyboard.press("Escape");
   await page.mouse.move(mid.x + 220, mid.y);
   await page.mouse.down();
   await page.mouse.move(mid.x, mid.y - 220, { steps: 12 });

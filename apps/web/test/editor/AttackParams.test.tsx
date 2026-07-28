@@ -18,6 +18,11 @@ beforeEach(() => {
   state().reset();
   state().setStageSize({ width: 0, height: 0 });
   clearHistory();
+  // The designer authors a definition as two slides of one scene, so a part
+  // drawn on either belongs to both (`AttackDesignerPage` sets this). Without
+  // it a new slide starts with an empty cast and an animation cannot be added
+  // to it at all.
+  state().setSharedCast(true);
 });
 
 describe("AttackParamsPanel — declaring what a plan must supply", () => {
@@ -45,11 +50,15 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
 
   it("points an objectRefs parameter at an animation's collideWith", async () => {
     const user = userEvent.setup();
-    // The designer's plan *is* the definition: one slide holds its animations.
+    // The designer's plan *is* the definition: slide 0 is the shape it starts
+    // as, and the **End** slide carries everything it animates — which is where
+    // `defToPlan` puts them and where this panel has to look. Adding them to
+    // slide 0 here, as this once did, agreed with a panel that read slide 0 and
+    // so hid the fact that the app could never bind anything (§19.2).
+    state().addSlide();
     const objectId = state().addPrimitive("shape", "circle");
     state().updateObject(objectId, { name: "Orb" });
-    state().addSlide();
-    const animId = state().addAnimation(0, objectId)!;
+    const animId = state().addAnimation(1, objectId)!;
 
     const params: AttackParam[] = [
       { key: "victims", label: "Caught by", type: "objectRefs" },
@@ -79,13 +88,13 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
 
   it("drives as many places as you tick — the point of naming it once", async () => {
     const user = userEvent.setup();
+    state().addSlide();
     const orb = state().addPrimitive("shape", "circle");
     state().updateObject(orb, { name: "Orb" });
     const cone = state().addPrimitive("shape", "circle");
     state().updateObject(cone, { name: "Cone" });
-    state().addSlide();
-    const first = state().addAnimation(0, orb)!;
-    const second = state().addAnimation(0, cone)!;
+    const first = state().addAnimation(1, orb)!;
+    const second = state().addAnimation(1, cone)!;
 
     const onBindingsChange = vi.fn();
     render(
@@ -110,10 +119,10 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
 
   it("unticks one place without disturbing the others", async () => {
     const user = userEvent.setup();
+    state().addSlide();
     const orb = state().addPrimitive("shape", "circle");
     state().updateObject(orb, { name: "Orb" });
-    state().addSlide();
-    const animId = state().addAnimation(0, orb)!;
+    const animId = state().addAnimation(1, orb)!;
 
     const onBindingsChange = vi.fn();
     render(
@@ -132,10 +141,10 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
   });
 
   it("shows a place another parameter already drives as taken", () => {
+    state().addSlide();
     const orb = state().addPrimitive("shape", "circle");
     state().updateObject(orb, { name: "Orb" });
-    state().addSlide();
-    const animId = state().addAnimation(0, orb)!;
+    const animId = state().addAnimation(1, orb)!;
 
     render(
       <AttackParamsPanel
@@ -160,10 +169,10 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
 
   it("offers a number both timing slots — a parameter isn't one-trick", async () => {
     const user = userEvent.setup();
+    state().addSlide();
     const orb = state().addPrimitive("shape", "circle");
     state().updateObject(orb, { name: "Orb" });
-    state().addSlide();
-    const animId = state().addAnimation(0, orb)!;
+    const animId = state().addAnimation(1, orb)!;
 
     const onBindingsChange = vi.fn();
     render(
@@ -185,9 +194,9 @@ describe("AttackParamsPanel — declaring what a plan must supply", () => {
   });
 
   it("says so when a parameter drives nothing — the half everyone misses", () => {
-    const objectId = state().addPrimitive("shape", "circle");
     state().addSlide();
-    state().addAnimation(0, objectId);
+    const objectId = state().addPrimitive("shape", "circle");
+    state().addAnimation(1, objectId);
 
     render(
       <AttackParamsPanel
