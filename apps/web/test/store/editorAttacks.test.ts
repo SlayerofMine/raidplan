@@ -86,7 +86,7 @@ describe("addAttack — placeholders", () => {
     state().setAttackDefs({
       [id]: {
         id,
-        encounterId: "enc",
+        scope: { kind: "encounter", encounterId: "enc" },
         name: "Frontal",
         version: 1,
         defaultSize: { w: 100, h: 100 },

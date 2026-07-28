@@ -68,7 +68,15 @@ export const attackRouter = router({
 
   create: adminProcedure
     .input(z.object({ encounterId: z.string().min(1), ...attackContent }))
-    .mutation(({ ctx, input }) => createAttack(ctx.db, input)),
+    .mutation(({ ctx, input }) => {
+      const { encounterId, ...content } = input;
+      // Encounter-scoped, because this is still the admin's curated library —
+      // §19.1's plan-scoped authoring arrives with the gate it needs.
+      return createAttack(ctx.db, {
+        scope: { kind: "encounter", encounterId },
+        ...content,
+      });
+    }),
 
   update: adminProcedure
     .input(z.object({ id: z.string().min(1), ...attackContent }))

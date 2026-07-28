@@ -115,9 +115,42 @@ export const AttackBindingsSchema = z
   .default({ collideWith: {}, durationMs: {}, delayMs: {}, tint: {} });
 export type AttackBindings = z.infer<typeof AttackBindingsSchema>;
 
+/**
+ * Which library a definition belongs to, and so who may read and write it
+ * (plan §19.1).
+ *
+ * A **union rather than two optional ids**, because "exactly one of these is
+ * set" is the whole invariant: a definition scoped to both an encounter and a
+ * plan has two different answers to who may edit it, and the type is where that
+ * question should be impossible to ask rather than the place it is checked.
+ *
+ * - `encounter` — the curated library every planner on that fight sees. Written
+ *   by site admins, readable by anyone, signed in or not.
+ * - `plan` — one plan's own. Written by whoever may edit that plan, readable by
+ *   whoever may view it, which is exactly what "confined to their plan" means:
+ *   the answer is the plan's ACL, not a second permission system.
+ *
+ * The `attacks` row carries the same shape as two nullable columns with a CHECK,
+ * so a scope can be changed by an UPDATE — which is what promotion is (§19.3).
+ */
+export const AttackScopeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("encounter"), encounterId: z.string().min(1) }),
+  z.object({ kind: z.literal("plan"), planId: z.string().min(1) }),
+]);
+export type AttackScope = z.infer<typeof AttackScopeSchema>;
+
+/** The encounter a def belongs to, or `undefined` if it belongs to a plan. */
+export const scopeEncounterId = (scope: AttackScope): string | undefined =>
+  scope.kind === "encounter" ? scope.encounterId : undefined;
+
+/** The plan a def belongs to, or `undefined` if it belongs to an encounter. */
+export const scopePlanId = (scope: AttackScope): string | undefined =>
+  scope.kind === "plan" ? scope.planId : undefined;
+
 export const AttackDefSchema = z.object({
   id: z.string().min(1),
-  encounterId: z.string().min(1),
+  /** Whose attack this is: an encounter's, or one plan's (plan §19.1). */
+  scope: AttackScopeSchema,
   name: z.string().min(1),
   /** Bumped on every edit; drives auto-follow's future "changed" marker. */
   version: z.number().int().positive().default(1),
@@ -182,7 +215,7 @@ export const AttackDefSchema = z.object({
 export type AttackDef = z.infer<typeof AttackDefSchema>;
 
 /** The editable body of an attack — everything but its identity and version. */
-export type AttackContent = Omit<AttackDef, "id" | "encounterId" | "version">;
+export type AttackContent = Omit<AttackDef, "id" | "scope" | "version">;
 
 /**
  * The geometric half of a definition: its parts and its slide, and nothing about

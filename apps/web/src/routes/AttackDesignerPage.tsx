@@ -4,6 +4,7 @@ import {
   ATTACK_END_SLIDE,
   defToPlan,
   planToAttackContent,
+  scopeEncounterId,
   type AttackBindings,
   type AttackDef,
   type AttackParam,
@@ -41,7 +42,7 @@ const DEFAULT_SIZE = { w: 400, h: 400 };
 function blankDef(encounterId: string): AttackDef {
   return {
     id: "",
-    encounterId,
+    scope: { kind: "encounter", encounterId },
     name: "New attack",
     version: 1,
     defaultSize: DEFAULT_SIZE,
@@ -154,8 +155,12 @@ function AttackDesigner({
     };
   }, [attackId, encounterId]);
 
+  // Where this attack lives, which for now is always an encounter's library —
+  // read off the def rather than the route, since editing arrives by id alone.
+  const home = scopeEncounterId(def?.scope ?? { kind: "plan", planId: "" });
+
   const save = async () => {
-    if (!def) return;
+    if (!def || !home) return;
     setSaving(true);
     setError(null);
     try {
@@ -169,12 +174,8 @@ function AttackDesigner({
       });
       if (attackId)
         await api.attack.update.mutate({ id: attackId, ...content });
-      else
-        await api.attack.create.mutate({
-          encounterId: def.encounterId,
-          ...content,
-        });
-      navigate(`/admin/encounters/${def.encounterId}/attacks`);
+      else await api.attack.create.mutate({ encounterId: home, ...content });
+      navigate(`/admin/encounters/${home}/attacks`);
     } catch {
       setError("Could not save the attack.");
       setSaving(false);
@@ -202,7 +203,7 @@ function AttackDesigner({
         className="flex flex-wrap items-center gap-2 border-b border-panelborder bg-panel px-3 py-2"
       >
         <Link
-          to={`/admin/encounters/${def.encounterId}/attacks`}
+          to={`/admin/encounters/${home}/attacks`}
           className="text-sm text-accent hover:underline"
         >
           ← Attacks

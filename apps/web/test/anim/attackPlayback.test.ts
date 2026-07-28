@@ -21,7 +21,7 @@ import { compileStep } from "../../src/anim/compileStep";
  */
 const def: AttackDef = {
   id: "atk",
-  encounterId: "enc",
+  scope: { kind: "encounter", encounterId: "enc" },
   name: "Sweeping Flame",
   version: 1,
   defaultSize: { w: 200, h: 200 },

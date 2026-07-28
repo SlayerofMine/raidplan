@@ -94,7 +94,7 @@ function fakeStage(ids: string[]) {
 /** A cone that slides right, and vanishes the moment it touches a victim. */
 const def: AttackDef = {
   id: "atk",
-  encounterId: "enc",
+  scope: { kind: "encounter", encounterId: "enc" },
   name: "Vanishing Cone",
   version: 1,
   defaultSize: { w: 400, h: 100 },

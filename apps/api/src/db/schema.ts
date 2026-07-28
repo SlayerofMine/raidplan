@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   integer,
   primaryKey,
@@ -207,17 +208,31 @@ export const encounters = sqliteTable(
 );
 
 /**
- * Reusable attack definitions (plan §17, stage 3). Like encounters, the whole
- * `AttackDef` (objects + animations + placement) lives as JSON in `doc`; the
- * columns exist only for listing an encounter's attacks and resolving them by
- * id. `encounter_id` is a plain column, not a foreign key — a dangling attack is
- * harmless (it simply isn't listed) and this keeps seeding and edits order-free.
+ * Reusable attack definitions (plan §17, stage 3; scoped in §19.1). Like
+ * encounters, the whole `AttackDef` (objects + slide + placement) lives as JSON
+ * in `doc`; the columns exist only for listing a library and resolving defs by
+ * id.
+ *
+ * **Exactly one of `encounter_id` / `plan_id` is set**, which is what says whose
+ * attack this is and therefore who may read and write it (§19.1). The CHECK is
+ * here rather than only in the zod union because this is the copy an
+ * authorization decision is made against: a row with both set would be a row
+ * with two different answers about who owns it.
+ *
+ * `encounter_id` stays a plain column — a dangling encounter attack is harmless
+ * (it simply isn't listed) and this keeps seeding order-free. `plan_id` is a
+ * real foreign key **with cascade**, because the opposite is true there: an
+ * attack confined to a plan has no meaning once that plan is gone, and leaving
+ * it behind would leave a row nobody can reach and nobody may edit.
  */
 export const attacks = sqliteTable(
   "attacks",
   {
     id: text("id").primaryKey(),
-    encounterId: text("encounter_id").notNull(),
+    encounterId: text("encounter_id"),
+    planId: text("plan_id").references(() => plans.id, {
+      onDelete: "cascade",
+    }),
     name: text("name").notNull(),
     version: integer("version").notNull().default(1),
     /** The `AttackDef` as JSON (plan §17). */
@@ -227,6 +242,11 @@ export const attacks = sqliteTable(
   },
   (t) => ({
     encounterIdx: index("attacks_encounter_idx").on(t.encounterId),
+    planIdx: index("attacks_plan_idx").on(t.planId),
+    oneScope: check(
+      "attacks_one_scope",
+      sql`(${t.encounterId} is null) <> (${t.planId} is null)`,
+    ),
   }),
 );
 

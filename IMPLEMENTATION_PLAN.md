@@ -1117,10 +1117,25 @@ Each is independently shippable and green on its own commit.
 
    The 82 attack tests pass **unchanged in substance** — only the fixture's vocabulary moved, which
    is the evidence that this is a re-expression and not a behaviour change.
-2. **Scope on the row.** Migration: `encounter_id` nullable, `plan_id` added with a cascade to
-   `plans`, a `CHECK` that exactly one is set, and an index on `plan_id`. `attacksRepo` grows
-   `listAttacksForPlan` and takes a scope on create. No behaviour change yet — every existing row is
-   encounter-scoped and stays that way.
+2. **Scope on the row** [DONE] — `encounter_id` nullable, `plan_id` added with a cascade to `plans`,
+   a `CHECK` that exactly one is set, and an index on `plan_id`. `attacksRepo` grows
+   `listAttacksForPlan` and takes a scope on create. No behaviour change — every existing row is
+   encounter-scoped and stays that way, and the router still creates only encounter attacks.
+
+   The def carries **`scope: AttackScope`** in place of `encounterId`: a discriminated union, not
+   two optional ids, because "exactly one of these is set" is the entire invariant. A def scoped to
+   both has two different answers to who may edit it, and that question should be impossible to ask
+   rather than checked. The table's `CHECK` is the same statement made where the authorization
+   decision actually reads it.
+
+   `plan_id` cascades where `encounter_id` deliberately does not: a dangling encounter attack is
+   harmless and simply isn't listed, but an attack confined to a deleted plan is a row nobody can
+   reach and nobody may edit — `canEdit` needs a plan to ask about.
+
+   drizzle-kit's generated migration had to be corrected by hand: SQLite cannot relax `NOT NULL` in
+   place, and the rebuild it emits `SELECT`s `plan_id` from the pre-migration table, which has no
+   such column. Reading it as `NULL` is both what makes the statement run and what is true — every
+   existing attack is an encounter's.
 3. **The gate moves.** `byIds` becomes public and filters by `canView`; plan-scoped
    create/update/delete behind a `canEdit` check that derives the plan from the def; encounter-scoped
    ones stay on `adminProcedure`; `attack.get` stops being admin-only and answers per scope. This is

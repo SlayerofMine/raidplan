@@ -8,11 +8,13 @@ import {
 } from "@raidplan/shared";
 import { createTestDb } from "../../src/db/testDb.js";
 import type { Db } from "../../src/db/client.js";
-import { attacks } from "../../src/db/schema.js";
+import { attacks, plans, users } from "../../src/db/schema.js";
+import { createPlan } from "../../src/plans/planRepo.js";
 import {
   attackDefsForPlan,
   getAttackDefsByIds,
   listAttacksForEncounter,
+  listAttacksForPlan,
   saveAttack,
 } from "../../src/attacks/attacksRepo.js";
 import { renderPlanSvg } from "../../src/og/renderPlanSvg.js";
@@ -21,7 +23,7 @@ const TINT = "#abcdef";
 
 const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   id: "atk1",
-  encounterId: "enc1",
+  scope: { kind: "encounter", encounterId: "enc1" },
   name: "Frontal cone",
   version: 1,
   defaultSize: { w: 200, h: 200 },
@@ -82,6 +84,20 @@ describe("attacksRepo", () => {
   beforeEach(() => ({ db, close } = createTestDb()));
   afterEach(() => close());
 
+  /** A real plan row, since `plan_id` is a foreign key that actually cascades. */
+  let owners = 0;
+  const makePlan = () => {
+    const ownerId = `u${++owners}`;
+    db.insert(users)
+      .values({ id: ownerId, discordId: ownerId, name: "Owner" })
+      .run();
+    return createPlan(db, {
+      ownerId,
+      background: { assetId: "arena", width: 100, height: 100 },
+    });
+  };
+  const scopeOf = (planId: string) => ({ kind: "plan" as const, planId });
+
   it("saves and resolves definitions by id", () => {
     saveAttack(db, def());
     const byId = getAttackDefsByIds(db, ["atk1", "missing"]);
@@ -104,7 +120,14 @@ describe("attacksRepo", () => {
   it("lists an encounter's attacks by name", () => {
     saveAttack(db, def({ id: "b", name: "Beta" }));
     saveAttack(db, def({ id: "a", name: "Alpha" }));
-    saveAttack(db, def({ id: "c", name: "Other", encounterId: "enc2" }));
+    saveAttack(
+      db,
+      def({
+        id: "c",
+        name: "Other",
+        scope: { kind: "encounter", encounterId: "enc2" },
+      }),
+    );
     expect(listAttacksForEncounter(db, "enc1").map((d) => d.name)).toEqual([
       "Alpha",
       "Beta",
@@ -115,6 +138,54 @@ describe("attacksRepo", () => {
     saveAttack(db, def());
     const defs = attackDefsForPlan(db, planWith("atk1"));
     expect(Object.keys(defs)).toEqual(["atk1"]);
+  });
+
+  it("keeps an encounter's library and a plan's own apart", () => {
+    const plan = makePlan();
+    saveAttack(db, def({ id: "lib", name: "Curated" }));
+    saveAttack(db, def({ id: "own", name: "Mine", scope: scopeOf(plan.id) }));
+
+    // Neither listing leaks into the other: that separation *is* "confined to
+    // their plan" (§19.1), and it is the thing the whole gate rests on.
+    expect(listAttacksForEncounter(db, "enc1").map((d) => d.id)).toEqual([
+      "lib",
+    ]);
+    expect(listAttacksForPlan(db, plan.id).map((d) => d.id)).toEqual(["own"]);
+  });
+
+  it("shows a plan's attacks to that plan only", () => {
+    const mine = makePlan();
+    const theirs = makePlan();
+    saveAttack(db, def({ id: "own", scope: scopeOf(mine.id) }));
+    expect(listAttacksForPlan(db, theirs.id)).toEqual([]);
+  });
+
+  // The row is where an authorization decision is made, so a row that claimed
+  // both an encounter and a plan would be a row with two answers about who owns
+  // it. The union makes that unsayable in the document; this is the copy.
+  it("refuses a row that is scoped to both, or to neither", () => {
+    const row = {
+      id: "bad",
+      name: "Bad",
+      version: 1,
+      doc: "{}",
+    };
+    expect(() =>
+      db
+        .insert(attacks)
+        .values({ ...row, encounterId: "enc1", planId: makePlan().id })
+        .run(),
+    ).toThrow();
+    expect(() => db.insert(attacks).values(row).run()).toThrow();
+  });
+
+  it("takes a plan's own attacks with it when the plan is deleted", () => {
+    const plan = makePlan();
+    saveAttack(db, def({ id: "own", scope: scopeOf(plan.id) }));
+    db.delete(plans).where(eq(plans.id, plan.id)).run();
+    // An attack confined to a plan has no meaning once the plan is gone, and
+    // nobody could reach it to clean it up: `canEdit` needs a plan to ask about.
+    expect(getAttackDefsByIds(db, ["own"])).toEqual({});
   });
 
   it("skips a row whose stored doc is corrupt", () => {

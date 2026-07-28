@@ -23,7 +23,7 @@ const planWith = (attacks: Plan["attacks"]): Plan => ({
 
 const def: AttackDef = {
   id: "atk1",
-  encounterId: "enc1",
+  scope: { kind: "encounter", encounterId: "enc1" },
   name: "Cone",
   version: 1,
   defaultSize: { w: 100, h: 100 },

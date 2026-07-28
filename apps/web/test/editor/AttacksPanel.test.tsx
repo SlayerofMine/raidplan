@@ -9,7 +9,7 @@ const state = () => useEditorStore.getState();
 
 const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   id: "atk1",
-  encounterId: "enc1",
+  scope: { kind: "encounter", encounterId: "enc1" },
   name: "Frontal Cone",
   version: 1,
   defaultSize: { w: 100, h: 100 },

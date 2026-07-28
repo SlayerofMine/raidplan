@@ -96,7 +96,7 @@ const makeDef = ({
   for (const o of objects) states[o.id] = { ...seedState(o), ...settles[o.id] };
   return {
     id: "atk",
-    encounterId: "enc",
+    scope: { kind: "encounter", encounterId: "enc" },
     name: "Cone",
     version: 1,
     defaultSize: { w: 400, h: 400 },
@@ -166,7 +166,7 @@ describe("AttackDefSchema", () => {
   it("defaults version and placement hint", () => {
     const def = AttackDefSchema.parse({
       id: "a",
-      encounterId: "e",
+      scope: { kind: "encounter", encounterId: "e" },
       name: "n",
       objects: [],
       slides: oneSlide,
@@ -183,7 +183,7 @@ describe("AttackDefSchema", () => {
     const def = (slides: unknown) =>
       AttackDefSchema.safeParse({
         id: "a",
-        encounterId: "e",
+        scope: { kind: "encounter", encounterId: "e" },
         name: "n",
         objects: [],
         slides,

@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, type SQL } from "drizzle-orm";
 import {
   AttackDefSchema,
   attackIdsInPlan,
+  scopeEncounterId,
+  scopePlanId,
   type AttackContent,
   type AttackDef,
+  type AttackScope,
   type Plan,
 } from "@raidplan/shared";
 import type { Db } from "../db/client.js";
@@ -57,15 +60,29 @@ export function attackDefsForPlan(
   return getAttackDefsByIds(db, attackIdsInPlan(plan));
 }
 
-/** An encounter's attacks, for the designer/palette. */
+/** An encounter's attacks — the curated library, for the palette and admin list. */
 export function listAttacksForEncounter(
   db: Db,
   encounterId: string,
 ): AttackDef[] {
+  return listWhere(db, eq(attacks.encounterId, encounterId));
+}
+
+/**
+ * One plan's own attacks (plan §19.1) — the ones its author drew, which no other
+ * plan can see. Whether the caller may see this plan at all is the router's
+ * decision; this only says what is in it.
+ */
+export function listAttacksForPlan(db: Db, planId: string): AttackDef[] {
+  return listWhere(db, eq(attacks.planId, planId));
+}
+
+/** The shared body of the two listings: name order, unparseable rows skipped. */
+function listWhere(db: Db, where: SQL | undefined): AttackDef[] {
   return db
     .select()
     .from(attacks)
-    .where(eq(attacks.encounterId, encounterId))
+    .where(where)
     .orderBy(asc(attacks.name))
     .all()
     .flatMap((row) => {
@@ -80,10 +97,10 @@ export function getAttack(db: Db, id: string): AttackDef | undefined {
   return row ? parseDef(row.doc) : undefined;
 }
 
-/** Create a new attack (version 1) from the designer. */
+/** Create a new attack (version 1) from the designer, in the scope it belongs to. */
 export function createAttack(
   db: Db,
-  input: { encounterId: string } & AttackContent,
+  input: { scope: AttackScope } & AttackContent,
 ): AttackDef {
   const def: AttackDef = { id: randomUUID(), version: 1, ...input };
   saveAttack(db, def);
@@ -93,8 +110,9 @@ export function createAttack(
 /**
  * Replace an attack's body, bumping its version. Version drives auto-follow's
  * future "changed" marker (plan §17): a plan using this attack picks up the edit
- * automatically. `encounterId` is immutable — an attack belongs to its
- * encounter. Returns `undefined` if no such attack.
+ * automatically. The **scope is immutable here** — saving an attack cannot move
+ * it between libraries, because that is a change of who may edit it and belongs
+ * to promotion (§19.3), not to a save. Returns `undefined` if no such attack.
  */
 export function updateAttack(
   db: Db,
@@ -106,7 +124,7 @@ export function updateAttack(
   const def: AttackDef = {
     ...content,
     id,
-    encounterId: existing.encounterId,
+    scope: existing.scope,
     version: existing.version + 1,
   };
   saveAttack(db, def);
@@ -129,7 +147,10 @@ export function saveAttack(db: Db, def: AttackDef): void {
   db.insert(attacks)
     .values({
       id: def.id,
-      encounterId: def.encounterId,
+      // Exactly one of these is non-null, which the table's CHECK enforces and
+      // the `AttackScope` union makes unsayable upstream.
+      encounterId: scopeEncounterId(def.scope) ?? null,
+      planId: scopePlanId(def.scope) ?? null,
       name: def.name,
       version: def.version,
       doc,
@@ -139,7 +160,8 @@ export function saveAttack(db: Db, def: AttackDef): void {
     .onConflictDoUpdate({
       target: attacks.id,
       set: {
-        encounterId: def.encounterId,
+        encounterId: scopeEncounterId(def.scope) ?? null,
+        planId: scopePlanId(def.scope) ?? null,
         name: def.name,
         version: def.version,
         doc,

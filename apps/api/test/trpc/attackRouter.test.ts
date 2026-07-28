@@ -30,7 +30,7 @@ async function expectCode(promise: Promise<unknown>, code: string) {
 
 const def = (over: Partial<AttackDef> = {}): AttackDef => ({
   id: "atk1",
-  encounterId: "enc1",
+  scope: { kind: "encounter", encounterId: "enc1" },
   name: "Cone",
   version: 1,
   defaultSize: { w: 100, h: 100 },
@@ -69,7 +69,14 @@ describe("attack.byIds", () => {
 describe("attack.listForEncounter", () => {
   it("returns an encounter's attacks", async () => {
     saveAttack(db, def({ id: "a", name: "Alpha" }));
-    saveAttack(db, def({ id: "b", name: "Other", encounterId: "enc2" }));
+    saveAttack(
+      db,
+      def({
+        id: "b",
+        name: "Other",
+        scope: { kind: "encounter", encounterId: "enc2" },
+      }),
+    );
     const list = await createCaller({
       db,
       viewer: user,
@@ -104,7 +111,7 @@ describe("attack authoring (admin only)", () => {
     expect(created.version).toBe(1);
     const got = await asAdmin().attack.get({ id: created.id });
     expect(got.name).toBe("Cone");
-    expect(got.encounterId).toBe("enc1");
+    expect(got.scope).toEqual({ kind: "encounter", encounterId: "enc1" });
   });
 
   it("replaces the body and bumps the version on update", async () => {
@@ -119,7 +126,8 @@ describe("attack authoring (admin only)", () => {
     });
     expect(updated.name).toBe("Renamed");
     expect(updated.version).toBe(2);
-    expect(updated.encounterId).toBe("enc1"); // immutable
+    // Immutable: saving a body cannot move an attack between libraries (§19.1).
+    expect(updated.scope).toEqual({ kind: "encounter", encounterId: "enc1" });
   });
 
   it("removes an attack", async () => {

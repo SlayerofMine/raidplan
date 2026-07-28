@@ -85,7 +85,7 @@ const base = (over: Partial<ObjectBase> = {}): ObjectBase => ({
  */
 const def: AttackDef = {
   id: "atk",
-  encounterId: "enc",
+  scope: { kind: "encounter", encounterId: "enc" },
   name: "Frontal",
   version: 1,
   defaultSize: { w: 200, h: 200 },
