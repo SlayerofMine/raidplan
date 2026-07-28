@@ -564,6 +564,14 @@ transformer, rigid move/scale/rotate comes for free. Animating a group needs no 
 either — `animateSelection` already gives every selected object the same animation, and the
 Animation panel already collapses identical ones into a single row that edits all of them.
 
+**The Timeline says the same thing the board does.** A group is one row, under its name, not one
+row per member — and while the members agree about their timing they share a *single* bar, which
+retimes all of their animations in one action (`updateAnimations`, so one undo). `buildTimelineRows`
+merges by the timing signature only, so changing one member's delay splits its bar back out inside
+the same row rather than hiding the difference. A row's label selects the whole group, the way
+clicking a member on the board does; a group worn down to one member is drawn as the object it is,
+without waiting for `pruneGroups`.
+
 Group/ungroup are store actions; `groupSelected` gathers the members contiguous in z-order at
 their front-most one, so nothing is left drawn *inside* a group. A group worn down to one member
 (by deleting, or by a merge into another group) is dissolved rather than left as a group of one

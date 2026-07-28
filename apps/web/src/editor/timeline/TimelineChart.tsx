@@ -3,7 +3,6 @@ import {
   attackNaturalMs,
   layoutStepTimeline,
   type AnimKind,
-  type AnimSpan,
   type AttackInstance,
 } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
@@ -18,12 +17,23 @@ import {
   timelineScale,
 } from "../../anim/stepTimeline";
 import { formatMs, selectPlaybackLocked, usePlayhead } from "./playhead";
+import {
+  buildTimelineRows,
+  type TimelineBar,
+  type TimelineRow,
+} from "./timelineRows";
 
 /**
  * One slide's Gantt chart (plan §3.4 / §7). Rows are the objects that have an
  * animation on this slide; each animation is a bar whose position and length come
  * from the shared {@link layoutStepTimeline} — the *same* math the player runs,
  * so a bar sits exactly where the frame will.
+ *
+ * A **group** gets one row, not one per member (plan §18.1): grouping is a claim
+ * that six tokens are one thing, so animating them together must read as one
+ * decision here too. While the members agree about their timing they share a
+ * single bar, and dragging it retimes all of them in one action; the moment one
+ * of them differs its bar splits out, inside the same row.
  *
  * A bar has two grabbable parts:
  *  - the **body** — drag it (or Arrow keys) to change `delayMs`;
@@ -97,19 +107,29 @@ export function TimelineChart({ slideIndex }: { slideIndex: number }) {
     [attacks, slide?.id, attackDefs],
   );
 
-  // Object rows in first-appearance order, so the chart reads top-to-bottom the
-  // way the animation list does.
-  const rows = useMemo(() => {
-    const order: string[] = [];
-    const seen = new Set<string>();
-    for (const span of timeline.spans) {
-      if (!seen.has(span.objectId)) {
-        seen.add(span.objectId);
-        order.push(span.objectId);
-      }
+  const groupNames = useEditorStore((s) => s.groups);
+
+  // A group is a group at two members or more (plan §18.1); a `groupId` left on
+  // a lone survivor is not a row, it's an object. `pruneGroups` normally clears
+  // those, but the chart shouldn't need that to have happened yet.
+  const groupOf = useMemo(() => {
+    const members = new Map<string, number>();
+    for (const object of Object.values(objects)) {
+      const groupId = object.groupId;
+      if (groupId) members.set(groupId, (members.get(groupId) ?? 0) + 1);
     }
-    return order;
-  }, [timeline]);
+    return (objectId: string) => {
+      const groupId = objects[objectId]?.groupId;
+      return groupId && (members.get(groupId) ?? 0) > 1 ? groupId : undefined;
+    };
+  }, [objects]);
+
+  // Rows in first-appearance order, so the chart reads top-to-bottom the way the
+  // animation list does.
+  const rows = useMemo(
+    () => buildTimelineRows(timeline.spans, groupOf),
+    [timeline, groupOf],
+  );
 
   if (!slide) return null;
 
@@ -180,22 +200,20 @@ export function TimelineChart({ slideIndex }: { slideIndex: number }) {
               active={active}
             />
 
-            {rows.map((objectId) => {
-              const spans = timeline.spans.filter(
-                (s) => s.objectId === objectId,
-              );
-              return (
-                <ObjectRow
-                  key={objectId}
-                  slideIndex={slideIndex}
-                  objectId={objectId}
-                  label={objectDisplayName(objects[objectId])}
-                  spans={spans}
-                  pxPerMs={scale.pxPerMs}
-                  locked={locked}
-                />
-              );
-            })}
+            {rows.map((row) => (
+              <Row
+                key={`${row.kind}:${row.id}`}
+                slideIndex={slideIndex}
+                row={row}
+                label={
+                  row.kind === "group"
+                    ? groupNames[row.id]?.trim() || "Group"
+                    : objectDisplayName(objects[row.id])
+                }
+                pxPerMs={scale.pxPerMs}
+                locked={locked}
+              />
+            ))}
 
             {attackRows.map((row) => (
               <AttackRow
@@ -469,36 +487,48 @@ function AttackRow({
   );
 }
 
-function ObjectRow({
+/**
+ * One line of the chart — an object, or a group standing for its members.
+ *
+ * A group row's label selects the whole group, the way clicking a member on the
+ * board does, so the two halves of the editor keep agreeing about what a group
+ * is.
+ */
+function Row({
   slideIndex,
-  objectId,
+  row,
   label,
-  spans,
   pxPerMs,
   locked,
 }: {
   slideIndex: number;
-  objectId: string;
+  row: TimelineRow;
   label: string;
-  spans: AnimSpan[];
   pxPerMs: number;
   locked: boolean;
 }) {
   const select = useEditorStore((s) => s.select);
+  const selectGroup = useEditorStore((s) => s.selectGroup);
+  const grouped = row.kind === "group";
 
-  // Concurrent animations on one object (e.g. move + fade `withPrevious`) get
-  // their own lane so they never draw on top of each other; sequential ones
-  // share a lane to keep the row compact.
-  const { lane, laneCount } = packLanes(spans);
+  // Concurrent animations in one row (e.g. move + fade `withPrevious`) get their
+  // own lane so they never draw on top of each other; sequential ones share a
+  // lane to keep the row compact. Merged group bars pack as the one bar they
+  // are, since only their representative span is laid out.
+  const { lane, laneCount } = packLanes(row.bars.map((bar) => bar.span));
 
   return (
     <>
       <button
         type="button"
-        onClick={() => select([objectId])}
-        data-testid={`timeline-row-${objectId}`}
-        className="min-w-0 truncate pr-2 text-right text-xs text-neutral-300 hover:text-accent"
-        title={`Select ${label}`}
+        onClick={() => (grouped ? selectGroup(row.id) : select([row.id]))}
+        data-testid={
+          grouped ? `timeline-row-group-${row.id}` : `timeline-row-${row.id}`
+        }
+        className={`min-w-0 truncate pr-2 text-right text-xs hover:text-accent ${
+          grouped ? "font-medium text-neutral-200" : "text-neutral-300"
+        }`}
+        title={grouped ? `Select the group ${label}` : `Select ${label}`}
         style={{ height: LANE_H }}
       >
         {label}
@@ -507,13 +537,13 @@ function ObjectRow({
         className="relative"
         style={{ height: laneCount * (LANE_H + LANE_GAP) - LANE_GAP }}
       >
-        {spans.map((span) => (
+        {row.bars.map((bar) => (
           <Bar
-            key={span.animId}
+            key={bar.animIds[0]}
             slideIndex={slideIndex}
-            span={span}
+            bar={bar}
             pxPerMs={pxPerMs}
-            top={(lane.get(span.animId) ?? 0) * (LANE_H + LANE_GAP)}
+            top={(lane.get(bar.span.animId) ?? 0) * (LANE_H + LANE_GAP)}
             locked={locked}
           />
         ))}
@@ -522,26 +552,34 @@ function ObjectRow({
   );
 }
 
+/**
+ * One bar. Usually one animation — but a group moving as one is a single bar
+ * over several identical animations, and then every edit here goes to all of
+ * them at once, in one action: taking back one drag must not cost a group of
+ * six six undos (plan §18.1).
+ */
 function Bar({
   slideIndex,
-  span,
+  bar,
   pxPerMs,
   top,
   locked,
 }: {
   slideIndex: number;
-  span: AnimSpan;
+  bar: TimelineBar;
   pxPerMs: number;
   top: number;
   locked: boolean;
 }) {
-  const updateAnimation = useEditorStore((s) => s.updateAnimation);
+  const updateAnimations = useEditorStore((s) => s.updateAnimations);
   const select = useEditorStore((s) => s.select);
 
+  const { span, animIds, objectCount } = bar;
+
   const setDelay = (delayMs: number) =>
-    updateAnimation(slideIndex, span.animId, { delayMs });
+    updateAnimations(slideIndex, animIds, { delayMs });
   const setDuration = (durationMs: number) =>
-    updateAnimation(slideIndex, span.animId, { durationMs });
+    updateAnimations(slideIndex, animIds, { durationMs });
 
   const delayW = msToPx(span.delayMs, pxPerMs);
   const bodyW = msToPx(span.spanMs, pxPerMs);
@@ -555,8 +593,11 @@ function Bar({
       : span.trigger === "onCollision"
         ? " · on collision"
         : "";
+  // A merged bar says how many objects it speaks for, since the row's label is
+  // the group's name and no longer tells you how big the group is.
+  const scope = objectCount > 1 ? ` · ${objectCount} objects` : "";
   const describe =
-    `${span.effect} (${span.kind}) · delay ${Math.round(span.delayMs)}ms · ` +
+    `${span.effect} (${span.kind})${scope} · delay ${Math.round(span.delayMs)}ms · ` +
     `${Math.round(span.durationMs)}ms${deferredNote}`;
 
   // Drag helper: attach window listeners so the pointer keeps controlling the
@@ -604,6 +645,7 @@ function Bar({
       <button
         type="button"
         data-testid={`timeline-bar-${span.animId}`}
+        data-objects={objectCount}
         aria-label={describe}
         title={describe}
         onPointerDown={(e) => beginDrag(e, span.delayMs, BODY_MIN_MS, setDelay)}
@@ -619,7 +661,10 @@ function Bar({
         } ${span.deferred ? "opacity-60 ring-1 ring-inset ring-white/40" : ""}`}
         style={{ width: Math.max(bodyW, 6) }}
       >
-        <span className="pointer-events-none truncate px-1">{span.effect}</span>
+        <span className="pointer-events-none truncate px-1">
+          {span.effect}
+          {objectCount > 1 && ` ×${objectCount}`}
+        </span>
         {/* Handle: drag / Arrow keys change the duration. */}
         <span
           role="button"

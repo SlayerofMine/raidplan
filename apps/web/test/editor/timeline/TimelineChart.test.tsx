@@ -114,3 +114,123 @@ describe("TimelineChart", () => {
     expect(screen.getByTestId(`timeline-bar-${secondId}`)).toBeInTheDocument();
   });
 });
+
+/**
+ * Three tokens with the first two grouped, all three animated together — the
+ * shape of "select a group, hit Animate" (plan §18.1 / §18.9).
+ */
+function seedGroupOfTwoPlusOne() {
+  const a = state().addIcon(iconId);
+  const b = state().addIcon(iconId);
+  const c = state().addIcon(iconId);
+  state().select([a, b]);
+  state().groupSelected();
+  const groupId = state().objects[a]!.groupId!;
+  state().renameGroup(groupId, "Melee");
+
+  state().selectOnly([a, b, c]);
+  const animIds = state().animateSelection(0);
+  const animOf = (objectId: string) =>
+    state().slides[0]!.animations.find((x) => x.objectId === objectId)!.id;
+  return { a, b, c, groupId, animIds, animOf };
+}
+
+describe("TimelineChart groups", () => {
+  it("gives a group one row under its name, not one row per member", () => {
+    const { a, b, c, groupId } = seedGroupOfTwoPlusOne();
+    render(<TimelineChart slideIndex={0} />);
+
+    const groupRow = screen.getByTestId(`timeline-row-group-${groupId}`);
+    expect(groupRow).toHaveTextContent("Melee");
+    // The members are inside the group's row, not rows of their own.
+    expect(screen.queryByTestId(`timeline-row-${a}`)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(`timeline-row-${b}`)).not.toBeInTheDocument();
+    // The ungrouped object still gets its own.
+    expect(screen.getByTestId(`timeline-row-${c}`)).toBeInTheDocument();
+  });
+
+  it("falls back to 'Group' when the group has no name", () => {
+    const { groupId } = seedGroupOfTwoPlusOne();
+    state().renameGroup(groupId, "");
+    render(<TimelineChart slideIndex={0} />);
+    expect(
+      screen.getByTestId(`timeline-row-group-${groupId}`),
+    ).toHaveTextContent("Group");
+  });
+
+  it("draws the members' identical animations as a single bar", () => {
+    const { a, b, animOf } = seedGroupOfTwoPlusOne();
+    render(<TimelineChart slideIndex={0} />);
+
+    const bar = screen.getByTestId(`timeline-bar-${animOf(a)}`);
+    expect(bar).toHaveAttribute("data-objects", "2");
+    expect(bar).toHaveAttribute(
+      "aria-label",
+      expect.stringContaining("2 objects"),
+    );
+    // The second member has no bar of its own — it *is* this one.
+    expect(
+      screen.queryByTestId(`timeline-bar-${animOf(b)}`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("retimes every member from the one bar, in a single action", () => {
+    const { a, b, animOf } = seedGroupOfTwoPlusOne();
+    render(<TimelineChart slideIndex={0} />);
+
+    fireEvent.keyDown(screen.getByTestId(`timeline-bar-${animOf(a)}`), {
+      key: "ArrowRight",
+    });
+    expect(anim(animOf(a)).delayMs).toBe(50);
+    expect(anim(animOf(b)).delayMs).toBe(50);
+
+    fireEvent.keyDown(screen.getByTestId(`timeline-handle-${animOf(a)}`), {
+      key: "ArrowRight",
+    });
+    expect(anim(animOf(a)).durationMs).toBe(550);
+    expect(anim(animOf(b)).durationMs).toBe(550);
+  });
+
+  it("splits a member's bar out of the group's the moment its timing differs", () => {
+    const { a, b, animOf } = seedGroupOfTwoPlusOne();
+    state().updateAnimation(0, animOf(b), { delayMs: 200 });
+    render(<TimelineChart slideIndex={0} />);
+
+    // Still one row — but two bars in it, since they no longer agree.
+    const first = screen.getByTestId(`timeline-bar-${animOf(a)}`);
+    const second = screen.getByTestId(`timeline-bar-${animOf(b)}`);
+    expect(first).toHaveAttribute("data-objects", "1");
+    expect(second).toHaveAttribute("data-objects", "1");
+  });
+
+  it("selects the whole group from the row's label", () => {
+    const { a, b, groupId } = seedGroupOfTwoPlusOne();
+    state().clearSelection();
+    render(<TimelineChart slideIndex={0} />);
+
+    fireEvent.click(screen.getByTestId(`timeline-row-group-${groupId}`));
+    expect([...state().selectedIds].sort()).toEqual([a, b].sort());
+  });
+
+  it("treats a group worn down to one member as the object it is", () => {
+    const { a, b, groupId } = seedGroupOfTwoPlusOne();
+    // One member gone while the other still carries the `groupId` — a group of
+    // one, which `pruneGroups` dissolves but the chart must not depend on it.
+    useEditorStore.setState((s) => ({
+      objects: Object.fromEntries(
+        Object.entries(s.objects).filter(([id]) => id !== b),
+      ),
+      objectIds: s.objectIds.filter((id) => id !== b),
+      slides: s.slides.map((slide) => ({
+        ...slide,
+        animations: slide.animations.filter((x) => x.objectId !== b),
+      })),
+    }));
+
+    render(<TimelineChart slideIndex={0} />);
+    expect(
+      screen.queryByTestId(`timeline-row-group-${groupId}`),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId(`timeline-row-${a}`)).toBeInTheDocument();
+  });
+});
