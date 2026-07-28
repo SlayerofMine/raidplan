@@ -278,3 +278,48 @@ describe("authoring inside your own plan (no admin needed)", () => {
     );
   });
 });
+
+describe("promotion (§19.3)", () => {
+  it("keeps the id, so instances already placed carry on working", async () => {
+    saveAttack(db, def({ id: "mine", name: "Good one", scope: planScope() }));
+
+    const promoted = await asAdmin().attack.promote({
+      id: "mine",
+      encounterId: "enc1",
+    });
+
+    // An UPDATE, not a copy. Copying would leave every instance pointing at the
+    // old def and make the promotion invisible to the plan that earned it.
+    expect(promoted?.id).toBe("mine");
+    expect(promoted?.scope).toEqual(encounterScope);
+    expect(
+      (await as(user).attack.listForEncounter({ encounterId: "enc1" })).map(
+        (d) => d.id,
+      ),
+    ).toEqual(["mine"]);
+    // And it has left the plan's own section.
+    expect(await as(user).attack.listForPlan({ planId })).toEqual([]);
+  });
+
+  it("is the admin's decision, not the plan owner's", async () => {
+    // The whole point of the §19.1 gate: anyone may author, publishing to the
+    // shared library is what takes an admin.
+    saveAttack(db, def({ id: "mine", scope: planScope() }));
+    await expectCode(
+      as(user).attack.promote({ id: "mine", encounterId: "enc1" }),
+      "FORBIDDEN",
+    );
+  });
+
+  it("refuses one that is already an encounter's, and one that isn't there", async () => {
+    saveAttack(db, def({ id: "lib" }));
+    await expectCode(
+      asAdmin().attack.promote({ id: "lib", encounterId: "enc1" }),
+      "BAD_REQUEST",
+    );
+    await expectCode(
+      asAdmin().attack.promote({ id: "nope", encounterId: "enc1" }),
+      "NOT_FOUND",
+    );
+  });
+});

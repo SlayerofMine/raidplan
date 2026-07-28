@@ -131,6 +131,28 @@ export function updateAttack(
   return def;
 }
 
+/**
+ * Move a definition into another library — an admin lifting a good plan-local
+ * attack into an encounter's curated one (plan §19.3).
+ *
+ * **An UPDATE, not a copy.** The id does not change, so every instance already
+ * placed keeps resolving through auto-follow and simply becomes visible to
+ * everyone working that fight. Copying would leave the originals pointing at
+ * the old def and the promotion invisible to the plan that earned it — which is
+ * most of why scope is a column rather than a document.
+ */
+export function rescopeAttack(
+  db: Db,
+  id: string,
+  scope: AttackScope,
+): AttackDef | undefined {
+  const existing = getAttack(db, id);
+  if (!existing) return undefined;
+  const def: AttackDef = { ...existing, scope };
+  saveAttack(db, def);
+  return def;
+}
+
 /** Delete an attack. Returns whether a row was actually removed. */
 export function deleteAttack(db: Db, id: string): boolean {
   return db.delete(attacks).where(eq(attacks.id, id)).run().changes > 0;

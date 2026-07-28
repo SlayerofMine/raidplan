@@ -27,6 +27,7 @@ import {
   videoFileName,
 } from "./videoExport";
 import { uploadBackground } from "./uploadBackground";
+import { SaveAsAttackButton } from "./SaveAsAttackButton";
 import { TetherButton } from "./TetherButton";
 import { Btn, Divider } from "./ToolbarButton";
 import { useToast } from "../ui/toastContext";
@@ -230,6 +231,8 @@ export function Toolbar({
         title="Dissolve the selected group (Ctrl+Shift+G)"
       />
       <TetherButton />
+      {/* The assembly you just grouped is already an attack (§19.3). */}
+      <SaveAsAttackButton />
 
       <Divider />
 

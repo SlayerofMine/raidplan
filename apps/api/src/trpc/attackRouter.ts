@@ -19,9 +19,15 @@ import {
   getAttackDefsByIds,
   listAttacksForEncounter,
   listAttacksForPlan,
+  rescopeAttack,
   updateAttack,
 } from "../attacks/attacksRepo.js";
-import { protectedProcedure, publicProcedure, router } from "./context.js";
+import {
+  adminProcedure,
+  protectedProcedure,
+  publicProcedure,
+  router,
+} from "./context.js";
 import { mayView, requireEditable, requireViewable } from "./planAccess.js";
 
 /**
@@ -170,6 +176,38 @@ export const attackRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "No such attack." });
       }
       return updated;
+    }),
+
+  /**
+   * Publish a plan's attack into an encounter's library (plan §19.3).
+   *
+   * Admin-only on both sides of the move, and deliberately so: this is the act
+   * the §19.1 gate exists for. It is an `UPDATE` of the scope, so the id
+   * survives and every instance already placed keeps working — it simply
+   * becomes visible to everyone working that fight.
+   */
+  promote: adminProcedure
+    .input(
+      z.object({
+        id: z.string().min(1),
+        encounterId: z.string().min(1),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      const existing = getAttack(ctx.db, input.id);
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "No such attack." });
+      }
+      if (existing.scope.kind === "encounter") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "That attack is already in an encounter's library.",
+        });
+      }
+      return rescopeAttack(ctx.db, input.id, {
+        kind: "encounter",
+        encounterId: input.encounterId,
+      });
     }),
 
   remove: protectedProcedure

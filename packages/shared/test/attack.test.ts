@@ -15,6 +15,7 @@ import {
   defToPlan,
   expandPlan,
   planToAttackContent,
+  selectionToAttackPlan,
   type AttackDef,
 } from "../src/attack.js";
 import {
@@ -1387,5 +1388,123 @@ describe("expandPlan — result is a valid plan", () => {
     expect(() =>
       PlanSchema.parse(expandPlan(plan, { atk: def })),
     ).not.toThrow();
+  });
+});
+
+describe("selectionToAttackPlan — the assembly is already the attack (§19.3)", () => {
+  const at = (x: number, y: number): SlideState => ({
+    x,
+    y,
+    w: 100,
+    h: 100,
+    rotation: 0,
+    opacity: 1,
+    visible: true,
+  });
+
+  const planObj = (id: string, over: Partial<PlanObject> = {}): PlanObject => ({
+    id,
+    type: "shape",
+    shape: "circle",
+    base: base({ x: 0, y: 0, w: 100, h: 100 }),
+    ...over,
+  });
+
+  /** A boss, and two circles the author has grouped into a cone. */
+  const board = (over: Partial<Slide> = {}) =>
+    makePlan(
+      [
+        slide({
+          id: "s0",
+          states: {
+            boss: at(0, 0),
+            a: at(100, 0),
+            b: at(200, 0),
+          },
+          ...over,
+        }),
+      ],
+      [
+        planObj("boss"),
+        planObj("a", { groupId: "g1" }),
+        planObj("b", { groupId: "g1" }),
+      ],
+    );
+
+  const saved = (plan: Plan, ids: string[]) =>
+    selectionToAttackPlan(plan, ids, 0);
+
+  it("takes the selected objects, in document order, without their group", () => {
+    const { plan } = saved(board(), ["b", "a"]);
+    // Document order rather than selection order: an attack's parts keep the
+    // stacking they were drawn in.
+    expect(plan.objects.map((o) => o.id)).toEqual(["a", "b"]);
+    // The plan's group is not the attack's: once placed, the instance groups
+    // its own parts.
+    expect(plan.objects.every((o) => o.groupId === undefined)).toBe(true);
+  });
+
+  it("turns a reference out of the selection into a hole the plan fills", () => {
+    const plan = board();
+    plan.objects[1] = planObj("a", { groupId: "g1", follow: { pin: "boss" } });
+    const out = saved(plan, ["a", "b"]).plan;
+
+    // "Leash this to the boss" cannot come along — the boss isn't part of what
+    // is being saved — but "one end of this is something you'll nominate" is
+    // exactly what a placeholder says (§18.14).
+    const holes = out.objects.filter((o) => o.type === "placeholder");
+    expect(holes).toHaveLength(1);
+    expect(out.objects.find((o) => o.id === "a")?.follow).toEqual({
+      pin: holes[0]!.id,
+    });
+  });
+
+  it("makes one hole per outside object, however many point at it", () => {
+    const plan = board();
+    plan.objects[1] = planObj("a", { follow: { pin: "boss" } });
+    plan.objects[2] = planObj("b", { follow: { aim: "boss" } });
+    const out = saved(plan, ["a", "b"]).plan;
+    expect(out.objects.filter((o) => o.type === "placeholder")).toHaveLength(1);
+  });
+
+  it("carries the animations of what it took, and no others", () => {
+    const plan = board({
+      animations: [
+        defAnim({ id: "mine", objectId: "a" }),
+        defAnim({ id: "theirs", objectId: "boss" }),
+      ],
+    });
+    const { plan: out } = saved(plan, ["a", "b"]);
+    expect(out.slides[1]!.animations.map((a) => a.id)).toEqual(["mine"]);
+  });
+
+  it("drops a collision target outside the selection, and says so", () => {
+    const plan = board({
+      animations: [
+        defAnim({ id: "hit", objectId: "a", collideWith: ["boss", "b"] }),
+      ],
+    });
+    const { plan: out, leftBehind } = saved(plan, ["a", "b"]);
+    // A definition can't name one of the plan's objects except through a
+    // parameter (§18.4), so the boss is dropped rather than silently rewired —
+    // and the author is told, so they can declare one.
+    expect(out.slides[1]!.animations[0]!.collideWith).toEqual(["b"]);
+    expect(leftBehind.collideWith).toEqual(["boss"]);
+  });
+
+  it("opens on the same layout it settles in", () => {
+    // A plan's animations already state their own targets, so there is no
+    // settled state to recover and nothing is lost by the two agreeing.
+    const { plan } = saved(board(), ["a", "b"]);
+    expect(plan.slides[0]!.states).toEqual(plan.slides[1]!.states);
+    expect(plan.slides[0]!.animations).toEqual([]);
+  });
+
+  it("is a definition once it has been through unit space", () => {
+    const { plan } = saved(board(), ["a", "b"]);
+    const content = planToAttackContent(plan, { name: "Cone" });
+    // 100..300 across, 0..100 down — the selection's own extent becomes -1..1.
+    expect(content.defaultSize).toEqual({ w: 200, h: 100 });
+    expect(content.objects[0]!.base).toMatchObject({ x: -1, y: -1 });
   });
 });

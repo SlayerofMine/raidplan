@@ -62,6 +62,12 @@ describe("the attacks palette (§19.4)", () => {
     expect(within(encounter).getByLabelText("Place curated")).toBeVisible();
     expect(within(encounter).queryByLabelText("Place mine")).toBeNull();
     expect(within(own).getByLabelText("Place mine")).toBeVisible();
+
+    // Publishing one into the encounter's library is an admin's decision
+    // (§19.3), so an ordinary planner is not shown the control at all.
+    expect(
+      screen.queryByLabelText("Publish mine to this encounter"),
+    ).toBeNull();
   });
 
   it("gives a plan with no encounter its own section and a way in", () => {

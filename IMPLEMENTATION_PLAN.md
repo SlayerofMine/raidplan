@@ -1171,8 +1171,26 @@ Each is independently shippable and green on its own commit.
    The e2e signs in as `e2e-planner`, deliberately *not* on the allowlist, and asserts the admin
    panel is closed to them before drawing an attack in their own plan and placing it. If the gate
    ever creeps back onto the act of authoring, that fails at the designer's door.
-5. **Save as attack.** Selection → def, with the reaching-animation rule and the separate
-   "replace selection with an instance" action. Rides on §18.1's group selection, so the common case
-   is "select group, save".
-6. **Promote.** Admin action on a plan-scoped def; an `UPDATE` of the two columns and a test that
-   existing instances still resolve.
+5. **Save as attack** [DONE] — `selectionToAttackPlan` is the pure core: the selected objects in
+   document order, the slide state they are in, and the animations belonging to them, handed back as
+   a designer `Plan` so unit space is still entered in exactly one place.
+
+   The reaching-reference rule turned out to have **two halves, not one**. An object reference out
+   of the selection — a tether end, a `follow` pin or aim — becomes a **placeholder**, which is the
+   honest translation: the boss cannot come along, but "one end of this is something you'll
+   nominate" is precisely what §18.14's hole says. One placeholder per distinct outside object, so
+   `{ pin: boss, aim: boss }` is one slot and not two. A **collision target** can't be translated
+   that way — it names a plan object and a definition reaches the plan only through a parameter
+   (§18.4) — so it is dropped and *reported*, and the toast says which, so the author can declare
+   one. Those are the only two cases: an animation belonging to an object you didn't select was
+   never part of this attack to begin with.
+
+   The originals are untouched, and the author **stays in the plan**. Sending them into the designer
+   to admire the capture (which is what this first did) leaves the plan's own debounced autosave in
+   mid air — the e2e caught it as a reloaded plan with zero objects in it. The flourish cost unsaved
+   work; the palette is one click away.
+
+6. **Promote** [DONE] — `attack.promote`, admin-only on both sides of the move, `UPDATE`ing the
+   scope so the id survives; a plan attack in the palette grows a *publish* control for admins only.
+   Tested for what makes it worth doing: the id is unchanged, the def has joined the encounter's
+   listing and left the plan's, a plan owner may not do it, and one already in a library is refused.

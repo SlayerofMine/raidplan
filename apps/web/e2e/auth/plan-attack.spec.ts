@@ -57,3 +57,61 @@ test("a planner who is not an admin draws an attack in their own plan", async ({
     page.getByRole("button", { name: "Remove My Cone" }),
   ).toBeVisible();
 });
+
+/**
+ * "Save as attack" (plan §19.3): the assembly a planner has already made *is*
+ * the attack, so the tool reads it rather than asking them to redraw it in the
+ * designer. This is what §18.1's groups were for.
+ */
+test("a group becomes a reusable attack, and the originals stay put", async ({
+  page,
+}) => {
+  await signIn(page, "e2e-planner", "E2E Planner");
+
+  await page.goto("/");
+  await page.getByTestId("new-plan").click();
+  await expect(page).toHaveURL(/\/plan\/.+\/edit/);
+  const planUrl = page.url();
+
+  // Two markers, grouped — the "four circles dragged into a cone" case.
+  await page.getByRole("button", { name: "Add Marker 1" }).click();
+  await page.getByTestId("prop-x").fill("200");
+  await page.getByTestId("prop-y").fill("200");
+  await page.getByRole("button", { name: "Add Marker 2" }).click();
+  await page.getByTestId("prop-x").fill("400");
+  await page.getByTestId("prop-y").fill("200");
+
+  const box = (await page.getByTestId("canvas-container").boundingBox())!;
+  await page.mouse.move(box.x + 2, box.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 2, box.y + box.height - 2, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  await expect(page.getByTestId("multi-selection")).toContainText("2 objects");
+  await page.getByRole("button", { name: "Group", exact: true }).click();
+
+  // The plan's own autosave is debounced; let it land before reloading below,
+  // or the reload would be testing the autosave rather than this feature.
+  const planSaved = page.waitForResponse((r) => r.url().includes("saveDoc"));
+
+  // --- the assembly becomes a definition ---
+  await page.getByRole("button", { name: "Save as attack" }).click();
+  await page.getByTestId("new-attack-name").fill("Twin Markers");
+  await page.getByRole("button", { name: "Save attack" }).click();
+  await expect(page.getByText(/Saved “Twin Markers”/)).toBeVisible();
+
+  // --- the author stays where they were, and the originals are untouched:
+  //     saving is not converting ---
+  await expect(page.getByTestId("multi-selection")).toContainText("2 objects");
+  await planSaved;
+  await page.goto(planUrl);
+  await expect(page.getByTestId("object-count")).toContainText("2");
+
+  await page.getByRole("tab", { name: "Attacks" }).click();
+  await expect(
+    page
+      .getByTestId("plan-attacks")
+      .getByRole("button", { name: "Place Twin Markers" }),
+  ).toBeVisible();
+});

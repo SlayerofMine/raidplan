@@ -2,6 +2,9 @@ import { Link } from "react-router-dom";
 import { attackSlots, type AttackDef, type ShapeKind } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
 import { AttackThumbnail } from "./AttackThumbnail";
+import { api } from "../api/client";
+import { useSession } from "../api/useSession";
+import { useToast } from "../ui/toastContext";
 import { ATTACK_DATA_TYPE, SHAPE_DATA_TYPE } from "./paletteDrag";
 import { isLocalPlan } from "./planScope";
 
@@ -133,17 +136,65 @@ function AttackTile({ def }: { def: AttackDef }) {
   );
 }
 
+/**
+ * Publishing one of this plan's attacks into the encounter's library (§19.3).
+ *
+ * Shown only to a site admin, and only where a plan attack and an encounter
+ * both exist — this is the one act the §19.1 gate is actually for, and it is an
+ * `UPDATE` of the scope, so the id survives and instances already placed carry
+ * on working. They simply become everyone's.
+ */
+function PromoteButton({
+  def,
+  encounterId,
+  onDone,
+}: {
+  def: AttackDef;
+  encounterId: string;
+  onDone: () => void;
+}) {
+  const { toast } = useToast();
+  return (
+    <button
+      type="button"
+      aria-label={`Publish ${def.name} to this encounter`}
+      title="Publish to the encounter's library — everyone working this fight gets it"
+      onClick={() => {
+        void api.attack.promote
+          .mutate({ id: def.id, encounterId })
+          .then(() => {
+            toast(`Published “${def.name}” to this encounter.`, "success");
+            onDone();
+          })
+          .catch(() => toast("Could not publish that attack.", "error"));
+      }}
+      className="w-full truncate rounded text-center text-[10px] text-accent hover:underline"
+    >
+      publish
+    </button>
+  );
+}
+
 function Section({
   title,
   hint,
   testId,
   defs,
+  promoteTo,
 }: {
   title: string;
   hint: string;
   testId: string;
   defs: AttackDef[];
+  /** The encounter these may be published into, for an admin. */
+  promoteTo?: string;
 }) {
+  const session = useSession();
+  const isAdmin =
+    session.status === "signedIn" && session.session.isAdmin === true;
+  const setAttackDefs = useEditorStore((s) => s.setAttackDefs);
+  const defsById = useEditorStore((s) => s.attackDefs);
+
   return (
     <section className="p-3" data-testid={testId}>
       <h3 className="mb-2 text-[10px] uppercase tracking-wide text-neutral-500">
@@ -154,7 +205,26 @@ function Section({
       ) : (
         <div className="grid grid-cols-2 gap-2">
           {defs.map((def) => (
-            <AttackTile key={def.id} def={def} />
+            <div key={def.id} className="flex flex-col gap-1">
+              <AttackTile def={def} />
+              {promoteTo && isAdmin && (
+                <PromoteButton
+                  def={def}
+                  encounterId={promoteTo}
+                  onDone={() =>
+                    // Reflect the move without a round trip: it has left this
+                    // section and joined the encounter's.
+                    setAttackDefs({
+                      ...defsById,
+                      [def.id]: {
+                        ...def,
+                        scope: { kind: "encounter", encounterId: promoteTo },
+                      },
+                    })
+                  }
+                />
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -199,6 +269,7 @@ export function AttacksTab() {
           testId="plan-attacks"
           hint="Attacks you draw here stay in this plan."
           defs={mine}
+          promoteTo={encounterId}
         />
       )}
       {canAuthor ? (

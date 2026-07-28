@@ -1189,3 +1189,136 @@ export function planToAttackContent(
  * two nodes answering to one id would make `findOne` a coin toss.
  */
 export const attackGroupId = (instanceId: string) => `attack:${instanceId}`;
+
+/**
+ * What could not come along when a selection was saved as an attack, so the
+ * dialog can say which (plan §19.3).
+ */
+export interface SelectionLeftBehind {
+  /**
+   * Collision targets dropped, by name: they name *plan* objects, and a
+   * definition cannot refer to one except through a parameter the plan answers
+   * (§18.4). Nothing is silently rewired — the author is told, so they can
+   * declare one.
+   *
+   * The only thing that *can* be left behind. An object reference out of the
+   * selection becomes a placeholder instead, and an animation belonging to an
+   * object you didn't select was never part of this attack to begin with.
+   */
+  collideWith: string[];
+}
+
+/**
+ * Turn part of a plan into a definition: the objects you selected, the slide
+ * state they are in, and the animations that belong to them (plan §19.3).
+ *
+ * **This is what §18.1's groups were for.** You have already dragged four
+ * circles into a cone and animated them; that *is* an attack, and the work is
+ * done by the time the author asks for it. So this reads the assembly rather
+ * than making the author redraw it.
+ *
+ * A reference **out of** the selection becomes a {@link attackSlots placeholder}
+ * — a hole the using plan fills (§18.14). That is the honest translation: a
+ * tether to the boss cannot come along, because the boss is not part of what is
+ * being saved, but "one end of this is something you'll nominate" is exactly
+ * what a placeholder says. One placeholder per distinct outside object, named
+ * after it, so `follow: { pin: boss, aim: tank }` arrives as two named slots.
+ *
+ * Returned as a designer {@link Plan} rather than an {@link AttackContent}, so
+ * the caller pipes it through {@link planToAttackContent} and unit space is
+ * still entered in exactly one place.
+ */
+export function selectionToAttackPlan(
+  plan: Plan,
+  selectedIds: readonly string[],
+  slideIndex: number,
+): { plan: Plan; leftBehind: SelectionLeftBehind } {
+  const slide = plan.slides[slideIndex];
+  const chosen = new Set(selectedIds);
+  // Document order, not selection order: an attack's parts keep the stacking
+  // they were drawn in, which is what `expandInstance` preserves downstream.
+  const objects = plan.objects.filter((o) => chosen.has(o.id));
+  const inside = new Set(objects.map((o) => o.id));
+
+  // One placeholder per distinct outside object, minted on demand and reused,
+  // so two references to the boss are one hole rather than two.
+  const holes = new Map<string, PlanObject>();
+  const holeFor = (id: string): string => {
+    const existing = holes.get(id);
+    if (existing) return existing.id;
+    const target = plan.objects.find((o) => o.id === id);
+    const state = slide?.states[id];
+    const hole: PlanObject = {
+      id: `slot-${holes.size + 1}`,
+      type: "placeholder",
+      base: {
+        ...(target?.base ?? { z: 0 }),
+        ...(state ?? {}),
+        // Named for what it stood for, because "which token is this aimed at"
+        // is a decision the planner revisits (§18.14).
+        name: target?.base.name ?? target?.base.label ?? "Slot",
+        label: "slot",
+      } as ObjectBase,
+    };
+    holes.set(id, hole);
+    return hole.id;
+  };
+  /** An id as the definition should say it: itself inside, a hole outside. */
+  const resolve = (id: string): string => (inside.has(id) ? id : holeFor(id));
+
+  const parts: PlanObject[] = objects.map((o) => ({
+    ...o,
+    // A part of an attack is not a member of the plan's group any more; the
+    // instance's own id groups it once placed (`expandInstance`).
+    groupId: undefined,
+    ...(o.fromId ? { fromId: resolve(o.fromId) } : {}),
+    ...(o.toId ? { toId: resolve(o.toId) } : {}),
+    ...(isFollowing(o.follow)
+      ? { follow: resolveFollow(o.follow, resolve) }
+      : {}),
+  }));
+
+  const leftBehind: SelectionLeftBehind = { collideWith: [] };
+  const animations: Anim[] = [];
+  for (const anim of slide?.animations ?? []) {
+    if (!inside.has(anim.objectId)) continue;
+    const outside = (anim.collideWith ?? []).filter((id) => !inside.has(id));
+    for (const id of outside) {
+      const target = plan.objects.find((o) => o.id === id);
+      leftBehind.collideWith.push(target?.base.name ?? id);
+    }
+    animations.push({
+      ...anim,
+      ...(anim.collideWith
+        ? { collideWith: anim.collideWith.filter((id) => inside.has(id)) }
+        : {}),
+    });
+  }
+  // Placeholders last: they are holes, not artwork, and `attackContentBox`
+  // ignores them anyway (§18.14).
+  const all = [...parts, ...holes.values()];
+  const states: Record<string, SlideState> = {};
+  for (const o of all) states[o.id] = slide?.states[o.id] ?? seedState(o);
+
+  return {
+    leftBehind,
+    plan: {
+      ...plan,
+      objects: all,
+      attacks: [],
+      groups: {},
+      slides: [
+        // Start and end are the same layout: a plan's animations already state
+        // their own targets (see `AnimParamsSchema`), so there is no settled
+        // state to recover — nothing is lost by the two agreeing.
+        {
+          id: ATTACK_START_SLIDE,
+          name: "Start",
+          states,
+          animations: [],
+        },
+        { id: ATTACK_END_SLIDE, name: "End", states, animations },
+      ],
+    },
+  };
+}
