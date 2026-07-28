@@ -3,25 +3,45 @@ import { z } from "zod";
 import {
   AttackBindingsSchema,
   AttackParamSchema,
+  AttackScopeSchema,
   FollowSchema,
   PlanObjectSchema,
   SlideSchema,
+  type AttackDef,
+  type AttackScope,
 } from "@raidplan/shared";
+import type { Viewer } from "../auth/access.js";
+import type { Db } from "../db/client.js";
 import {
   createAttack,
   deleteAttack,
   getAttack,
   getAttackDefsByIds,
   listAttacksForEncounter,
+  listAttacksForPlan,
   updateAttack,
 } from "../attacks/attacksRepo.js";
-import { adminProcedure, protectedProcedure, router } from "./context.js";
+import { protectedProcedure, publicProcedure, router } from "./context.js";
+import { mayView, requireEditable, requireViewable } from "./planAccess.js";
 
 /**
- * Attack definitions (plan §17). Reads are open to any signed-in caller (the
- * viewer and WebM export fetch the defs a plan references); authoring — the
- * designer's create/update/delete — is gated to site admins via
- * {@link adminProcedure}, like encounters.
+ * Attack definitions (plan §17, re-gated in §19.1).
+ *
+ * The gate is on the **noun, not the verb**. Authoring an attack is not a
+ * privilege; publishing one into an encounter's curated library is, because
+ * that library is seen by every planner working that fight. So each procedure
+ * asks what the def's {@link AttackScope} is and defers to a decision that
+ * already exists — the admin allowlist for an encounter, `planAccess` for a
+ * plan — rather than inventing a third notion of ownership.
+ *
+ *     encounter │ read: anyone, even anonymous │ write: site admin
+ *     plan      │ read: canView(plan)          │ write: canEdit(plan)
+ *
+ * **Reads are public** because a definition is drawing, not a secret, and the
+ * thing worth protecting is the plan that uses it — which `canView` already
+ * protects. Keeping `byIds` behind a session while `plan.get` was public meant
+ * a logged-out visitor following a share link watched the plan render with its
+ * mechanics silently missing.
  */
 const attackContent = {
   name: z.string().min(1).max(120),
@@ -42,46 +62,109 @@ const attackContent = {
   bindings: AttackBindingsSchema,
 };
 
+/**
+ * May this viewer *read* a definition in this scope?
+ *
+ * Used to filter, not to throw: `byIds` takes a list from the caller and must
+ * drop what isn't theirs rather than fail the whole request, since a plan
+ * legitimately mixes its own attacks with the encounter's.
+ */
+function mayRead(db: Db, scope: AttackScope, viewer: Viewer | null): boolean {
+  return scope.kind === "encounter" || mayView(db, scope.planId, viewer);
+}
+
+/**
+ * Assert this viewer may *author* in this scope, or throw.
+ *
+ * `requireEditable` answers for a plan, which also handles the plan not
+ * existing (404, not 403 — see `planAccess`). An encounter takes the site-admin
+ * allowlist, unchanged from §17.
+ */
+function assertMayAuthor(
+  db: Db,
+  scope: AttackScope,
+  viewer: Viewer,
+  isAdmin: boolean,
+): void {
+  if (scope.kind === "plan") {
+    requireEditable(db, scope.planId, viewer);
+    return;
+  }
+  if (!isAdmin) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Only admins publish attacks to an encounter.",
+    });
+  }
+}
+
+/**
+ * The def named by `id`, or `NOT_FOUND` — including when it exists but this
+ * viewer may not see it, which must be indistinguishable from absent.
+ */
+function requireReadable(db: Db, id: string, viewer: Viewer | null): AttackDef {
+  const def = getAttack(db, id);
+  if (!def || !mayRead(db, def.scope, viewer)) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "No such attack." });
+  }
+  return def;
+}
+
 export const attackRouter = router({
-  /** The definitions for a set of attack ids (what a plan's instances point at). */
-  byIds: protectedProcedure
+  /**
+   * The definitions for a set of attack ids (what a plan's instances point at).
+   *
+   * Public, and **filtered by scope** rather than trusting the id list — the ids
+   * are supplied by the caller, so this is the one place a stranger could ask
+   * for someone else's plan-scoped attack by guessing. Unreadable ids are
+   * dropped silently, exactly like ids that don't exist: a renderer's job is to
+   * draw what it may see.
+   */
+  byIds: publicProcedure
     .input(z.object({ ids: z.array(z.string().min(1)).max(200) }))
     .query(({ ctx, input }) =>
-      Object.values(getAttackDefsByIds(ctx.db, input.ids)),
+      Object.values(getAttackDefsByIds(ctx.db, input.ids)).filter((def) =>
+        mayRead(ctx.db, def.scope, ctx.viewer),
+      ),
     ),
 
-  /** Every attack authored for an encounter (for the palette and admin list). */
-  listForEncounter: protectedProcedure
+  /** An encounter's curated library — public, like the encounter itself. */
+  listForEncounter: publicProcedure
     .input(z.object({ encounterId: z.string().min(1) }))
     .query(({ ctx, input }) =>
       listAttacksForEncounter(ctx.db, input.encounterId),
     ),
 
-  /** One attack, for the designer to open. Admin-only — it's an authoring read. */
-  get: adminProcedure
-    .input(z.object({ id: z.string().min(1) }))
+  /** One plan's own attacks (§19.1), for anyone who may see that plan. */
+  listForPlan: publicProcedure
+    .input(z.object({ planId: z.string().min(1) }))
     .query(({ ctx, input }) => {
-      const def = getAttack(ctx.db, input.id);
-      if (!def) throw new TRPCError({ code: "NOT_FOUND" });
-      return def;
+      requireViewable(ctx.db, input.planId, ctx.viewer);
+      return listAttacksForPlan(ctx.db, input.planId);
     }),
 
-  create: adminProcedure
-    .input(z.object({ encounterId: z.string().min(1), ...attackContent }))
+  /** One attack, for the designer to open — readable by whoever may read it. */
+  get: publicProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .query(({ ctx, input }) => requireReadable(ctx.db, input.id, ctx.viewer)),
+
+  create: protectedProcedure
+    .input(z.object({ scope: AttackScopeSchema, ...attackContent }))
     .mutation(({ ctx, input }) => {
-      const { encounterId, ...content } = input;
-      // Encounter-scoped, because this is still the admin's curated library —
-      // §19.1's plan-scoped authoring arrives with the gate it needs.
-      return createAttack(ctx.db, {
-        scope: { kind: "encounter", encounterId },
-        ...content,
-      });
+      const { scope, ...content } = input;
+      assertMayAuthor(ctx.db, scope, ctx.viewer, ctx.isAdmin ?? false);
+      return createAttack(ctx.db, { scope, ...content });
     }),
 
-  update: adminProcedure
+  update: protectedProcedure
     .input(z.object({ id: z.string().min(1), ...attackContent }))
     .mutation(({ ctx, input }) => {
       const { id, ...content } = input;
+      // The scope comes from the **stored def**, never from the caller. Taking
+      // it from an argument would let anyone edit anyone's attack by naming a
+      // plan they happen to own.
+      const existing = requireReadable(ctx.db, id, ctx.viewer);
+      assertMayAuthor(ctx.db, existing.scope, ctx.viewer, ctx.isAdmin ?? false);
       const updated = updateAttack(ctx.db, id, content);
       if (!updated) {
         throw new TRPCError({ code: "NOT_FOUND", message: "No such attack." });
@@ -89,9 +172,11 @@ export const attackRouter = router({
       return updated;
     }),
 
-  remove: adminProcedure
+  remove: protectedProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(({ ctx, input }) => {
+      const existing = requireReadable(ctx.db, input.id, ctx.viewer);
+      assertMayAuthor(ctx.db, existing.scope, ctx.viewer, ctx.isAdmin ?? false);
       if (!deleteAttack(ctx.db, input.id)) {
         throw new TRPCError({ code: "NOT_FOUND", message: "No such attack." });
       }

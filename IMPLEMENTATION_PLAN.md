@@ -1136,11 +1136,24 @@ Each is independently shippable and green on its own commit.
    place, and the rebuild it emits `SELECT`s `plan_id` from the pre-migration table, which has no
    such column. Reading it as `NULL` is both what makes the statement run and what is true — every
    existing attack is an encounter's.
-3. **The gate moves.** `byIds` becomes public and filters by `canView`; plan-scoped
-   create/update/delete behind a `canEdit` check that derives the plan from the def; encounter-scoped
-   ones stay on `adminProcedure`; `attack.get` stops being admin-only and answers per scope. This is
-   the security-critical stage, so it is its own commit with the access-control tests §13 asks for —
-   including the negative cases: another user's plan, an anonymous caller, a mixed id list.
+3. **The gate moves** [DONE] — `byIds` and `listForEncounter` become public, `byIds` filtering by
+   scope; `listForPlan` added behind `canView`; create/update/delete on `protectedProcedure`, asking
+   `assertMayAuthor` which library the def belongs to; `attack.get` answers per scope.
+
+   `requireViewable`/`requireEditable` moved out of `planRouter` into **`planAccess.ts`** rather
+   than being reimplemented — a plan-scoped attack has to be gated by the very decision the plan's
+   own procedures make, or the two drift and the quieter one is wrong.
+
+   Two rules the tests pin down, both of them the kind of thing that is obvious until it isn't.
+   `update`/`remove` read the scope from the **stored def**, never from an argument, or naming a
+   plan you happen to own would be enough to edit anyone's attack. And `byIds` **filters** rather
+   than refusing: the ids come from the caller, a plan legitimately mixes its own attacks with the
+   encounter's, and an unreadable id has to be dropped exactly like a nonexistent one — refusing it
+   confirms it is there.
+
+   Ten access-control tests, weighted to the negative cases §13 asks for: a stranger, an anonymous
+   caller, a mixed id list, a public plan's viewer (readable, not writable), and a site admin
+   against someone else's private plan — because the encounter allowlist says nothing about a plan.
 4. **Authoring reachable.** The designer routes under a plan and saves to it; the palette grows its
    two sections; `AttackDefResolver` fetches both. An e2e as a **non-admin**: author an attack, place
    it, see it resolve on the editor canvas.

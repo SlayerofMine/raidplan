@@ -174,7 +174,9 @@ function AttackDesigner({
       });
       if (attackId)
         await api.attack.update.mutate({ id: attackId, ...content });
-      else await api.attack.create.mutate({ encounterId: home, ...content });
+      // The scope the designer was opened in — an encounter's library today,
+      // a plan's own once §19.3 routes it there.
+      else await api.attack.create.mutate({ scope: def.scope, ...content });
       navigate(`/admin/encounters/${home}/attacks`);
     } catch {
       setError("Could not save the attack.");

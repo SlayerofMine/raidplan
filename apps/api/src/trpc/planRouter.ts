@@ -5,18 +5,10 @@ import {
   PlanSchema,
   VisibilitySchema,
 } from "@raidplan/shared";
-import {
-  canAdminister,
-  canEdit,
-  canList,
-  canView,
-  type Viewer,
-} from "../auth/access.js";
-import type { Db } from "../db/client.js";
+import { canAdminister, canList, canView } from "../auth/access.js";
 import {
   createPlan,
   duplicatePlan,
-  findPlanRow,
   findPlanRowBySlug,
   getPlanWithDoc,
   listPlansFor,
@@ -30,6 +22,7 @@ import {
 import { isValidSlug } from "../plans/slug.js";
 import { getEncounter } from "../encounters/encountersRepo.js";
 import { protectedProcedure, publicProcedure, router } from "./context.js";
+import { requireEditable, requireViewable } from "./planAccess.js";
 
 /**
  * The app API (plan §9). Every procedure resolves the plan, then asks
@@ -37,30 +30,9 @@ import { protectedProcedure, publicProcedure, router } from "./context.js";
  * place authorization is applied, and the repository stays unguarded and
  * honest about it.
  *
- * A caller who may not *see* a plan gets `NOT_FOUND`, never `FORBIDDEN`:
- * telling a stranger "this exists but isn't yours" leaks that it exists.
+ * `requireViewable`/`requireEditable` live in `planAccess.ts` since §19.1, so
+ * that a plan-scoped attack is gated by the very same decision as the plan.
  */
-
-/** Load a plan row and assert the viewer may see it, or 404. */
-function requireViewable(db: Db, planId: string, viewer: Viewer | null) {
-  const row = findPlanRow(db, planId);
-  if (!row || !canView(toAcl(row), viewer)) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "No such plan." });
-  }
-  return row;
-}
-
-/** As above, but the viewer must also be allowed to change it. */
-function requireEditable(db: Db, planId: string, viewer: Viewer) {
-  const row = requireViewable(db, planId, viewer);
-  if (!canEdit(toAcl(row), viewer)) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "You can't edit this plan.",
-    });
-  }
-  return row;
-}
 
 export const planRouter = router({
   create: protectedProcedure
