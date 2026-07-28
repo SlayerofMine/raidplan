@@ -72,6 +72,7 @@ const planWith = (attackId: string): Plan => ({
       args: {},
     },
   ],
+  groups: {},
   slides: [{ id: "s0", states: {}, animations: [] }],
   schemaVersion: SCHEMA_VERSION,
 });

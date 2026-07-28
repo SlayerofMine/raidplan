@@ -986,6 +986,7 @@ export function defToPlan(def: AttackDef): Plan {
     background: { assetId: ATTACK_BOX_ASSET, width: size, height: size },
     objects,
     attacks: [],
+    groups: {},
     slides: [
       { id: ATTACK_START_SLIDE, name: "Start", states: start, animations: [] },
       {

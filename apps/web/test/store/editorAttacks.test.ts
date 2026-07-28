@@ -316,6 +316,7 @@ describe("round-trip", () => {
       objects: [],
       attacks: [],
       slides: [{ id: "s0", states: {}, animations: [] }],
+      groups: {},
       schemaVersion: SCHEMA_VERSION,
     });
     state().addAttack("atk1", { x: 10, y: 20 });

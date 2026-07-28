@@ -32,6 +32,7 @@ function validPlan(): Plan {
       },
     ],
     attacks: [],
+    groups: {},
     slides: [
       {
         id: "slide_1",

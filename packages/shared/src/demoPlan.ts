@@ -413,6 +413,7 @@ export function buildDemoPlan(): Plan {
     background: { ...BOARD },
     objects,
     attacks: [],
+    groups: {},
     slides: slidesFrom(objects, [
       {
         id: "slide-effects",

@@ -79,6 +79,7 @@ function plan(objects: PlanObject[], slides: Slide[]): Plan {
     background: { assetId: "bg", width: 1000, height: 1000 },
     objects,
     attacks: [],
+    groups: {},
     slides,
     schemaVersion: SCHEMA_VERSION,
   };

@@ -70,6 +70,7 @@ function seedOfflinePlan() {
     objects: [],
     attacks: [],
     slides: [{ id: "s1", states: {}, animations: [] }],
+    groups: {},
     schemaVersion: SCHEMA_VERSION,
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));

@@ -87,6 +87,7 @@ const plan: Plan = {
     { id: "s0", states: {}, animations: [] },
     { id: "s1", states: {}, animations: [] },
   ],
+  groups: {},
   schemaVersion: SCHEMA_VERSION,
 };
 

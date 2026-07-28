@@ -120,6 +120,7 @@ function PlacedAttack({
       // only here so a tether into one of them resolves, and are never drawn
       // from this shell.
       slides: [{ id: "s", states: {}, animations: [] }],
+      groups: {},
       schemaVersion: SCHEMA_VERSION,
     };
     const expanded = expandPlan(shell, { [instance.attackId]: def });
