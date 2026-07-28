@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 /** Shared toolbar primitives, so the editor toolbar and the attack designer
  * draw identical controls (plan §2 / §17). */
 
@@ -13,7 +15,8 @@ export function Btn({
   disabled,
 }: {
   onClick: () => void;
-  label: string;
+  /** Text, or an icon — an icon label needs `ariaLabel` to carry the name. */
+  label: ReactNode;
   ariaLabel?: string;
   title?: string;
   disabled?: boolean;
@@ -23,9 +26,9 @@ export function Btn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      aria-label={ariaLabel ?? label}
+      aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)}
       title={title}
-      className="rounded border border-panelborder px-2 py-1 text-sm hover:border-accent disabled:opacity-40"
+      className="inline-flex items-center justify-center rounded border border-panelborder px-2 py-1 text-sm hover:border-accent disabled:opacity-40"
     >
       {label}
     </button>

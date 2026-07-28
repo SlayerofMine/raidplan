@@ -1,3 +1,4 @@
+import { LuPencil, LuX } from "react-icons/lu";
 import { ANIM_KINDS, ANIM_TRIGGERS, type Anim } from "@raidplan/shared";
 import {
   defaultEffectFor,
@@ -7,6 +8,7 @@ import {
 } from "../anim/effectChoices";
 import { useEditorStore } from "../store/editorStore";
 import { finishMoveDraft, useMoveDraft } from "./canvas/useMoveDraft";
+import { CollapsiblePanel } from "./CollapsiblePanel";
 import { objectDisplayName } from "./objectName";
 
 /** GSAP eases offered in the picker (plan §7: easing is a GSAP ease name). */
@@ -117,9 +119,10 @@ export function AnimationPanel() {
               : "Click the corners of the route on the board"
           }
           onClick={() => begin(routable!, currentSlideIndex)}
-          className="w-full rounded border border-panelborder py-1 text-sm hover:border-accent disabled:opacity-40"
+          className="flex w-full items-center justify-center gap-1.5 rounded border border-panelborder py-1 text-sm hover:border-accent disabled:opacity-40"
         >
-          ✎ Draw a move
+          <LuPencil aria-hidden />
+          Draw a move
         </button>
       )}
 
@@ -247,9 +250,9 @@ function AnimationRow({
           type="button"
           aria-label="Delete animation"
           onClick={() => deleteAnimations(slideIndex, ids)}
-          className="text-xs text-neutral-500 hover:text-accent"
+          className="text-sm text-neutral-500 hover:text-accent"
         >
-          ×
+          <LuX aria-hidden />
         </button>
       </div>
 
@@ -532,12 +535,9 @@ function ColliderPicker({
 
 function Section({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-2 border-t border-panelborder px-3 py-2">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
-        Animations
-      </h2>
-      {children}
-    </div>
+    <CollapsiblePanel id="animations" title="Animations" testId="anim-panel">
+      <div className="flex flex-col gap-2 px-3 pb-2">{children}</div>
+    </CollapsiblePanel>
   );
 }
 

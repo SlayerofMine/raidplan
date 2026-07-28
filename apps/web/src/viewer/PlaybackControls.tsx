@@ -1,3 +1,12 @@
+import type { ReactNode } from "react";
+import {
+  LuMaximize,
+  LuPause,
+  LuPlay,
+  LuRotateCcw,
+  LuSkipBack,
+  LuSkipForward,
+} from "react-icons/lu";
 import type { PlaybackApi } from "../anim/usePlayback";
 
 /**
@@ -19,21 +28,25 @@ export function PlaybackControls({
     <div className="flex items-center gap-2 border-t border-panelborder bg-panel px-3 py-2">
       <Btn
         label="Previous slide"
-        glyph="⏮"
+        icon={<LuSkipBack aria-hidden />}
         onClick={playback.previous}
         disabled={slideIndex <= 0}
       />
       <Btn
         label={isPlaying ? "Pause" : "Play"}
-        glyph={isPlaying ? "⏸" : "▶"}
+        icon={isPlaying ? <LuPause aria-hidden /> : <LuPlay aria-hidden />}
         onClick={playback.toggle}
         disabled={slideCount === 0}
         testId="play-toggle"
       />
-      <Btn label="Restart slide" glyph="↺" onClick={playback.restart} />
+      <Btn
+        label="Restart slide"
+        icon={<LuRotateCcw aria-hidden />}
+        onClick={playback.restart}
+      />
       <Btn
         label="Next slide"
-        glyph="⏭"
+        icon={<LuSkipForward aria-hidden />}
         onClick={playback.next}
         disabled={slideIndex >= slideCount - 1}
       />
@@ -58,20 +71,24 @@ export function PlaybackControls({
         className="mx-2 flex-1 accent-accent"
       />
 
-      <Btn label="Fullscreen" glyph="⛶" onClick={onFullscreen} />
+      <Btn
+        label="Fullscreen"
+        icon={<LuMaximize aria-hidden />}
+        onClick={onFullscreen}
+      />
     </div>
   );
 }
 
 function Btn({
   label,
-  glyph,
+  icon,
   onClick,
   disabled,
   testId,
 }: {
   label: string;
-  glyph: string;
+  icon: ReactNode;
   onClick: () => void;
   disabled?: boolean;
   testId?: string;
@@ -84,9 +101,9 @@ function Btn({
       onClick={onClick}
       disabled={disabled}
       data-testid={testId}
-      className="rounded border border-panelborder px-2 py-1 text-sm hover:border-accent disabled:opacity-40"
+      className="flex items-center justify-center rounded border border-panelborder px-2 py-1.5 text-sm hover:border-accent disabled:opacity-40"
     >
-      {glyph}
+      {icon}
     </button>
   );
 }

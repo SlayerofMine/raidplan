@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
+import { LuX } from "react-icons/lu";
 import { ToastContext, type Toast, type ToastKind } from "./toastContext";
 
 /**
@@ -86,7 +87,7 @@ function ToastViewport({
             aria-label="Dismiss"
             className="text-neutral-400 hover:text-neutral-100"
           >
-            ✕
+            <LuX aria-hidden />
           </button>
         </div>
       ))}

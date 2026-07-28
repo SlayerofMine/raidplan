@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { LuChevronDown, LuChevronRight } from "react-icons/lu";
 import { useEditorStore } from "../../store/editorStore";
 import { usePlayhead } from "./playhead";
 import { PlayheadTransport } from "./PlayheadTransport";
@@ -45,8 +46,12 @@ export function TimelineDock() {
           onClick={() => setOpen((v) => !v)}
           className="flex min-w-0 items-center gap-2 text-xs text-neutral-300 hover:text-accent"
         >
-          <span aria-hidden="true" className="text-neutral-500">
-            {open ? "▾" : "▸"}
+          <span className="text-neutral-500">
+            {open ? (
+              <LuChevronDown aria-hidden />
+            ) : (
+              <LuChevronRight aria-hidden />
+            )}
           </span>
           Timeline
           <span className="truncate text-neutral-500">· {slideName}</span>

@@ -6,6 +6,7 @@ import { CanvasStage } from "./canvas/CanvasStage";
 import { EmptySlideHint } from "./EmptySlideHint";
 import { IconPalette } from "./IconPalette";
 import { isLocalPlan, LOCAL_PLAN_ID } from "./planScope";
+import { ObjectsPanel } from "./ObjectsPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { SaveStatus } from "./SaveStatus";
 import { SyncedIconResolver } from "./SyncedIconResolver";
@@ -26,6 +27,10 @@ import {
  * The five-region editor shell (plan §1.1): toolbar across the top, palette /
  * canvas / properties in the middle row, slides strip along the bottom. The grid
  * gives the canvas all remaining space while the side panels keep a fixed width.
+ *
+ * The right rail is one scroller holding four collapsible panels; each remembers
+ * whether it is shut (see `CollapsiblePanel`), so the rail can be pared back to
+ * the one being worked in without that choice riding along in the plan.
  *
  * It is also where the editing lock is applied. While the Timeline's playhead is
  * off zero the canvas shows a frame of the slide's animation rather than the
@@ -86,6 +91,7 @@ export function EditorLayout({ planId }: { planId: string }) {
         style={{ gridArea: "props" }}
         className="flex min-h-0 flex-col overflow-y-auto border-l border-panelborder bg-panel"
       >
+        <ObjectsPanel />
         <PropertiesPanel />
         <AnimationPanel />
         <AttacksPanel />

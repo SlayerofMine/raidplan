@@ -219,7 +219,7 @@ test.describe("slides", () => {
     await page.getByTestId("slide-0").click();
     await expect(page.getByTestId("object-count")).toHaveText("1");
 
-    // …and "⇥" is how a scene carries on: same cast, same places.
+    // …and "Continue" is how a scene carries on: same cast, same places.
     await page.getByTestId("continue-slide-0").click();
     await expect(page.getByTestId("object-count")).toHaveText("1");
   });

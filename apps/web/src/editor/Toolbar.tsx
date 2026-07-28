@@ -1,4 +1,5 @@
 import { useRef, useState, type ChangeEvent } from "react";
+import { LuMinus, LuPlus } from "react-icons/lu";
 import { Link } from "react-router-dom";
 import {
   BACKGROUNDS,
@@ -283,7 +284,7 @@ export function Toolbar({
       <Btn
         onClick={() => zoomCentre(1 / 1.2)}
         disabled={view.scale <= SCALE_MIN}
-        label="−"
+        label={<LuMinus aria-hidden />}
         ariaLabel="Zoom out"
       />
       <span
@@ -295,7 +296,7 @@ export function Toolbar({
       <Btn
         onClick={() => zoomCentre(1.2)}
         disabled={view.scale >= SCALE_MAX}
-        label="+"
+        label={<LuPlus aria-hidden />}
         ariaLabel="Zoom in"
       />
       <Btn onClick={fitToStage} label="Fit" />

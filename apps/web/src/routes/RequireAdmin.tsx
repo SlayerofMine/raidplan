@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { LuLoaderCircle } from "react-icons/lu";
 import { Link } from "react-router-dom";
 import { loginUrl, useSession } from "../api/useSession";
 
@@ -26,7 +27,18 @@ export function RequireAdmin({
 }) {
   const session = useSession();
 
-  if (session.status === "loading") return <Centered>…</Centered>;
+  if (session.status === "loading") {
+    return (
+      <Centered>
+        <span role="status" aria-label="Loading">
+          <LuLoaderCircle
+            className="animate-spin text-neutral-500"
+            aria-hidden
+          />
+        </span>
+      </Centered>
+    );
+  }
   if (session.status === "unreachable") {
     return <Centered>Can’t reach the RaidPlans server.</Centered>;
   }

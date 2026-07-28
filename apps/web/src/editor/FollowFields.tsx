@@ -1,3 +1,4 @@
+import { LuCrosshair } from "react-icons/lu";
 import type { Follow } from "@raidplan/shared";
 
 /**
@@ -64,9 +65,9 @@ export function FollowFields({
             title="Back to the middle"
             data-testid={`${testIdPrefix}-origin-reset`}
             onClick={() => onOrigin({ ox: 0.5, oy: 0.5 })}
-            className="rounded border border-panelborder px-1.5 py-1 text-xs text-neutral-400 hover:text-neutral-200"
+            className="flex items-center justify-center rounded border border-panelborder px-1.5 py-1 text-sm text-neutral-400 hover:text-neutral-200"
           >
-            ⌖
+            <LuCrosshair aria-hidden />
           </button>
         </div>
       </div>
