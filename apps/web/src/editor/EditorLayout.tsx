@@ -84,8 +84,9 @@ export function EditorLayout({ planId }: { planId: string }) {
       </div>
       {/* Fetches URLs for synced WoW tokens a reopened plan references. */}
       <SyncedIconResolver />
-      {/* Loads this encounter's attack definitions for the preview + export. */}
-      <AttackDefResolver />
+      {/* Loads the attack definitions this plan may use — the encounter's and
+          its own (§19.4) — for the preview and the export. */}
+      <AttackDefResolver planId={planId} />
       <Locked
         disabled={locked}
         style={{ gridArea: "props" }}

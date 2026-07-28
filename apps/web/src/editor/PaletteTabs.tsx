@@ -1,7 +1,9 @@
-import { attackSlots, type ShapeKind } from "@raidplan/shared";
+import { Link } from "react-router-dom";
+import { attackSlots, type AttackDef, type ShapeKind } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
 import { AttackThumbnail } from "./AttackThumbnail";
 import { ATTACK_DATA_TYPE, SHAPE_DATA_TYPE } from "./paletteDrag";
+import { isLocalPlan } from "./planScope";
 
 /**
  * The palette's non-icon tabs (plan §18.5).
@@ -80,80 +82,143 @@ export function ShapesTab({ authoring = false }: { authoring?: boolean }) {
   );
 }
 
-export function AttacksTab() {
-  const encounterId = useEditorStore((s) => s.encounterId);
+/** One placeable definition: its thumbnail, its name, and what it still needs. */
+function AttackTile({ def }: { def: AttackDef }) {
   const background = useEditorStore((s) => s.background);
   const addAttack = useEditorStore((s) => s.addAttack);
   const selectedIds = useEditorStore((s) => s.selectedIds);
-  const defs = Object.values(useEditorStore((s) => s.attackDefs));
 
-  if (!encounterId) {
-    return (
-      <p
-        data-testid="attacks-no-encounter"
-        className="p-3 text-xs text-neutral-500"
-      >
-        This plan isn’t tied to an encounter, so it has no attack library.
-      </p>
-    );
-  }
-  if (defs.length === 0) {
-    return (
-      <p data-testid="no-attacks" className="p-3 text-xs text-neutral-500">
-        This encounter has no attacks yet.
-      </p>
-    );
-  }
+  // A definition with holes in it needs objects to fill them, and takes them
+  // from the selection: pick the boss and the tank, then place the frontal
+  // (§18.14).
+  const slots = attackSlots(def);
+  const short = slots.length - selectedIds.length;
+  const blocked = short > 0;
 
   return (
-    <div className="grid grid-cols-2 gap-2 p-3" data-testid="attacks-tab">
-      {defs.map((def) => {
-        // A definition with holes in it needs objects to fill them, and takes
-        // them from the selection: pick the boss and the tank, then place the
-        // frontal (§18.14).
-        const slots = attackSlots(def);
-        const short = slots.length - selectedIds.length;
-        const blocked = short > 0;
-        return (
-          <button
-            key={def.id}
-            type="button"
-            title={
-              blocked
-                ? `Select ${slots.length} object${slots.length === 1 ? "" : "s"} first — this attack needs ${slots
-                    .map((slot) => slot.base.name ?? "a slot")
-                    .join(", ")}`
-                : def.name
-            }
-            aria-label={`Place ${def.name}`}
-            disabled={blocked}
-            onClick={() =>
-              addAttack(def.id, {
-                x: background.width / 2,
-                y: background.height / 2,
-              })
-            }
-            draggable={!blocked}
-            onDragStart={(e) =>
-              e.dataTransfer.setData(ATTACK_DATA_TYPE, def.id)
-            }
-            className={`${tile} disabled:cursor-not-allowed disabled:opacity-40`}
+    <button
+      type="button"
+      title={
+        blocked
+          ? `Select ${slots.length} object${slots.length === 1 ? "" : "s"} first — this attack needs ${slots
+              .map((slot) => slot.base.name ?? "a slot")
+              .join(", ")}`
+          : def.name
+      }
+      aria-label={`Place ${def.name}`}
+      disabled={blocked}
+      onClick={() =>
+        addAttack(def.id, {
+          x: background.width / 2,
+          y: background.height / 2,
+        })
+      }
+      draggable={!blocked}
+      onDragStart={(e) => e.dataTransfer.setData(ATTACK_DATA_TYPE, def.id)}
+      className={`${tile} disabled:cursor-not-allowed disabled:opacity-40`}
+    >
+      <span className="pointer-events-none aspect-square w-full">
+        <AttackThumbnail def={def} />
+      </span>
+      <span className="w-full truncate text-center">{def.name}</span>
+      {blocked && (
+        <span
+          data-testid={`needs-slots-${def.id}`}
+          className="w-full truncate text-center text-[10px] text-amber-400/80"
+        >
+          select {short} more
+        </span>
+      )}
+    </button>
+  );
+}
+
+function Section({
+  title,
+  hint,
+  testId,
+  defs,
+}: {
+  title: string;
+  hint: string;
+  testId: string;
+  defs: AttackDef[];
+}) {
+  return (
+    <section className="p-3" data-testid={testId}>
+      <h3 className="mb-2 text-[10px] uppercase tracking-wide text-neutral-500">
+        {title}
+      </h3>
+      {defs.length === 0 ? (
+        <p className="text-xs text-neutral-500">{hint}</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {defs.map((def) => (
+            <AttackTile key={def.id} def={def} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * The attack library, in **two sections** (plan §19.4): the encounter's curated
+ * attacks, and this plan's own.
+ *
+ * Split because "who else sees this" is a fact the author needs continuously and
+ * cannot infer from a thumbnail — editing a curated attack changes it for
+ * everyone working that fight, and editing your own changes it for you. A plan
+ * with no encounter used to have no attacks and no way to get any; it now has
+ * the second section and the whole feature.
+ */
+export function AttacksTab() {
+  const planId = useEditorStore((s) => s.id);
+  const encounterId = useEditorStore((s) => s.encounterId);
+  const defs = Object.values(useEditorStore((s) => s.attackDefs));
+
+  const mine = defs.filter((d) => d.scope.kind === "plan");
+  const curated = defs.filter((d) => d.scope.kind === "encounter");
+  // The offline scratch plan has no server to author against; everything else
+  // does, whether or not it was seeded from an encounter.
+  const canAuthor = !isLocalPlan(planId);
+
+  return (
+    <div data-testid="attacks-tab" className="divide-y divide-panelborder">
+      {encounterId && (
+        <Section
+          title="Encounter"
+          testId="encounter-attacks"
+          hint="This encounter has no attacks yet."
+          defs={curated}
+        />
+      )}
+      {canAuthor && (
+        <Section
+          title="This plan"
+          testId="plan-attacks"
+          hint="Attacks you draw here stay in this plan."
+          defs={mine}
+        />
+      )}
+      {canAuthor ? (
+        <div className="p-3">
+          <Link
+            to={`/plan/${planId}/attacks/new`}
+            data-testid="new-plan-attack"
+            className={`${tile} block text-center hover:border-accent`}
           >
-            <span className="pointer-events-none aspect-square w-full">
-              <AttackThumbnail def={def} />
-            </span>
-            <span className="w-full truncate text-center">{def.name}</span>
-            {blocked && (
-              <span
-                data-testid={`needs-slots-${def.id}`}
-                className="w-full truncate text-center text-[10px] text-amber-400/80"
-              >
-                select {short} more
-              </span>
-            )}
-          </button>
-        );
-      })}
+            + New attack
+          </Link>
+        </div>
+      ) : (
+        <p
+          data-testid="attacks-local-plan"
+          className="p-3 text-xs text-neutral-500"
+        >
+          Save this plan to the server to draw attacks of your own.
+        </p>
+      )}
     </div>
   );
 }

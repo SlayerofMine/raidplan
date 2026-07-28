@@ -1154,9 +1154,23 @@ Each is independently shippable and green on its own commit.
    Ten access-control tests, weighted to the negative cases §13 asks for: a stranger, an anonymous
    caller, a mixed id list, a public plan's viewer (readable, not writable), and a site admin
    against someone else's private plan — because the encounter allowlist says nothing about a plan.
-4. **Authoring reachable.** The designer routes under a plan and saves to it; the palette grows its
-   two sections; `AttackDefResolver` fetches both. An e2e as a **non-admin**: author an attack, place
-   it, see it resolve on the editor canvas.
+4. **Authoring reachable** [DONE] — `/plan/:planId/attacks/new` and `/plan/:planId/attacks/:id`
+   reach the same designer as the admin routes; the route carries the scope, so what differs is a
+   value (where "save" sends it, where "back" returns to) rather than a mode flag threaded through
+   the tree. Only the admin route wears `RequireAdmin` — a plan's own attacks are gated by the plan,
+   on the server, where that decision already lives.
+
+   `AttackDefResolver` fetches both libraries into the one `attackDefs` map, with `allSettled`
+   rather than `all`: the plan's own attacks failing to arrive is no reason to lose the encounter's.
+   Nothing downstream of the map noticed there are now two sources.
+
+   The palette's two sections are the point at which this becomes usable, and the palette had **no
+   test at all** — so it got four, including the case §19 exists for: a plan with no encounter now
+   has its own section instead of a sentence explaining that it has nothing.
+
+   The e2e signs in as `e2e-planner`, deliberately *not* on the allowlist, and asserts the admin
+   panel is closed to them before drawing an attack in their own plan and placing it. If the gate
+   ever creeps back onto the act of authoring, that fails at the designer's door.
 5. **Save as attack.** Selection → def, with the reaching-animation rule and the separate
    "replace selection with an instance" action. Rides on §18.1's group selection, so the common case
    is "select group, save".

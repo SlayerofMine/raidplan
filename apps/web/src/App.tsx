@@ -40,6 +40,16 @@ export function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/plan/:id/edit" element={<EditorPage />} />
+            {/* Authoring an attack of your own, inside your own plan (§19.3).
+                No admin gate: the plan's ACL is the whole permission. */}
+            <Route
+              path="/plan/:planId/attacks/new"
+              element={<AttackDesignerPage />}
+            />
+            <Route
+              path="/plan/:planId/attacks/:attackId"
+              element={<AttackDesignerPage />}
+            />
             {/*
             The viewer lives at /view/:slug, not /p/:slug: `/p/*` is the public
             *share link*, served by the API so Discord's crawler gets real Open

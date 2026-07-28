@@ -4,10 +4,10 @@ import {
   ATTACK_END_SLIDE,
   defToPlan,
   planToAttackContent,
-  scopeEncounterId,
   type AttackBindings,
   type AttackDef,
   type AttackParam,
+  type AttackScope,
   type Follow,
 } from "@raidplan/shared";
 import { api } from "../api/client";
@@ -28,7 +28,7 @@ import { clearHistory, useEditorStore } from "../store/editorStore";
 import { Centered, RequireAdmin } from "./RequireAdmin";
 
 /**
- * The attack designer (plan §17, stage 4).
+ * The attack designer (plan §17 stage 4; reachable by anyone in §19.3).
  *
  * An {@link AttackDef} is a one-slide mini-plan, so the designer *is* the editor:
  * `defToPlan` loads the def onto the shared store and the same canvas, palette
@@ -36,13 +36,20 @@ import { Centered, RequireAdmin } from "./RequireAdmin";
  * objects sit); **Animate** edits the single slide — its end state (drag to set a
  * move/scale target) and its animations. `planToAttackContent` reads it back on
  * save. Unlike the plan editor, nothing here auto-persists as a plan.
+ *
+ * **The route carries the scope** (§19.3): `/plan/:planId/attacks/…` authors into
+ * one plan, `/admin/encounters/:encounterId/attacks/…` into the curated library.
+ * One component either way — what differs is where "save" sends it and where
+ * "back" returns to, which is a value, not a mode flag threaded through the tree.
+ * Only the admin route wears `RequireAdmin`; a plan's own attacks are gated by
+ * the plan, on the server, where that decision already lives.
  */
 const DEFAULT_SIZE = { w: 400, h: 400 };
 
-function blankDef(encounterId: string): AttackDef {
+function blankDef(scope: AttackScope): AttackDef {
   return {
     id: "",
-    scope: { kind: "encounter", encounterId },
+    scope,
     name: "New attack",
     version: 1,
     defaultSize: DEFAULT_SIZE,
@@ -55,27 +62,55 @@ function blankDef(encounterId: string): AttackDef {
   };
 }
 
+/**
+ * Where a new attack belongs, from the route that opened the designer. Absent on
+ * `/admin/attacks/:id`, which edits an existing def — that one carries its own.
+ */
+function scopeFromRoute(
+  planId?: string,
+  encounterId?: string,
+): AttackScope | undefined {
+  if (planId) return { kind: "plan", planId };
+  if (encounterId) return { kind: "encounter", encounterId };
+  return undefined;
+}
+
 export function AttackDesignerPage() {
-  const { attackId, encounterId } = useParams<{
+  const { attackId, encounterId, planId } = useParams<{
     attackId?: string;
     encounterId?: string;
+    planId?: string;
   }>();
+
+  const scope = scopeFromRoute(planId, encounterId);
+  const home = planId
+    ? `/plan/${planId}/edit`
+    : `/admin/encounters/${encounterId}/attacks`;
+
+  // A plan's own attack needs no site admin — the server asks the plan's ACL,
+  // which is the same question `plan.get` already answers for the editor itself.
+  if (planId) {
+    return <AttackDesigner attackId={attackId} scope={scope} home={home} />;
+  }
+
   const next = attackId
     ? `/admin/attacks/${attackId}`
     : `/admin/encounters/${encounterId}/attacks/new`;
   return (
     <RequireAdmin next={next}>
-      <AttackDesigner attackId={attackId} encounterId={encounterId} />
+      <AttackDesigner attackId={attackId} scope={scope} home={home} />
     </RequireAdmin>
   );
 }
 
 function AttackDesigner({
   attackId,
-  encounterId,
+  scope,
+  home,
 }: {
   attackId?: string;
-  encounterId?: string;
+  scope?: AttackScope;
+  home: string;
 }) {
   useEditorHotkeys();
   const navigate = useNavigate();
@@ -147,20 +182,16 @@ function AttackDesigner({
         .query({ id: attackId })
         .then(apply)
         .catch(() => setError("Could not load that attack."));
-    } else if (encounterId) {
-      apply(blankDef(encounterId));
+    } else if (scope) {
+      apply(blankDef(scope));
     }
     return () => {
       cancelled = true;
     };
-  }, [attackId, encounterId]);
-
-  // Where this attack lives, which for now is always an encounter's library —
-  // read off the def rather than the route, since editing arrives by id alone.
-  const home = scopeEncounterId(def?.scope ?? { kind: "plan", planId: "" });
+  }, [attackId, scope]);
 
   const save = async () => {
-    if (!def || !home) return;
+    if (!def) return;
     setSaving(true);
     setError(null);
     try {
@@ -177,7 +208,7 @@ function AttackDesigner({
       // The scope the designer was opened in — an encounter's library today,
       // a plan's own once §19.3 routes it there.
       else await api.attack.create.mutate({ scope: def.scope, ...content });
-      navigate(`/admin/encounters/${home}/attacks`);
+      navigate(home);
     } catch {
       setError("Could not save the attack.");
       setSaving(false);
@@ -204,11 +235,8 @@ function AttackDesigner({
         style={{ gridArea: "toolbar" }}
         className="flex flex-wrap items-center gap-2 border-b border-panelborder bg-panel px-3 py-2"
       >
-        <Link
-          to={`/admin/encounters/${home}/attacks`}
-          className="text-sm text-accent hover:underline"
-        >
-          ← Attacks
+        <Link to={home} className="text-sm text-accent hover:underline">
+          ← Back
         </Link>
         <input
           aria-label="Attack name"
