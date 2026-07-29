@@ -134,6 +134,15 @@ export interface EditorState extends PlanDoc {
    * a thing follows is a fact about the thing, not about the moment.
    */
   setFollow: (id: string, follow: Follow | undefined) => void;
+  /**
+   * Mark an object a **slot** — a stand-in for something the using plan will
+   * supply (plan §21) — or clear it. Only meaningful inside an attack
+   * definition, which is the only document the Attack Designer ever holds.
+   *
+   * Slide-independent, like lock and style: what a thing *stands for* is a fact
+   * about the thing, not about the moment.
+   */
+  setSlotName: (id: string, slotName: string | undefined) => void;
   deleteObjects: (ids: string[]) => void;
   deleteSelected: () => void;
   duplicateSelected: () => string[];
@@ -1023,6 +1032,15 @@ export const useEditorStore = create<EditorState>()(
           // plan disagree with itself about which it meant.
           if (isFollowing(follow)) object.follow = follow;
           else delete object.follow;
+        }),
+
+      setSlotName: (id, slotName) =>
+        set((s) => {
+          const object = s.objects[id];
+          if (!object) return;
+          const trimmed = slotName?.trim();
+          if (trimmed) object.slotName = trimmed;
+          else delete object.slotName;
         }),
 
       deleteObjects: (ids) =>

@@ -11,6 +11,7 @@ import { useSoleSelection } from "../store/useSoleSelection";
 import { CollapsiblePanel } from "./CollapsiblePanel";
 import { FollowFields } from "./FollowFields";
 import { useFollowChoices } from "./useFollowChoices";
+import { useIsDesigner } from "./designer/designerContext";
 
 /** Round for display without fighting the user mid-edit. */
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -30,6 +31,8 @@ export function PropertiesPanel() {
   const updateStyle = useEditorStore((s) => s.updateStyle);
   const setLocked = useEditorStore((s) => s.setLocked);
   const setFollow = useEditorStore((s) => s.setFollow);
+  const setSlotName = useEditorStore((s) => s.setSlotName);
+  const isDesigner = useIsDesigner();
   const followChoices = useFollowChoices(object?.id);
   const bringForward = useEditorStore((s) => s.bringForward);
   const sendBackward = useEditorStore((s) => s.sendBackward);
@@ -55,6 +58,38 @@ export function PropertiesPanel() {
 
       {object && state && (
         <div data-testid="properties" className="flex flex-col gap-2 px-3 pb-4">
+          {/* Only a definition can have slots, so only the designer asks. In a
+              plan the field would be a promise nothing could keep. */}
+          {isDesigner && (
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-neutral-500">Slot</span>
+                <input
+                  type="checkbox"
+                  data-testid="prop-is-slot"
+                  aria-label="Use as a slot"
+                  checked={object.slotName !== undefined}
+                  onChange={(e) =>
+                    setSlotName(
+                      object.id,
+                      e.target.checked ? "the target" : undefined,
+                    )
+                  }
+                />
+              </span>
+              {object.slotName !== undefined && (
+                <input
+                  type="text"
+                  data-testid="prop-slot-name"
+                  aria-label="What the plan is asked for"
+                  value={object.slotName}
+                  placeholder="the tank"
+                  onChange={(e) => setSlotName(object.id, e.target.value)}
+                  className="rounded border border-panelborder bg-neutral-900 px-2 py-0.5 text-sm"
+                />
+              )}
+            </label>
+          )}
           <NumberField
             label="X"
             testId="prop-x"

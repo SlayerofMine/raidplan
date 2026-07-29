@@ -11,6 +11,9 @@ const EditorPage = lazy(() =>
 const ViewerPage = lazy(() =>
   import("./routes/ViewerPage").then((m) => ({ default: m.ViewerPage })),
 );
+const DesignerPage = lazy(() =>
+  import("./routes/DesignerPage").then((m) => ({ default: m.DesignerPage })),
+);
 const AdminPage = lazy(() =>
   import("./routes/AdminPage").then((m) => ({ default: m.AdminPage })),
 );
@@ -39,6 +42,10 @@ export function App() {
           */}
             <Route path="/view/:slug" element={<ViewerPage />} />
             {/* Admin-gated on the server; the pages turn non-admins away too. */}
+            <Route
+              path="/plan/:id/attack/:attackId"
+              element={<DesignerPage />}
+            />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

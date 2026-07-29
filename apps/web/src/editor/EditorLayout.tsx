@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
+import type { AttackParam } from "@raidplan/shared";
 import { AnimationPanel } from "./AnimationPanel";
+import { AttackDesignerPanel } from "./designer/AttackDesignerPanel";
+import { DesignerContext } from "./designer/designerContext";
 import { CanvasStage } from "./canvas/CanvasStage";
 import { EmptySlideHint } from "./EmptySlideHint";
 import { IconPalette } from "./IconPalette";
@@ -35,71 +38,101 @@ import {
  * slide as stored, so every region that writes to the document is disabled —
  * everything but the Timeline dock itself, which is how you get back.
  */
-export function EditorLayout({ planId }: { planId: string }) {
+export function EditorLayout({
+  planId,
+  designer,
+}: {
+  planId: string;
+  /**
+   * Present when this is the **Attack Designer** rather than a plan editor
+   * (plan §21). Two things change and nothing else does: the document is never
+   * autosaved — the designer owns saving, into the plan's library — and the
+   * slide strip gives way to the panel where slots and parameters are said. One
+   * slide, by construction, so there is no strip to show anyway.
+   */
+  designer?: {
+    name: string;
+    onNameChange: (name: string) => void;
+    params: AttackParam[];
+    onParamsChange: (params: AttackParam[]) => void;
+    onSave: () => void;
+    onDiscard: () => void;
+    saving: boolean;
+    error: string | null;
+  };
+}) {
   useEditorHotkeys();
   useEditorPlayhead();
-  const remote = usePersistence(planId);
+  // The sandbox is never persisted as a plan: it is not one, and the autosave
+  // that would do it is the reason the designer is its own route at all.
+  const remote = usePersistence(designer ? null : planId);
   const locked = usePlayhead(selectPlaybackLocked);
 
   return (
-    <div
-      className="grid h-screen w-screen overflow-hidden text-neutral-100"
-      style={{
-        gridTemplateColumns: "14rem 1fr 18rem",
-        gridTemplateRows: "auto 1fr auto",
-        gridTemplateAreas: `
+    <DesignerContext.Provider value={designer !== undefined}>
+      <div
+        className="grid h-screen w-screen overflow-hidden text-neutral-100"
+        style={{
+          gridTemplateColumns: "14rem 1fr 18rem",
+          gridTemplateRows: "auto 1fr auto",
+          gridTemplateAreas: `
           "toolbar toolbar toolbar"
           "palette canvas  props"
           "slides   slides   slides"
         `,
-      }}
-    >
-      <Locked disabled={locked} style={{ gridArea: "toolbar" }}>
-        <Toolbar
-          // The viewer addresses plans by *slug*, not by the id in this URL —
-          // and a server plan's slug is only known once it has loaded.
-          viewHref={
-            isLocalPlan(planId)
-              ? `/view/${LOCAL_PLAN_ID}`
-              : remote?.slug
-                ? `/view/${remote.slug}`
-                : null
-          }
-          status={<SaveStatus planId={planId} remote={remote} />}
-        />
-      </Locked>
-      <Locked
-        disabled={locked}
-        style={{ gridArea: "palette" }}
-        className="min-h-0"
+        }}
       >
-        <IconPalette />
-      </Locked>
-      <div style={{ gridArea: "canvas" }} className="relative min-h-0">
-        <CanvasStage />
-        {!locked && <EmptySlideHint />}
-        <PlaybackLockNotice />
-      </div>
-      {/* Fetches URLs for synced WoW tokens a reopened plan references. */}
-      <SyncedIconResolver />
-      <Locked
-        disabled={locked}
-        style={{ gridArea: "props" }}
-        className="flex min-h-0 flex-col overflow-y-auto border-l border-panelborder bg-panel"
-      >
-        <ObjectsPanel />
-        <PropertiesPanel />
-        <AnimationPanel />
-      </Locked>
-      <div style={{ gridArea: "slides" }} className="flex min-h-0 flex-col">
-        {/* The strip locks with everything else; the dock below it never does,
-            because it carries Stop. */}
-        <Locked disabled={locked} className="min-h-0">
-          <SlideStrip />
+        <Locked disabled={locked} style={{ gridArea: "toolbar" }}>
+          <Toolbar
+            // The viewer addresses plans by *slug*, not by the id in this URL —
+            // and a server plan's slug is only known once it has loaded.
+            viewHref={
+              designer
+                ? null
+                : isLocalPlan(planId)
+                  ? `/view/${LOCAL_PLAN_ID}`
+                  : remote?.slug
+                    ? `/view/${remote.slug}`
+                    : null
+            }
+            status={
+              designer ? null : <SaveStatus planId={planId} remote={remote} />
+            }
+          />
         </Locked>
-        <TimelineDock />
+        <Locked
+          disabled={locked}
+          style={{ gridArea: "palette" }}
+          className="min-h-0"
+        >
+          <IconPalette />
+        </Locked>
+        <div style={{ gridArea: "canvas" }} className="relative min-h-0">
+          <CanvasStage />
+          {!locked && <EmptySlideHint />}
+          <PlaybackLockNotice />
+        </div>
+        {/* Fetches URLs for synced WoW tokens a reopened plan references. */}
+        <SyncedIconResolver />
+        <Locked
+          disabled={locked}
+          style={{ gridArea: "props" }}
+          className="flex min-h-0 flex-col overflow-y-auto border-l border-panelborder bg-panel"
+        >
+          <ObjectsPanel />
+          <PropertiesPanel />
+          <AnimationPanel />
+        </Locked>
+        <div style={{ gridArea: "slides" }} className="flex min-h-0 flex-col">
+          {/* The strip locks with everything else; the dock below it never does,
+            because it carries Stop. */}
+          <Locked disabled={locked} className="min-h-0">
+            {designer ? <AttackDesignerPanel {...designer} /> : <SlideStrip />}
+          </Locked>
+          <TimelineDock />
+        </div>
       </div>
-    </div>
+    </DesignerContext.Provider>
   );
 }
 
@@ -141,9 +174,9 @@ function Locked({
  * Both hooks are always called — hooks can't be conditional — so each is told
  * whether it's the active one rather than being skipped.
  */
-function usePersistence(planId: string): RemoteStatus | null {
-  const local = isLocalPlan(planId);
+function usePersistence(planId: string | null): RemoteStatus | null {
+  const local = planId !== null && isLocalPlan(planId);
   useLocalPersistence(local);
-  const remote = useRemotePersistence(local ? null : planId);
-  return local ? null : remote;
+  const remote = useRemotePersistence(local || planId === null ? null : planId);
+  return local || planId === null ? null : remote;
 }

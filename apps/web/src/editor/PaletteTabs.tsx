@@ -1,7 +1,10 @@
 import { useShallow } from "zustand/react/shallow";
+import { Link, useParams } from "react-router-dom";
+import { LuPencil } from "react-icons/lu";
 import { attackSlots, type ShapeKind } from "@raidplan/shared";
 import { useEditorStore, viewCentreNative } from "../store/editorStore";
 import { ATTACK_DATA_TYPE, SHAPE_DATA_TYPE } from "./paletteDrag";
+import { LOCAL_PLAN_ID } from "./planScope";
 import { useAttackPlacement } from "./useAttackPlacement";
 
 /**
@@ -67,47 +70,70 @@ export function ShapesTab() {
 export function AttacksTab() {
   const attacks = useEditorStore(useShallow((s) => s.attacks));
   const place = useAttackPlacement();
-
-  if (attacks.length === 0) {
-    return (
-      <p className="p-3 text-xs text-neutral-400" data-testid="attacks-tab">
-        No attacks yet. Make one from the Attacks panel, or start a plan from a
-        map that ships with some.
-      </p>
-    );
-  }
+  const { id } = useParams<{ id: string }>();
+  const planId = id ?? LOCAL_PLAN_ID;
 
   return (
     <div className="flex flex-col gap-1 p-3" data-testid="attacks-tab">
+      <Link
+        to={`/plan/${planId}/attack/new`}
+        data-testid="attack-new"
+        className="rounded border border-dashed border-panelborder py-1 text-center text-xs text-neutral-300 hover:border-accent hover:text-accent"
+      >
+        + New attack
+      </Link>
+
+      {attacks.length === 0 ? (
+        <p className="pt-1 text-xs text-neutral-500">
+          Nothing here yet. An attack is a mechanic you build once — its objects
+          and its animations — and then drop into any slide of this plan.
+        </p>
+      ) : null}
+
       {attacks.map((def) => {
         const slots = attackSlots(def.objects);
         return (
-          <button
+          <div
             key={def.id}
-            type="button"
-            aria-label={`Place ${def.name}`}
-            data-testid={`attack-tile-${def.id}`}
-            onClick={() =>
-              place(def.id, viewCentreNative(useEditorStore.getState()))
-            }
-            draggable
-            onDragStart={(e) =>
-              e.dataTransfer.setData(ATTACK_DATA_TYPE, def.id)
-            }
-            className="flex flex-col items-start gap-0.5 rounded border border-transparent bg-neutral-800/40 p-2 text-left text-xs text-neutral-200 hover:border-accent"
+            className="flex items-start gap-1 rounded border border-transparent bg-neutral-800/40 p-2 hover:border-accent"
           >
-            <span className="flex w-full items-center justify-between gap-2">
-              <span className="truncate font-medium">{def.name}</span>
-              <span className="shrink-0 rounded bg-neutral-700/60 px-1 text-[10px] uppercase tracking-wide text-neutral-400">
-                {def.source === "preset" ? "map" : "yours"}
+            <button
+              type="button"
+              aria-label={`Place ${def.name}`}
+              data-testid={`attack-tile-${def.id}`}
+              onClick={() =>
+                place(def.id, viewCentreNative(useEditorStore.getState()))
+              }
+              draggable
+              onDragStart={(e) =>
+                e.dataTransfer.setData(ATTACK_DATA_TYPE, def.id)
+              }
+              className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left text-xs text-neutral-200"
+            >
+              <span className="flex w-full items-center justify-between gap-2">
+                <span className="truncate font-medium">{def.name}</span>
+                <span className="shrink-0 rounded bg-neutral-700/60 px-1 text-[10px] uppercase tracking-wide text-neutral-400">
+                  {def.source === "preset" ? "map" : "yours"}
+                </span>
               </span>
-            </span>
-            {slots.length > 0 ? (
-              <span className="text-[11px] text-neutral-400">
-                Needs {slots.map((slot) => slot.slotName).join(", ")}
-              </span>
-            ) : null}
-          </button>
+              {slots.length > 0 ? (
+                <span className="text-[11px] text-neutral-400">
+                  Needs {slots.map((slot) => slot.slotName).join(", ")}
+                </span>
+              ) : null}
+            </button>
+            {/* Editing a definition changes every *future* placement of it, and
+                re-derives the ones already on the board when they next move. */}
+            <Link
+              to={`/plan/${planId}/attack/${def.id}`}
+              aria-label={`Edit ${def.name}`}
+              data-testid={`attack-edit-${def.id}`}
+              title="Open in the Attack Designer"
+              className="shrink-0 text-neutral-500 hover:text-accent"
+            >
+              <LuPencil aria-hidden />
+            </Link>
+          </div>
         );
       })}
     </div>
