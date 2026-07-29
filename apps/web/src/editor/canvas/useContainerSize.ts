@@ -36,3 +36,30 @@ export function useContainerSize<T extends HTMLElement>(): [
 
   return [ref, size];
 }
+
+/**
+ * Konva stage dimensions for a container that may not be measured yet.
+ *
+ * A stage sized 0×0 gets a 0×0 `bufferCanvas`, and any shape that needs the
+ * buffer — fill *and* stroke under an opacity below 1, which is every
+ * translucent zone and attack shape — ends its draw with
+ * `context.drawImage(bufferCanvas)`. Firefox throws `InvalidStateError:
+ * Passed-in canvas is empty` on a zero-sized source, and since the draw happens
+ * inside React's commit it takes the whole editor down rather than one shape.
+ *
+ * The first frame is *always* unmeasured: react-konva mounts and draws the
+ * stage during the commit's mutation phase, before the effect above ever runs.
+ * It only crashes when the plan's objects are already in the store at that
+ * moment — a client-side navigation into the editor with a warm cache, not a
+ * cold reload, which is why the bug looks like it "fixes itself" on refresh.
+ *
+ * Clamping to one pixel is invisible (the real size lands on the next frame)
+ * and keeps the stage mounted, which unmounting on a zero measurement — from a
+ * collapsed panel, say — would not.
+ */
+export function stageSize(size: Size): Size {
+  return {
+    width: Math.max(size.width, 1),
+    height: Math.max(size.height, 1),
+  };
+}

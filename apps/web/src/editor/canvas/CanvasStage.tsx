@@ -50,7 +50,7 @@ import {
 import { OriginHandle } from "./OriginHandle";
 import { SelectionTransformer } from "./SelectionTransformer";
 import { setStageNode } from "./stageHandle";
-import { useContainerSize } from "./useContainerSize";
+import { stageSize, useContainerSize } from "./useContainerSize";
 import { useImageElement } from "./useImageElement";
 
 /** An in-progress rubber-band sweep, in native coordinates. */
@@ -72,6 +72,7 @@ const DBLCLICK_SLOP_PX = 8;
  */
 export function CanvasStage() {
   const [containerRef, size] = useContainerSize<HTMLDivElement>();
+  const canvasSize = stageSize(size);
   const stageOf = useRef<StageNode | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const didFit = useRef(false);
@@ -366,8 +367,9 @@ export function CanvasStage() {
           stageOf.current = node;
           setStageNode(node);
         }}
-        width={size.width}
-        height={size.height}
+        // Never 0×0, even on the first unmeasured frame (see `stageSize`).
+        width={canvasSize.width}
+        height={canvasSize.height}
         scaleX={view.scale}
         scaleY={view.scale}
         x={view.x}

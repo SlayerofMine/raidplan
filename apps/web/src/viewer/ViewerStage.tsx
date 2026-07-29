@@ -6,7 +6,7 @@ import { getBackgroundSrc } from "@raidplan/shared";
 import { fitView } from "../editor/canvas/coords";
 import { ObjectNode } from "../editor/canvas/ObjectNode";
 import { SyncedIconResolver } from "../editor/SyncedIconResolver";
-import { useContainerSize } from "../editor/canvas/useContainerSize";
+import { stageSize, useContainerSize } from "../editor/canvas/useContainerSize";
 import { useImageElement } from "../editor/canvas/useImageElement";
 import { useEditorStore } from "../store/editorStore";
 
@@ -33,6 +33,7 @@ export function ViewerStage({
   onObjectClick?: (objectId: string) => void;
 }) {
   const [containerRef, size] = useContainerSize<HTMLDivElement>();
+  const canvasSize = stageSize(size);
   const background = useEditorStore((s) => s.background);
   const objectIds = useEditorStore((s) => s.objectIds);
   const bgImage = useImageElement(getBackgroundSrc(background.assetId));
@@ -75,8 +76,9 @@ export function ViewerStage({
       <SyncedIconResolver />
       <Stage
         ref={stageRef}
-        width={size.width}
-        height={size.height}
+        // Never 0×0, even on the first unmeasured frame (see `stageSize`).
+        width={canvasSize.width}
+        height={canvasSize.height}
         scaleX={view.scale}
         scaleY={view.scale}
         x={view.x}
