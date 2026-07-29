@@ -217,3 +217,145 @@ describe("encounter authoring (admin only)", () => {
     expect(await callerFor(user).encounter.list()).toEqual([]);
   });
 });
+
+describe("shipping attacks with a map (plan §21)", () => {
+  const box = {
+    x: 0,
+    y: 0,
+    w: 64,
+    h: 64,
+    rotation: 0,
+    opacity: 1,
+    visible: true,
+  };
+  const attack = (over: Record<string, unknown> = {}) => ({
+    id: "def_1",
+    name: "Fireball",
+    source: "plan" as const,
+    objects: [{ id: "puddle", type: "token" as const, base: { ...box, z: 0 } }],
+    slide: { id: "s", states: { puddle: box }, animations: [] },
+    params: [],
+    ...over,
+  });
+
+  const seedEncounter = () =>
+    upsertEncounter(db, {
+      slug: "fyrakk",
+      raid: "Amirdrassil",
+      name: "Fyrakk",
+      preset: { background: BACKGROUND, objects: [], slides: [], attacks: [] },
+    });
+
+  it("refuses a signed-in caller who isn't an admin", async () => {
+    const encounter = seedEncounter();
+    await expectCode(
+      callerFor(user).encounter.publishAttack({
+        id: encounter.id,
+        attack: attack(),
+      }),
+      "FORBIDDEN",
+    );
+  });
+
+  it("refuses an anonymous caller before it asks about admin at all", async () => {
+    const encounter = seedEncounter();
+    await expectCode(
+      callerFor(null).encounter.publishAttack({
+        id: encounter.id,
+        attack: attack(),
+      }),
+      "UNAUTHORIZED",
+    );
+  });
+
+  it("marks a published attack as coming from the map, whatever it claimed", async () => {
+    const encounter = seedEncounter();
+    const updated = await adminCallerFor(admin).encounter.publishAttack({
+      id: encounter.id,
+      attack: attack({ source: "plan" }),
+    });
+    expect(updated.preset.attacks).toHaveLength(1);
+    expect(updated.preset.attacks[0]!.source).toBe("preset");
+  });
+
+  it("replaces a re-published definition in place rather than leaving two", async () => {
+    const encounter = seedEncounter();
+    const caller = adminCallerFor(admin);
+    await caller.encounter.publishAttack({
+      id: encounter.id,
+      attack: attack(),
+    });
+    const updated = await caller.encounter.publishAttack({
+      id: encounter.id,
+      attack: attack({ name: "Fireball II" }),
+    });
+    expect(updated.preset.attacks).toHaveLength(1);
+    expect(updated.preset.attacks[0]!.name).toBe("Fireball II");
+  });
+
+  it("seeds every new plan from the map with a copy", async () => {
+    const encounter = seedEncounter();
+    await adminCallerFor(admin).encounter.publishAttack({
+      id: encounter.id,
+      attack: attack(),
+    });
+    const plan = await callerFor(user).plan.create({
+      encounterId: encounter.id,
+    });
+    expect(plan.doc.attacks.map((a) => a.name)).toEqual(["Fireball"]);
+    expect(plan.doc.attacks[0]!.source).toBe("preset");
+  });
+
+  it("leaves plans that already exist alone — the copy is theirs now", async () => {
+    const encounter = seedEncounter();
+    const caller = callerFor(user);
+    const before = await caller.plan.create({ encounterId: encounter.id });
+
+    await adminCallerFor(admin).encounter.publishAttack({
+      id: encounter.id,
+      attack: attack(),
+    });
+
+    const reloaded = await caller.plan.get({ id: before.id });
+    expect(reloaded.doc.attacks).toEqual([]);
+  });
+
+  it("takes one back out again", async () => {
+    const encounter = seedEncounter();
+    const caller = adminCallerFor(admin);
+    await caller.encounter.publishAttack({
+      id: encounter.id,
+      attack: attack(),
+    });
+    const updated = await caller.encounter.unpublishAttack({
+      id: encounter.id,
+      attackId: "def_1",
+    });
+    expect(updated.preset.attacks).toEqual([]);
+  });
+
+  it("404s for an encounter that isn't there", async () => {
+    await expectCode(
+      adminCallerFor(admin).encounter.publishAttack({
+        id: "nope",
+        attack: attack(),
+      }),
+      "NOT_FOUND",
+    );
+  });
+
+  it("keeps the attacks when the panel edits name, raid or background", async () => {
+    const encounter = seedEncounter();
+    const caller = adminCallerFor(admin);
+    await caller.encounter.publishAttack({
+      id: encounter.id,
+      attack: attack(),
+    });
+    const updated = await caller.encounter.update({
+      id: encounter.id,
+      name: "Fyrakk (heroic)",
+      background: BACKGROUND2,
+    });
+    expect(updated.preset.attacks).toHaveLength(1);
+  });
+});

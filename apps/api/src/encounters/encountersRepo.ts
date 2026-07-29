@@ -3,6 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import {
   DEFAULT_ENCOUNTERS,
   EncounterPresetSchema,
+  type AttackDef,
   type Background,
   type EncounterPreset,
   type EncounterSummary,
@@ -207,6 +208,62 @@ export function updateEncounter(
     .where(eq(encounters.id, id))
     .run();
   return { id, slug: existing.slug, raid, name, preset };
+}
+
+/**
+ * Publish an attack definition into an encounter's library (plan §21).
+ *
+ * What "ships with the map" means: from here on, every plan created from this
+ * encounter is born with a copy. Plans that already exist are **not** touched —
+ * they hold their own copies, which is the whole point of copying at creation.
+ * An admin fixing a definition can never reach into work someone has saved.
+ *
+ * Upserts by id and marks the definition `preset`, so the palette can say where
+ * it came from and re-publishing an edited one replaces it in place rather than
+ * leaving two entries with the same name.
+ */
+export function publishEncounterAttack(
+  db: Db,
+  id: string,
+  attack: AttackDef,
+): EncounterRecord | undefined {
+  const existing = getEncounter(db, id);
+  if (!existing) return undefined;
+
+  const shipped: AttackDef = { ...attack, source: "preset" };
+  const at = existing.preset.attacks.findIndex((a) => a.id === shipped.id);
+  const preset: EncounterPreset = {
+    ...existing.preset,
+    attacks:
+      at === -1
+        ? [...existing.preset.attacks, shipped]
+        : existing.preset.attacks.map((a, i) => (i === at ? shipped : a)),
+  };
+
+  db.update(encounters)
+    .set({ doc: JSON.stringify(preset), updatedAt: nowSeconds() })
+    .where(eq(encounters.id, id))
+    .run();
+  return { ...existing, preset };
+}
+
+/** Take an attack back out of an encounter's library. */
+export function unpublishEncounterAttack(
+  db: Db,
+  id: string,
+  attackId: string,
+): EncounterRecord | undefined {
+  const existing = getEncounter(db, id);
+  if (!existing) return undefined;
+  const preset: EncounterPreset = {
+    ...existing.preset,
+    attacks: existing.preset.attacks.filter((a) => a.id !== attackId),
+  };
+  db.update(encounters)
+    .set({ doc: JSON.stringify(preset), updatedAt: nowSeconds() })
+    .where(eq(encounters.id, id))
+    .run();
+  return { ...existing, preset };
 }
 
 /** Delete an encounter. Returns whether a row was actually removed. */

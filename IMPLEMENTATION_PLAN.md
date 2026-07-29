@@ -1347,5 +1347,5 @@ repeated drags accumulate no rounding error.
    through the recipe. [DONE]
 5. **Timeline.** One row, one bar, dragging the whole attack and scaling its durations. [DONE]
 6. **The designer.** The editor in a sandbox on one slide, with slots, parameters and save. [DONE]
-7. **Preset attacks.** `EncounterPreset.attacks`, `encounter.setAttacks`, publishing from the designer.
+7. **Preset attacks.** `EncounterPreset.attacks`, `encounter.publishAttack`, publishing from the designer. [DONE]
 8. **End-to-end tests.**

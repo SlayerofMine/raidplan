@@ -1,10 +1,12 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { BackgroundSchema } from "@raidplan/shared";
+import { AttackDefSchema, BackgroundSchema } from "@raidplan/shared";
 import {
   createEncounter,
   deleteEncounter,
   listEncounters,
+  publishEncounterAttack,
+  unpublishEncounterAttack,
   updateEncounter,
 } from "../encounters/encountersRepo.js";
 import { adminProcedure, protectedProcedure, router } from "./context.js";
@@ -47,6 +49,48 @@ export const encounterRouter = router({
     .mutation(({ ctx, input }) => {
       const { id, ...patch } = input;
       const updated = updateEncounter(ctx.db, id, patch);
+      if (!updated) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "No such encounter.",
+        });
+      }
+      return updated;
+    }),
+
+  /**
+   * Ship an attack with this map (plan §21). Admin-only, because an encounter
+   * is the one piece of content everyone's plans are seeded from.
+   *
+   * Reaches **new plans only**: a plan copies the library it was born with, so
+   * publishing a fix cannot rewrite work someone has already saved.
+   */
+  publishAttack: adminProcedure
+    .input(
+      z.object({
+        id: z.string().min(1),
+        attack: AttackDefSchema,
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      const updated = publishEncounterAttack(ctx.db, input.id, input.attack);
+      if (!updated) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "No such encounter.",
+        });
+      }
+      return updated;
+    }),
+
+  unpublishAttack: adminProcedure
+    .input(z.object({ id: z.string().min(1), attackId: z.string().min(1) }))
+    .mutation(({ ctx, input }) => {
+      const updated = unpublishEncounterAttack(
+        ctx.db,
+        input.id,
+        input.attackId,
+      );
       if (!updated) {
         throw new TRPCError({
           code: "NOT_FOUND",

@@ -28,6 +28,7 @@ export function AttackDesignerPanel({
   onParamsChange,
   onSave,
   onDiscard,
+  onPublish,
   saving,
   error,
 }: {
@@ -37,6 +38,7 @@ export function AttackDesignerPanel({
   onParamsChange: (params: AttackParam[]) => void;
   onSave: () => void;
   onDiscard: () => void;
+  onPublish?: () => void;
   saving: boolean;
   error: string | null;
 }) {
@@ -75,6 +77,18 @@ export function AttackDesignerPanel({
             Discard
           </button>
         </div>
+        {onPublish ? (
+          <button
+            type="button"
+            data-testid="attack-publish"
+            disabled={saving}
+            onClick={onPublish}
+            title="Every plan made from this map in future starts with a copy. Plans that already exist keep theirs."
+            className="rounded border border-panelborder py-1 text-xs text-neutral-300 hover:border-accent disabled:opacity-40"
+          >
+            Ship with this map
+          </button>
+        ) : null}
         {error ? (
           <p className="text-xs text-rose-400" data-testid="attack-save-error">
             {error}

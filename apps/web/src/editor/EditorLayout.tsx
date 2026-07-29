@@ -57,6 +57,8 @@ export function EditorLayout({
     onParamsChange: (params: AttackParam[]) => void;
     onSave: () => void;
     onDiscard: () => void;
+    /** Ship it with the map. Absent for anyone who may not, or nowhere to. */
+    onPublish?: () => void;
     saving: boolean;
     error: string | null;
   };
