@@ -22,7 +22,12 @@ import { useFollowing } from "../../anim/useFollowing";
 import { boardStack, useEditorStore } from "../../store/editorStore";
 import { selectSelectionSizes } from "../../store/selectors";
 import { isEditableTarget } from "../isEditableTarget";
-import { ICON_DATA_TYPE, SHAPE_DATA_TYPE } from "../paletteDrag";
+import {
+  ATTACK_DATA_TYPE,
+  ICON_DATA_TYPE,
+  SHAPE_DATA_TYPE,
+} from "../paletteDrag";
+import { useAttackPlacement } from "../useAttackPlacement";
 import { selectPlaybackLocked, usePlayhead } from "../timeline/playhead";
 import { screenToNative, type Point } from "./coords";
 import { snapValue } from "./snapping";
@@ -107,6 +112,9 @@ export function CanvasStage() {
   const select = useEditorStore((s) => s.select);
   const addIcon = useEditorStore((s) => s.addIcon);
   const addPrimitive = useEditorStore((s) => s.addPrimitive);
+  // Placed through the shared hook, so a drop and a palette click refuse for the
+  // same reason and say the same thing about it.
+  const placeAttack = useAttackPlacement();
   const drawMove = useEditorStore((s) => s.drawMove);
 
   // Drawing a route is a *mode*: while it is on, a click means "corner here"
@@ -327,6 +335,11 @@ export function CanvasStage() {
       else addPrimitive("shape", shape as ShapeKind, at);
       return;
     }
+
+    // An attack resolves on the way in (plan §21): what lands is ordinary
+    // objects and animations, not a thing the player has to learn about.
+    const attackId = e.dataTransfer.getData(ATTACK_DATA_TYPE);
+    if (attackId) return void placeAttack(attackId, at);
   };
 
   return (

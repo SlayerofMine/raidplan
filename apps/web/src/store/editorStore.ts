@@ -3,18 +3,25 @@ import { temporal } from "zundo";
 import { shallow } from "zustand/shallow";
 import { immer } from "zustand/middleware/immer";
 import {
+  attackAnchor,
+  attackSlots,
   centrePoint,
   isDeferredTrigger,
   isFollowing,
   isOnSlide,
   makeFirstSlide,
   objectsOnSlide,
+  placementTransform,
   settledStates,
   resolveObjectState,
   seedState,
+  stampAttack,
   stateBeforeAnim,
   topLeftForCentre,
   type Anim,
+  type AttackInstance,
+  type AttackParamValue,
+  type AttackTransform,
   type Background,
   type Follow,
   type ObjectBase,
@@ -29,7 +36,13 @@ import {
 } from "@raidplan/shared";
 import { DEFAULT_BACKGROUND } from "@raidplan/shared";
 import { getIconById } from "@raidplan/shared";
-import { nextAnimId, nextGroupId, nextSlideId } from "./ids";
+import {
+  nextAnimId,
+  nextAttackId,
+  nextGroupId,
+  nextObjectId,
+  nextSlideId,
+} from "./ids";
 import {
   fitView,
   screenToNative,
@@ -50,6 +63,7 @@ import {
 import {
   fromPlan,
   pickPlanDoc,
+  pruneAttacks,
   pruneGroups,
   toPlan,
   type PlanDoc,
@@ -188,6 +202,59 @@ export interface EditorState extends PlanDoc {
    * slide's state), so this is one slide's answer, not the group's.
    */
   setGroupVisible: (groupId: string, visible: boolean) => void;
+
+  // --- attacks (plan §21) ---
+  /**
+   * Place an attack on the slide being edited, resolved on the spot into
+   * ordinary objects, states and animations.
+   *
+   * Returns the instance id, or `undefined` when it can't be placed — an
+   * unknown definition, or a definition with slots and the wrong number of
+   * objects selected to fill them. The caller says why (a toast); this only
+   * says no, because "which objects" is a question about the selection and the
+   * store is where the selection lives.
+   *
+   * Slots bind in authoring order to the selection, and the attack lands on the
+   * first one. With no slots it lands on `at`.
+   */
+  placeAttack: (defId: string, at: Point) => string | undefined;
+  /**
+   * Move, turn and scale a whole placement.
+   *
+   * The recipe changes and everything is re-derived from the definition — which
+   * is why this and not `applyTransforms`: a plain group transform would move
+   * the objects and leave their motion paths behind.
+   */
+  setAttackTransform: (instanceId: string, transform: AttackTransform) => void;
+  /** When the placement starts on its slide, and how far its timings stretch. */
+  setAttackTiming: (
+    instanceId: string,
+    patch: { anchorDelayMs?: number; timeScale?: number },
+  ) => void;
+  /** Give a parameter of this placement a value of its own. */
+  setAttackParam: (
+    instanceId: string,
+    name: string,
+    value: AttackParamValue,
+  ) => void;
+  /** Bind one of the definition's slots to a different object on the slide. */
+  setAttackSlot: (
+    instanceId: string,
+    slotObjectId: string,
+    planObjectId: string,
+  ) => void;
+  /**
+   * Let the placement go: its objects stay exactly where they are, as ordinary
+   * grouped objects, and stop being an attack.
+   *
+   * The escape hatch, and it is deliberately one-way. While a placement is
+   * attached its members are derived and a re-stamp would overwrite anything
+   * done to one of them individually; detaching is how an author says "from
+   * here it's mine".
+   */
+  detachAttack: (instanceId: string) => void;
+  /** Remove a placement and everything it owns. Objects bound to its slots stay. */
+  deleteAttack: (instanceId: string) => void;
 
   // --- slides (plan §3.2) ---
   /** Add an **empty** slide at the end and edit it. */
@@ -474,6 +541,103 @@ function gatherMembers(
   ];
 }
 
+/**
+ * Re-derive one placement from its recipe and its definition (plan §21).
+ *
+ * **The single choke point for everything an attack instance can do.** Move it,
+ * turn it, scale it, retime it, change a parameter, rebind a slot: each writes
+ * the recipe and comes back here, and here always starts from the definition.
+ * Nothing is ever computed from what was stamped last time, which is what makes
+ * coordinate drift impossible rather than merely unlikely (§20).
+ *
+ * The stamped objects keep their ids, so this updates them in place: their
+ * z-order is the author's, and a tether they drew into the attack still finds
+ * them. Animations are replaced as one contiguous block at the position the old
+ * block held, because the slide's chain runs in document order and a block split
+ * apart would chain onto a stranger.
+ */
+function restampAttack(s: EditorState, instanceId: string): boolean {
+  const slideIndex = s.slides.findIndex((slide) =>
+    Boolean(slide.attackInstances?.[instanceId]),
+  );
+  const slide = s.slides[slideIndex];
+  const instance = slide?.attackInstances?.[instanceId];
+  if (!slide || !instance) return false;
+
+  const def = s.attacks.find((a) => a.id === instance.defId);
+  // A definition the plan no longer has leaves its objects exactly where they
+  // are: there is nothing to re-derive them from, and deleting a planner's work
+  // because a library entry went missing would be the wrong answer by far.
+  if (!def) return false;
+
+  const boundStates: Record<string, SlideState> = {};
+  for (const planId of Object.values(instance.slots)) {
+    const state = slide.states[planId];
+    if (state) boundStates[planId] = state;
+  }
+
+  const owned = s.objectIds.filter(
+    (id) => s.objects[id]?.attackId === instanceId,
+  );
+  const stamped = stampAttack({
+    def,
+    instance,
+    boundStates,
+    // Its group is whatever its objects are already in, so re-stamping never
+    // reshuffles the z-order or breaks a group the author renamed.
+    groupId:
+      owned.map((id) => s.objects[id]?.groupId).find(Boolean) ?? nextGroupId(),
+    nextObjectId,
+    nextAnimId,
+  });
+
+  const kept = new Set(stamped.objects.map((o) => o.id));
+  for (const object of stamped.objects) {
+    if (!s.objects[object.id]) s.objectIds.push(object.id);
+    s.objects[object.id] = object;
+  }
+  // A definition that lost a member leaves one behind here; take it out of the
+  // scene the way deleting it would.
+  for (const id of owned) {
+    if (kept.has(id)) continue;
+    delete s.objects[id];
+    delete slide.states[id];
+    s.objectIds = s.objectIds.filter((other) => other !== id);
+  }
+  for (const [id, state] of Object.entries(stamped.states)) {
+    slide.states[id] = state;
+  }
+
+  const previous = new Set(Object.values(instance.animMap));
+  const firstIndex = slide.animations.findIndex((a) => previous.has(a.id));
+  const rest = slide.animations.filter((a) => !previous.has(a.id));
+  const at = firstIndex === -1 ? rest.length : firstIndex;
+  slide.animations = [
+    ...rest.slice(0, at),
+    ...stamped.animations,
+    ...rest.slice(at),
+  ];
+
+  slide.attackInstances = {
+    ...slide.attackInstances,
+    [instanceId]: stamped.instance,
+  };
+  reindexZ(s);
+  return true;
+}
+
+/** Read a placement's recipe from whichever slide it lives on. */
+function findInstance(
+  s: EditorState,
+  instanceId: string,
+): AttackInstance | undefined {
+  for (const slide of s.slides) {
+    const instance = slide.attackInstances?.[instanceId];
+    if (instance) return instance;
+  }
+  return undefined;
+}
+
 /** One item on the board, and where it is drawn. */
 interface StackItem {
   id: string;
@@ -494,6 +658,13 @@ export function boardStack(s: {
 
 /** Offset (native px) applied to duplicated/pasted copies so they're visible. */
 const CLONE_OFFSET = 20;
+
+/**
+ * The slowest an attack can be stretched to. Not zero: a `timeScale` of nothing
+ * is an attack that takes no time, which the timeline could not draw and the
+ * planner could not get hold of again to undo.
+ */
+const MIN_TIME_SCALE = 0.05;
 
 /**
  * Copy an object under a fresh id, nudged by `CLONE_OFFSET`. Shared by
@@ -800,8 +971,10 @@ export const useEditorStore = create<EditorState>()(
               (a) => !orphaned.has(a.objectId),
             );
           }
-          // Deleting members can wear a group down to one, which is not a group.
+          // Deleting members can wear a group down to one, which is not a group,
+          // and can take the last object a placement owned (plan §21).
           pruneGroups(s);
+          pruneAttacks(s);
           reindexZ(s);
         }),
 
@@ -1049,6 +1222,126 @@ export const useEditorStore = create<EditorState>()(
             writeSlideState(s, id, { visible });
           }
         }),
+
+      // --- attacks (plan §21) ---
+      placeAttack: (defId, at) => {
+        const state = get();
+        const def = state.attacks.find((a) => a.id === defId);
+        const slide = state.slides[state.currentSlideIndex];
+        if (!def || !slide) return undefined;
+
+        const slots = attackSlots(def.objects);
+        // The rule, and the whole of it: an attack that stands for something in
+        // the plan can only be placed once the plan has said what.
+        const chosen = state.selectedIds.filter((id) => slide.states[id]);
+        if (chosen.length !== slots.length) return undefined;
+
+        const anchor = attackAnchor(def.slide.states);
+        const firstSlot = slots[0];
+        const slotState = firstSlot
+          ? def.slide.states[firstSlot.id]
+          : undefined;
+        const boundState = chosen[0] ? slide.states[chosen[0]] : undefined;
+        const transform = placementTransform({
+          anchor,
+          // With a slot, the attack lands *on* what it was given rather than
+          // where the cursor happened to be — which is the point of having one.
+          align: slotState ? centrePoint(slotState) : anchor,
+          at: boundState ? centrePoint(boundState) : at,
+        });
+
+        const instanceId = nextAttackId();
+        set((s) => {
+          const draft = s.slides[s.currentSlideIndex];
+          if (!draft) return;
+          draft.attackInstances = {
+            ...draft.attackInstances,
+            [instanceId]: {
+              id: instanceId,
+              defId: def.id,
+              // Snapshotted, so a placement still reads sensibly if the
+              // definition is later renamed or dropped from the library.
+              name: def.name,
+              transform,
+              timeScale: 1,
+              anchorDelayMs: 0,
+              values: {},
+              slots: Object.fromEntries(
+                slots.map((slot, i) => [slot.id, chosen[i]!]),
+              ),
+              objectMap: {},
+              animMap: {},
+            },
+          };
+          if (!restampAttack(s, instanceId)) {
+            delete draft.attackInstances[instanceId];
+            return;
+          }
+          s.selectedIds = s.objectIds.filter(
+            (id) => s.objects[id]?.attackId === instanceId,
+          );
+        });
+        return findInstance(get(), instanceId) ? instanceId : undefined;
+      },
+
+      setAttackTransform: (instanceId, transform) =>
+        set((s) => {
+          const instance = findInstance(s, instanceId);
+          if (!instance) return;
+          instance.transform = transform;
+          restampAttack(s, instanceId);
+        }),
+
+      setAttackTiming: (instanceId, patch) =>
+        set((s) => {
+          const instance = findInstance(s, instanceId);
+          if (!instance) return;
+          if (patch.anchorDelayMs !== undefined)
+            instance.anchorDelayMs = Math.max(0, patch.anchorDelayMs);
+          if (patch.timeScale !== undefined)
+            instance.timeScale = Math.max(MIN_TIME_SCALE, patch.timeScale);
+          restampAttack(s, instanceId);
+        }),
+
+      setAttackParam: (instanceId, name, value) =>
+        set((s) => {
+          const instance = findInstance(s, instanceId);
+          if (!instance) return;
+          instance.values = { ...instance.values, [name]: value };
+          restampAttack(s, instanceId);
+        }),
+
+      setAttackSlot: (instanceId, slotObjectId, planObjectId) =>
+        set((s) => {
+          const instance = findInstance(s, instanceId);
+          if (!instance || !s.objects[planObjectId]) return;
+          instance.slots = { ...instance.slots, [slotObjectId]: planObjectId };
+          restampAttack(s, instanceId);
+        }),
+
+      detachAttack: (instanceId) =>
+        set((s) => {
+          for (const id of s.objectIds) {
+            const object = s.objects[id];
+            if (object?.attackId === instanceId) delete object.attackId;
+          }
+          // The group stays: these objects really are one thing, and that was
+          // true before the attack let go of them.
+          pruneAttacks(s);
+        }),
+
+      deleteAttack: (instanceId) => {
+        const state = get();
+        const owned = state.objectIds.filter(
+          (id) => state.objects[id]?.attackId === instanceId,
+        );
+        // Through the ordinary delete, so a tether hanging off one of these goes
+        // with it and nothing has to remember a second set of rules.
+        if (owned.length > 0) get().deleteObjects(owned);
+        set((s) => {
+          pruneAttacks(s);
+        });
+      },
 
       addSlide: () => {
         // An empty stage. A slide is its own scene, so a new one starts as one —
@@ -1369,16 +1662,11 @@ export const useEditorStore = create<EditorState>()(
 
       loadPlan: (plan) =>
         set((s) => {
-          const doc = fromPlan(plan);
-          s.id = doc.id;
-          s.title = doc.title;
-          s.raid = doc.raid;
-          s.encounterId = doc.encounterId;
-          s.background = doc.background;
-          s.objects = doc.objects;
-          s.objectIds = doc.objectIds;
-          s.groups = doc.groups;
-          s.slides = doc.slides;
+          // Every document slice at once, rather than a hand-written list of
+          // fields: `fromPlan` returns exactly a `PlanDoc`, so a field added to
+          // the document is loaded here the day it exists. The hand-written
+          // version had already silently stopped loading one.
+          Object.assign(s, fromPlan(plan));
           s.selectedIds = [];
           s.currentSlideIndex = 0;
         }),
@@ -1390,6 +1678,7 @@ export const useEditorStore = create<EditorState>()(
           s.objects = {};
           s.objectIds = [];
           s.groups = {};
+          s.attacks = [];
           s.selectedIds = [];
           s.title = "Untitled plan";
           s.background = DEFAULT_BACKGROUND;
@@ -1436,7 +1725,7 @@ export const useEditorStore = create<EditorState>()(
 );
 
 /** The native-space point at the centre of what's currently on screen. */
-function viewCentreNative(state: {
+export function viewCentreNative(state: {
   stageSize: Size;
   view: View;
   background: Background;

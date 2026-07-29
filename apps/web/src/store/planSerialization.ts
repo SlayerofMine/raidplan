@@ -118,6 +118,33 @@ export function pruneGroups(doc: {
   }
 }
 
+/**
+ * Drop attack instances nothing belongs to any more (plan §21).
+ *
+ * The sibling of {@link pruneGroups}, and the same rule for the same reason: an
+ * instance exists precisely while it still **owns** an object. Membership lives
+ * on the objects (`attackId`), so deleting the last one cannot leave a placement
+ * behind with nothing to draw — and a later placement handed the same id could
+ * never inherit a stranger's parameters.
+ *
+ * Mutates in place, so the store can call it on an immer draft.
+ */
+export function pruneAttacks(doc: {
+  objects: Record<string, PlanObject>;
+  slides: Slide[];
+}): void {
+  const owned = new Set<string>();
+  for (const object of Object.values(doc.objects)) {
+    if (object.attackId) owned.add(object.attackId);
+  }
+  for (const slide of doc.slides) {
+    if (!slide.attackInstances) continue;
+    for (const id of Object.keys(slide.attackInstances)) {
+      if (!owned.has(id)) delete slide.attackInstances[id];
+    }
+  }
+}
+
 /** Normalized editor document → the shared `Plan` document. */
 export function toPlan(doc: PlanDoc): Plan {
   return {
@@ -164,7 +191,9 @@ export function fromPlan(plan: Plan): PlanDoc {
     slides: normalizeSlides(plan.objects, plan.slides),
   };
   // The same load-time repair `normalizeSlides` does for the slides: a document
-  // from outside the store can name groups that its objects no longer join.
+  // from outside the store can name groups that its objects no longer join, and
+  // placements no object still belongs to.
   pruneGroups(doc);
+  pruneAttacks(doc);
   return doc;
 }

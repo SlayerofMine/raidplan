@@ -1342,7 +1342,7 @@ repeated drags accumulate no rounding error.
    `attackId` on objects, `attackInstances` on slides, `attacks` on plans and encounter presets.
    Schema **7** — every addition is optional or defaulted, so a 6 opens unchanged. [DONE]
 2. **The pure core.** `attackTransform.ts` and `attackStamp.ts`, plus the load-time repair pass. [DONE]
-3. **Placement.** Store actions, the palette's Attacks tab, the drop path, the slot rule, Detach.
+3. **Placement.** Store actions, the palette's Attacks tab, the drop path, the slot rule, Detach. [DONE]
 4. **Instance editing.** The Attack card: parameters, slot re-binding, and the transformer routed
    through the recipe.
 5. **Timeline.** One row, one bar, dragging the whole attack and scaling its durations.

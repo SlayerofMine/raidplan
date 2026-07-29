@@ -8,3 +8,5 @@
 export const ICON_DATA_TYPE = "application/x-raidplan-icon";
 /** Payload: a `ShapeKind`, or `"text"`/`"arrow"` for the non-shape primitives. */
 export const SHAPE_DATA_TYPE = "application/x-raidplan-shape";
+/** Payload: an attack definition id, from the plan's own library (plan §21). */
+export const ATTACK_DATA_TYPE = "application/x-raidplan-attack";

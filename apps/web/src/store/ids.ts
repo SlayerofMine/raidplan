@@ -15,3 +15,7 @@ export const nextSlideId = (): string => nextId("slide");
 export const nextAnimId = (): string => nextId("anim");
 /** Ties objects into a group that selects and transforms as one (plan §18.1). */
 export const nextGroupId = (): string => nextId("grp");
+/** An attack definition, in a plan's own library (plan §21). */
+export const nextAttackDefId = (): string => nextId("atkdef");
+/** One placement of a definition — the recipe its objects are derived from. */
+export const nextAttackId = (): string => nextId("atk");
