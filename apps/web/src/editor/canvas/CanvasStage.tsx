@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type DragEvent as ReactDragEvent,
-  type ReactNode,
 } from "react";
 import {
   Group,
@@ -23,11 +22,7 @@ import { useFollowing } from "../../anim/useFollowing";
 import { boardStack, useEditorStore } from "../../store/editorStore";
 import { selectSelectionSizes } from "../../store/selectors";
 import { isEditableTarget } from "../isEditableTarget";
-import {
-  ATTACK_DATA_TYPE,
-  ICON_DATA_TYPE,
-  SHAPE_DATA_TYPE,
-} from "../paletteDrag";
+import { ICON_DATA_TYPE, SHAPE_DATA_TYPE } from "../paletteDrag";
 import { selectPlaybackLocked, usePlayhead } from "../timeline/playhead";
 import { screenToNative, type Point } from "./coords";
 import { snapValue } from "./snapping";
@@ -36,7 +31,6 @@ import {
   normalizeRect,
   objectsInMarquee,
 } from "./marquee";
-import { PlacedAttackNode } from "./AttackPreviewLayer";
 import { ObjectNode } from "./ObjectNode";
 import { MotionPathLayer } from "./MotionPathLayer";
 import { MoveDraftLayer } from "./MoveDraftLayer";
@@ -68,21 +62,20 @@ const DBLCLICK_SLOP_PX = 8;
  * turns the stage into a pan surface. Palette drops are converted to native
  * coordinates and added at the cursor.
  */
-export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
+export function CanvasStage() {
   const [containerRef, size] = useContainerSize<HTMLDivElement>();
   const stageOf = useRef<StageNode | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const didFit = useRef(false);
 
   const background = useEditorStore((s) => s.background);
-  // Built from the three document slices rather than selected: `boardStack`
-  // makes fresh objects every call, and a selector whose result is never
+  // Built from the document slices rather than selected: `boardStack` makes
+  // fresh objects every call, and a selector whose result is never
   // reference-equal loops forever (`useSyncExternalStore` catches it, loudly).
   // Immer keeps untouched slices stable, so the memo recomputes exactly when
   // the stack can actually have changed.
   const objects = useEditorStore((s) => s.objects);
   const objectIds = useEditorStore((s) => s.objectIds);
-  const attacks = useEditorStore((s) => s.attacks);
   // The cast of the slide being edited. Objects are plan-level, but a slide
   // holds only the ones in its own scene — the others aren't drawn at all, so
   // there is nothing on the board that can't be clicked.
@@ -91,17 +84,15 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
   );
   const stack = useMemo(
     () =>
-      boardStack({ objects, objectIds, attacks }).filter(
-        (item) =>
-          item.kind !== "object" || slideStates?.[item.id] !== undefined,
+      boardStack({ objects, objectIds }).filter(
+        (item) => slideStates?.[item.id] !== undefined,
       ),
-    [objects, objectIds, attacks, slideStates],
+    [objects, objectIds, slideStates],
   );
   // Read here rather than inside `SelectionTransformer`, so attaching the
   // handles happens in the same render that creates the nodes they attach to.
   // See the note on that component.
   const selectedIds = useEditorStore((s) => s.selectedIds);
-  const selectedAttackIds = useEditorStore((s) => s.selectedAttackIds);
   // A resize the transformer has no way of hearing about — read here for the
   // same reason the selection is, so the refresh lands after the nodes resize.
   const selectionSizes = useEditorStore(selectSelectionSizes);
@@ -116,7 +107,6 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
   const select = useEditorStore((s) => s.select);
   const addIcon = useEditorStore((s) => s.addIcon);
   const addPrimitive = useEditorStore((s) => s.addPrimitive);
-  const addAttack = useEditorStore((s) => s.addAttack);
   const drawMove = useEditorStore((s) => s.drawMove);
 
   // Drawing a route is a *mode*: while it is on, a click means "corner here"
@@ -147,7 +137,7 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
   }, []);
 
   const bgImage = useImageElement(getBackgroundSrc(background.assetId));
-  // Attacks and objects that follow the board keep following it while you
+  // Objects that follow the board keep following it while you
   // drag a token — which is the whole point of saying they follow it.
   useFollowing(stageOf);
 
@@ -337,9 +327,6 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
       else addPrimitive("shape", shape as ShapeKind, at);
       return;
     }
-
-    const attackId = e.dataTransfer.getData(ATTACK_DATA_TYPE);
-    if (attackId) addAttack(attackId, at);
   };
 
   return (
@@ -398,21 +385,13 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
               group stops listening, so a click means "corner here" (or nothing)
               and can't accidentally grab a token instead. */}
           <Group listening={!drawing && !locked}>
-            {/* One stack: an attack can sit under the token standing on it, and
-                whatever is on top is what a click finds. */}
-            {stack.map((item) =>
-              item.kind === "object" ? (
-                <ObjectNode
-                  key={item.id}
-                  objectId={item.id}
-                  draggable={!isPanning && !drawing && !locked}
-                />
-              ) : (
-                <PlacedAttackNode key={item.id} instanceId={item.id} />
-              ),
-            )}
-            {/* Chrome only one caller wants — the designer's bounding box. */}
-            {overlay}
+            {stack.map((item) => (
+              <ObjectNode
+                key={item.id}
+                objectId={item.id}
+                draggable={!isPanning && !drawing && !locked}
+              />
+            ))}
             {/* Editing chrome describes the *stored* slide, so it would be
                 lying about a board mid-animation. Hidden until the playhead is
                 back at 0, which also stops the transformer from chasing nodes
@@ -421,8 +400,6 @@ export function CanvasStage({ overlay }: { overlay?: ReactNode } = {}) {
               <>
                 <SelectionTransformer
                   selectedIds={selectedIds}
-                  selectedAttackIds={selectedAttackIds}
-                  attacks={attacks}
                   objectIds={objectIds}
                   selectionSizes={selectionSizes}
                 />

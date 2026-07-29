@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
-/** Shared toolbar primitives, so the editor toolbar and the attack designer
- * draw identical controls (plan §2 / §17). */
+/** Shared toolbar primitives, so every toolbar draws identical controls
+ * (plan §2). */
 
 export function Divider() {
   return <div className="mx-1 h-5 w-px bg-panelborder" />;

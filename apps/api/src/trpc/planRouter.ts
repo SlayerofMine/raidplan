@@ -31,7 +31,7 @@ import { requireEditable, requireViewable } from "./planAccess.js";
  * honest about it.
  *
  * `requireViewable`/`requireEditable` live in `planAccess.ts` since §19.1, so
- * that a plan-scoped attack is gated by the very same decision as the plan.
+ * that a plan-scoped resource is gated by the very same decision as the plan.
  */
 
 export const planRouter = router({
@@ -67,7 +67,7 @@ export const planRouter = router({
           objects: encounter.preset.objects,
           slides: encounter.preset.slides,
           raid: encounter.raid,
-          // Remembered so the editor can offer this encounter's attacks (§17).
+          // Remembered so a plan knows which encounter seeded it (§17).
           encounterId: encounter.id,
         });
       }

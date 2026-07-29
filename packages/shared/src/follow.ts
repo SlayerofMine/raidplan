@@ -23,11 +23,9 @@ import {
  *
  * Ids are read in the **expanded** plan's namespace, which is what lets one
  * field cover every case: a plan object following another plan object, a
- * definition's part following another part of the same attack, and a definition
- * following one of the *plan's* objects through a placeholder. `expandPlan`
- * routes them through the same `resolveId` choke point as tether ends and
- * collision targets, so a filled placeholder resolves to the plan's own id and
- * every reference follows at once.
+ * plan object following another plan object, and one following a group member.
+ * They go through the same `resolveId` choke point as tether ends and collision
+ * targets, so every reference follows at once.
  */
 export const FollowSchema = z.object({
   /** The object whose centre this transform's origin sits on. */

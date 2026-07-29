@@ -93,7 +93,7 @@ describe("solveFollow", () => {
     near(facingDeg(solved), 90);
   });
 
-  it("keeps the attack's own size — reach is the ability's, not the distance", () => {
+  it("keeps its own size — reach is the ability's, not the distance", () => {
     const t = cone();
     const placed = solveFollow(
       t,
@@ -136,9 +136,9 @@ describe("solveFollow", () => {
 describe("resolveFollow", () => {
   it("rewrites both ids through the mapping", () => {
     const mapped = resolveFollow({ pin: "slot", aim: "orb" }, (id) =>
-      id === "slot" ? "plan-boss" : `attack::${id}`,
+      id === "slot" ? "plan-boss" : `scoped::${id}`,
     );
-    expect(mapped).toEqual({ pin: "plan-boss", aim: "attack::orb" });
+    expect(mapped).toEqual({ pin: "plan-boss", aim: "scoped::orb" });
   });
 
   it("leaves out what was never there", () => {

@@ -1,9 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { Hono } from "hono";
-import { expandPlan, isUploadedAsset, type Plan } from "@raidplan/shared";
+import { isUploadedAsset, type Plan } from "@raidplan/shared";
 import { canView } from "../auth/access.js";
-import { attackDefsForPlan } from "../attacks/attacksRepo.js";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
 import { createIconCatalogRepo } from "../icons/catalogRepo.js";
@@ -62,12 +61,8 @@ export function createShareRoutes({
   };
 
   app.get("/p/:slug/og.png", async (c) => {
-    const raw = await loadShared(c.req.param("slug"), c.req.raw);
-    if (!raw) return c.text("Not found", 404);
-
-    // Stamp any attacks into concrete objects so the preview shows them too
-    // (plan §17). A no-attack plan passes straight through.
-    const plan = expandPlan(raw, attackDefsForPlan(db, raw));
+    const plan = await loadShared(c.req.param("slug"), c.req.raw);
+    if (!plan) return c.text("Not found", 404);
 
     // "Slide 1" is index 0; a plan with no slides previews its base layout.
     const png = renderOgImage(plan, plan.slides.length > 0 ? 0 : -1, {
@@ -158,9 +153,7 @@ export async function inlineUploadedBackground(
 /** A one-line summary for the unfurl card. */
 export function planDescription(plan: Plan): string {
   const slides = plan.slides.length;
-  // Attacks are objects as far as a reader is concerned — a plan made of one
-  // attack is not an empty plan.
-  const objects = plan.objects.length + plan.attacks.length;
+  const objects = plan.objects.length;
   const parts = [
     `${slides} ${slides === 1 ? "slide" : "slides"}`,
     `${objects} ${objects === 1 ? "object" : "objects"}`,

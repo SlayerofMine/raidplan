@@ -60,14 +60,6 @@ export const OBJECT_TYPES = [
    * transform — see `tetherOps` in `mechanics.ts`.
    */
   "tether",
-  /**
-   * A **hole in an attack definition**, filled by one of the using plan's own
-   * objects (plan §18.14). It draws nothing itself: at expansion every
-   * reference to it — a tether endpoint, a collision target, an animation
-   * target — becomes a reference to the object the plan put there, which is how
-   * an attack can tether the boss to a player it could never have known about.
-   */
-  "placeholder",
 ] as const;
 export const ObjectTypeSchema = z.enum(OBJECT_TYPES);
 export type ObjectType = z.infer<typeof ObjectTypeSchema>;

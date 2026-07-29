@@ -1,5 +1,4 @@
 import { protectedProcedure, router } from "./context.js";
-import { attackRouter } from "./attackRouter.js";
 import { encounterRouter } from "./encounterRouter.js";
 import { planRouter } from "./planRouter.js";
 
@@ -7,7 +6,6 @@ import { planRouter } from "./planRouter.js";
 export const appRouter = router({
   plan: planRouter,
   encounter: encounterRouter,
-  attack: attackRouter,
   me: router({
     get: protectedProcedure.query(({ ctx }) => ({
       userId: ctx.viewer.userId,

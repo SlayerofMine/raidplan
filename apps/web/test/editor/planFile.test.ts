@@ -9,7 +9,6 @@ function plan(): Plan {
     raid: "",
     background: { assetId: "arena", width: 1600, height: 900 },
     objects: [],
-    attacks: [],
     // A plan always has at least one slide; `PlanSchema` rejects none.
     slides: [{ id: "s1", states: {}, animations: [] }],
     groups: {},

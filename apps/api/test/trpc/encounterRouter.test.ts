@@ -90,7 +90,7 @@ describe("plan.create from an encounter", () => {
     expect(plan.doc.background).toEqual(BACKGROUND);
     expect(plan.doc.objects).toHaveLength(1);
     expect(plan.doc.objects[0]!.id).toBe("boss");
-    // Remembered so the editor can offer this encounter's attacks (§17).
+    // Remembered so a plan knows which encounter seeded it (§17).
     expect(plan.doc.encounterId).toBe(encounter.id);
   });
 

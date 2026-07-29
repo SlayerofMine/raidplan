@@ -78,7 +78,7 @@ export function createPlan(
     background: Plan["background"];
     /** Encounter classification, mirrored to the `raid` column for listing. */
     raid?: string;
-    /** Which encounter seeded this plan (plan §17) — drives the attack palette. */
+    /** Which encounter seeded this plan (plan §17). */
     encounterId?: string;
     /** Pre-placed content when seeding from an encounter preset (plan §17). */
     objects?: Plan["objects"];

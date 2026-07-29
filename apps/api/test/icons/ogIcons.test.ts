@@ -39,7 +39,6 @@ const plan = (objects: PlanObject[]): Plan => ({
   raid: "",
   background: { assetId: "no-such-bg", width: 400, height: 300 },
   objects,
-  attacks: [],
   groups: {},
   // A slide's `states` is its cast list — an object with no entry isn't in the
   // scene, so the fixture puts them all on the opening slide.

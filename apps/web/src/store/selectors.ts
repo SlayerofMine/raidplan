@@ -34,8 +34,6 @@ export function selectObjectState(
  * The handles snap back to the size the object started at and stay there until
  * the selection is rebuilt — which is why unselecting and reselecting fixed it.
  *
- * A placed attack needs none of this: its grab frame is a real `Rect` carrying
- * `width`/`height`, which the Transformer does watch.
  *
  * Sizes only, and resolved for the current slide so a slide change counts too.
  * Position and rotation are attributes of the `Group` itself, so those it hears.

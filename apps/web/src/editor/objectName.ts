@@ -23,7 +23,6 @@ const TYPE_LABELS: Record<ObjectType, string> = {
   arrow: "Arrow",
   image: "Image",
   tether: "Tether",
-  placeholder: "Slot",
 };
 
 export function objectDisplayName(object: PlanObject | undefined): string {

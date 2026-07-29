@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { Transformer } from "react-konva";
-import type { AttackInstance } from "@raidplan/shared";
 import type { Node as KonvaNode } from "konva/lib/Node";
 import type { Transformer as TransformerNode } from "konva/lib/shapes/Transformer";
 import { useEditorStore } from "../../store/editorStore";
@@ -33,14 +32,10 @@ const ROTATION_SNAPS = [0, 45, 90, 135, 180, 225, 270, 315];
  */
 export function SelectionTransformer({
   selectedIds,
-  selectedAttackIds,
-  attacks,
   objectIds,
   selectionSizes,
 }: {
   selectedIds: readonly string[];
-  selectedAttackIds: readonly string[];
-  attacks: readonly AttackInstance[];
   /** Not read — a dependency, so added or removed nodes force a re-attach. */
   objectIds: readonly string[];
   /** Not read — a dependency; see `selectSelectionSizes` and the effect below. */
@@ -61,14 +56,6 @@ export function SelectionTransformer({
         const object = objects[id];
         return object && !object.locked && object.type !== "tether";
       })
-      // A placed attack is transformed through its frame, which carries the
-      // instance id (plan §18.3) — resizing it *is* resizing the rectangle.
-      // Locked ones are skipped for the same reason locked objects are.
-      .concat(
-        selectedAttackIds.filter(
-          (id) => !attacks.find((a) => a.id === id)?.locked,
-        ),
-      )
       .map((id) => stage.findOne(`#${id}`))
       // Hidden objects keep their nodes so playback can reveal them, but they
       // can't be clicked or dragged — handles floating over nothing would be a
@@ -81,7 +68,7 @@ export function SelectionTransformer({
     transformer.getLayer()?.batchDraw();
     // `objectIds` participates so the transformer re-attaches when nodes are
     // added/removed underneath a stable selection.
-  }, [selectedIds, selectedAttackIds, attacks, objectIds]);
+  }, [selectedIds, objectIds]);
 
   /**
    * Re-measure when a selected object changes size, because nothing else will:
@@ -130,9 +117,7 @@ export function SelectionTransformer({
     if (store.selectedIds.length < 2) return;
 
     const held = ref.current?.nodes() ?? [];
-    // Where each node the handles moved has ended up. A placed attack's frame
-    // is not an object and settles through its own handler; a selection is
-    // never both kinds at once, so this simply leaves it alone.
+    // Where each node the handles moved has ended up.
     const settled = held.flatMap((node) => {
       const before = selectObjectState(store, node.id());
       if (!before) return [];

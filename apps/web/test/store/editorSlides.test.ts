@@ -273,39 +273,6 @@ describe("slides — bringing an object into another scene", () => {
   });
 });
 
-/**
- * The attack designer is the one editor where the slides are *not* separate
- * scenes: a def is one thing in two states, laid out as Start and End, so a part
- * drawn on either belongs to both.
- */
-describe("slides — a shared cast", () => {
-  it("puts a new object on every slide", () => {
-    state().continueSlide(0);
-    state().setSharedCast(true);
-    state().selectSlide(0);
-
-    const id = state().addIcon(iconId);
-
-    expect(state().slides.map((s) => s.states[id] !== undefined)).toEqual([
-      true,
-      true,
-    ]);
-    state().setSharedCast(false);
-  });
-
-  it("takes a deleted object off every slide", () => {
-    state().continueSlide(0);
-    state().setSharedCast(true);
-    const id = state().addIcon(iconId);
-
-    state().deleteObjects([id]);
-
-    expect(state().slides.some((s) => s.states[id])).toBe(false);
-    expect(state().objects[id]).toBeUndefined();
-    state().setSharedCast(false);
-  });
-});
-
 describe("animations — CRUD", () => {
   it("addAnimation adds a sensible default animation", () => {
     const id = state().addIcon(iconId);

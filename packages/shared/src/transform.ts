@@ -40,8 +40,8 @@ export const TransformSchema = z.object({
    *
    * An angle rather than a second point, because a point would be dragged out
    * of true by any non-square scaling: unit space maps x and y independently
-   * ({@link ../attack.ts mapPoint}), so stretching a frontal sideways would
-   * quietly re-aim it. An angle is immune to that.
+   * so a non-uniform scale would quietly re-aim a frontal stretched sideways.
+   * An angle is immune to that.
    */
   dir: z.number().finite().optional(),
 });
@@ -73,9 +73,8 @@ export const angleDeg = (a: Point, b: Point): number =>
  * Where the origin actually sits, in the space the transform is placed in.
  *
  * Rotation is about `x,y` — the top-left — which is Konva's convention and the
- * one the rest of the geometry already assumes (see `cornersOf` in
- * `attack.ts`). So the origin is the local offset, turned by the transform's own
- * rotation, added to the top-left.
+ * one the rest of the geometry already assumes. So the origin is the local
+ * offset, turned by the transform's own rotation, added to the top-left.
  */
 export function pivotPoint(t: Pivoted): Point {
   const rad = t.rotation * DEG;

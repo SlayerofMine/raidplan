@@ -70,7 +70,6 @@ function planDoc(over: Partial<Plan> = {}): Plan {
     title: "Test",
     raid: "",
     background: BACKGROUND,
-    attacks: [],
     groups: {},
     // A slide's `states` is its cast list, so the fixture's objects have to be
     // *on* the opening slide to be drawn — placed at their creation transform,
@@ -395,31 +394,6 @@ describe("planDescription", () => {
     expect(planDescription(planDoc({ raid: "Aberrus", slides: [] }))).toBe(
       "Aberrus · 0 slides · 0 objects",
     );
-  });
-
-  it("counts a placed attack — a plan made of one isn't empty", () => {
-    expect(
-      planDescription(
-        planDoc({
-          slides: [{ id: "s", states: {}, animations: [] }],
-          attacks: [
-            {
-              id: "i1",
-              attackId: "atk",
-              slideId: "s",
-              x: 0,
-              y: 0,
-              w: 100,
-              h: 100,
-              rotation: 0,
-              startMs: 0,
-              slots: {},
-              args: {},
-            },
-          ],
-        }),
-      ),
-    ).toBe("1 slide · 1 object");
   });
 });
 

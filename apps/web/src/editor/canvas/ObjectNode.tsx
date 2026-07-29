@@ -190,10 +190,9 @@ export const ObjectNode = memo(function ObjectNode({
       scaleX={1}
       scaleY={1}
       // Hidden objects keep their node rather than unmounting: playback drives
-      // Konva by id, so an object that starts a slide invisible — every attack
-      // part does (plan §17) — must already be there for an entrance effect to
-      // reveal. Konva skips invisible nodes when drawing and hit-testing, so
-      // this costs nothing on screen.
+      // Konva by id, so an object that starts a slide invisible must already
+      // be there for an entrance effect to reveal. Konva skips invisible nodes
+      // when drawing and hit-testing, so this costs nothing on screen.
       visible={state.visible}
       draggable={draggable && !object.locked}
       // Selection is an *editor* concern. The viewer enables listening on slides

@@ -105,8 +105,8 @@ export interface Placed {
  * object it belongs to *actually is* — the live node, which for a following
  * object is not where the document put it (plan §18.17).
  *
- * The same offset-and-turn `useFollowing` uses to carry a followed attack: sit
- * the group's offset on the authored top-left, its position on the live one, and
+ * An offset-and-turn: sit the group's offset on the authored top-left, its
+ * position on the live one, and
  * turn it by the difference. A child authored at document point `p` then lands
  * at `live + R(live.rotation − base.rotation) · (p − base)`, which for any point
  * of the object's own box is exactly where that part of the object now is. So

@@ -43,6 +43,13 @@
       "when": 1785251669346,
       "tag": "0005_clumsy_rhodey",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1785282467220,
+      "tag": "0006_drop_attacks",
+      "breakpoints": true
     }
   ]
 }

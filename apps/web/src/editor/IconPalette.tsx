@@ -6,7 +6,7 @@ import {
   type IconCategory,
 } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
-import { AttacksTab, ShapesTab } from "./PaletteTabs";
+import { ShapesTab } from "./PaletteTabs";
 import { WowIconGrid } from "./WowIconGrid";
 import { ICON_DATA_TYPE } from "./paletteDrag";
 const COLUMNS = 4;
@@ -20,13 +20,9 @@ const ROW_HEIGHT = 56;
  * Click a token to drop it in the centre of the view, or drag it onto the
  * canvas to place it at the cursor.
  */
-export function IconPalette({
-  authoring = false,
-}: { authoring?: boolean } = {}) {
+export function IconPalette() {
   const addIcon = useEditorStore((s) => s.addIcon);
-  const [tab, setTab] = useState<"tokens" | "wow" | "shapes" | "attacks">(
-    "tokens",
-  );
+  const [tab, setTab] = useState<"tokens" | "wow" | "shapes">("tokens");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<IconCategory | "all">("all");
 
@@ -70,19 +66,12 @@ export function IconPalette({
           active={tab === "shapes"}
           onClick={() => setTab("shapes")}
         />
-        <TabButton
-          label="Attacks"
-          active={tab === "attacks"}
-          onClick={() => setTab("attacks")}
-        />
       </div>
 
       {tab === "wow" ? (
         <WowIconGrid />
       ) : tab === "shapes" ? (
-        <ShapesTab authoring={authoring} />
-      ) : tab === "attacks" ? (
-        <AttacksTab />
+        <ShapesTab />
       ) : (
         <>
           <div className="flex flex-col gap-2 p-3 pb-2">

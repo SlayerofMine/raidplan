@@ -72,10 +72,8 @@ function tracePolyline(ctx: Context, points: number[]): void {
 /**
  * The line itself: two endpoint ids, read live from the layer on every draw.
  *
- * Store-free on purpose. A tether inside an **attack** is not in the document
- * (its parts are materialised at render time), and since §18.14 one of its ends
- * can be one of the *plan's* objects — so the drawing has to work from ids
- * alone, wherever those ids happen to come from.
+ * Store-free on purpose: the drawing works from ids alone, wherever those ids
+ * happen to come from.
  */
 export function TetherShape({
   id,

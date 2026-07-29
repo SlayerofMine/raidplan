@@ -30,7 +30,6 @@ function validPlan(): Plan {
         },
       },
     ],
-    attacks: [],
     groups: {},
     slides: [
       {
@@ -146,7 +145,6 @@ describe("PlanSchema — malformed documents are rejected", () => {
 
   it("rejects an unknown animation trigger", () => {
     const plan = validPlan() as unknown as {
-      attacks: [];
       slides: { animations: { trigger: string }[] }[];
     };
     plan.slides[0]!.animations[0]!.trigger = "someday";

@@ -7,7 +7,7 @@ import { Btn } from "./ToolbarButton";
  * This stays in the toolbar rather than the palette (plan §18.5): it isn't a
  * thing you *add* from a library, it's an operation on the current selection —
  * the tether's geometry comes from the two objects it joins. Everything you add
- * now lives in the palette's Shapes and Attacks tabs.
+ * lives in the palette's own tabs.
  */
 export function TetherButton() {
   const selectedIds = useEditorStore((s) => s.selectedIds);

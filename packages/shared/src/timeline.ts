@@ -6,7 +6,7 @@ import type { Anim } from "./plan.js";
  *
  * This is the single source of truth for *when* each animation starts and how
  * long it occupies a slide's timeline. The playback engine, the interactive
- * Timeline/Gantt view and `expandPlan` (which flattens an attack's internal
+ * Timeline/Gantt view and the player (which flattens a slide's internal
  * chain onto its host slide) all consume it, so a bar drawn in the Gantt is
  * guaranteed to line up with the frame the player produces — there is no second
  * implementation of the trigger rules to drift out of sync (the web suite's

@@ -14,9 +14,8 @@ import { type Page } from "@playwright/test";
  *    content of z-order.
  *
  * Konva publishes every live stage on `window.Konva`, so this needs no test-only
- * hook in the app. The editor can have more than one stage (the Attacks palette
- * renders each definition as its own miniature board), so pick the real board by
- * its container rather than trusting `stages[0]`.
+ * hook in the app. Pick the real board by its container rather than trusting
+ * `stages[0]`, in case the page ever mounts a second stage.
  */
 export interface BoardNode {
   id: string;

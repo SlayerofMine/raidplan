@@ -3,8 +3,6 @@ import { temporal } from "zundo";
 import { shallow } from "zustand/shallow";
 import { immer } from "zustand/middleware/immer";
 import {
-  attackSlots,
-  attackZ,
   centrePoint,
   isDeferredTrigger,
   isFollowing,
@@ -17,8 +15,6 @@ import {
   stateBeforeAnim,
   topLeftForCentre,
   type Anim,
-  type AttackDef,
-  type AttackInstance,
   type Background,
   type Follow,
   type ObjectBase,
@@ -33,7 +29,7 @@ import {
 } from "@raidplan/shared";
 import { DEFAULT_BACKGROUND } from "@raidplan/shared";
 import { getIconById } from "@raidplan/shared";
-import { nextAnimId, nextAttackId, nextGroupId, nextSlideId } from "./ids";
+import { nextAnimId, nextGroupId, nextSlideId } from "./ids";
 import {
   fitView,
   screenToNative,
@@ -83,21 +79,6 @@ export interface EditorState extends PlanDoc {
    * Ephemeral, like the selection.
    */
   currentSlideIndex: number;
-  /**
-   * Do all the slides share one cast? `false` — a plan — means each slide owns
-   * its own objects, so adding one puts it on the slide being edited and
-   * deleting one takes it out of that scene alone.
-   *
-   * The attack designer sets it `true`. An {@link AttackDef} is genuinely
-   * *one* thing in two states — a start shape and what its animations turn it
-   * into — which `defToPlan` lays out as two slides. They are two views of the
-   * same scene, not two scenes, so a part drawn on either belongs to both.
-   *
-   * Ephemeral: a property of which editor is open, never of the document.
-   */
-  sharedCast: boolean;
-  setSharedCast: (shared: boolean) => void;
-
   // --- creation ---
   addIcon: (iconId: string, native?: Point) => string;
   /** `native` places it at a point (a palette drop); otherwise the view centre. */
@@ -178,13 +159,6 @@ export interface EditorState extends PlanDoc {
   selectAll: () => void;
   clearSelection: () => void;
   /**
-   * Placed attacks currently selected (plan §18.3). Kept beside `selectedIds`
-   * rather than mixed into it: an attack is a reference, not an object, and the
-   * two are never selected together — picking one clears the other.
-   */
-  selectedAttackIds: string[];
-  selectAttack: (ids: string[]) => void;
-  /**
    * Tie the current selection together so it selects and transforms as one
    * (plan §18.1). Returns the new group id, or undefined for a selection of
    * fewer than two. Members already in other groups are merged into this one.
@@ -229,8 +203,8 @@ export interface EditorState extends PlanDoc {
    * Copy the previous slide's cast into slide `index`, where it left them,
    * without touching what is already there. The repair for "I added a slide and
    * now there's nothing to animate" — and it fills the slide in place rather
-   * than making another one, so nothing pinned to it (an attack's timing) is
-   * lost to a delete-and-recreate.
+   * than making another one, so nothing pinned to it is lost to a
+   * delete-and-recreate.
    */
   carryOverInto: (index: number) => void;
   duplicateSlide: (index: number) => void;
@@ -291,47 +265,6 @@ export interface EditorState extends PlanDoc {
   ) => string | undefined;
   deleteAnimation: (slideIndex: number, animId: string) => void;
   deleteAnimations: (slideIndex: number, animIds: string[]) => void;
-
-  /**
-   * Definitions for the attacks this plan can use, keyed by id (plan §17).
-   * Ephemeral: fetched per plan, never part of the document, undo or autosave —
-   * a plan references attacks, it doesn't own them. Shared by the canvas preview
-   * and the WebM export so both expand from the same defs.
-   */
-  attackDefs: Record<string, AttackDef>;
-  setAttackDefs: (defs: Record<string, AttackDef>) => void;
-
-  // --- placed attacks (plan §17) ---
-  /**
-   * Drop a pre-designed attack on the board at a point (plan §18.3).
-   *
-   * Placement belongs to the plan, so this works from the base layout as well as
-   * from a slide. *When* it fires is a separate question: it's pinned to the slide
-   * being edited, or to the first one when you're laying out the board — and a
-   * plan with no slides gets one, because an attack that never fires is furniture.
-   *
-   * A definition with **placeholders** (§18.14) takes them from the current
-   * selection, in document order — select the boss and the tank, then place the
-   * frontal. Too small a selection and nothing is placed: a definition with
-   * holes in it isn't a thing you can put on a board.
-   */
-  addAttack: (
-    attackId: string,
-    at: { x: number; y: number },
-    slideId?: string,
-  ) => string | undefined;
-  /** Retune a placed attack — position, rotation, scale, slide or start offset. */
-  updateAttack: (
-    instanceId: string,
-    patch: Partial<Omit<AttackInstance, "id" | "attackId">>,
-  ) => void;
-  removeAttack: (instanceId: string) => void;
-  /**
-   * Move a placed attack through the board's stack — past objects as well as
-   * past other attacks, because they share one order. `delta` counts places and
-   * is clamped to the ends.
-   */
-  reorderAttack: (instanceId: string, delta: number) => void;
 
   // --- document ---
   setTitle: (title: string) => void;
@@ -459,24 +392,19 @@ function reanchorRoutes(
  * the fight yet on slide 1, and it does not automatically stay for slide 5
  * either: carrying it forward is something the author says by duplicating the
  * slide or continuing from it, not something adding an object decides for them.
- *
- * Under {@link EditorState.sharedCast} it lands on every slide instead — see
- * that flag for why the attack designer is the exception.
  */
 function putOnCurrentSlide(
   s: EditorState,
   id: string,
   state: ObjectState,
 ): void {
-  const slides = s.sharedCast ? s.slides : [s.slides[s.currentSlideIndex]];
-  for (const slide of slides) {
-    if (slide) slide.states[id] = { ...state };
-  }
+  const slide = s.slides[s.currentSlideIndex];
+  if (slide) slide.states[id] = { ...state };
 }
 
-/** The slides a structural edit reaches: this one, or all of them. */
+/** The slides a structural edit reaches — the one being edited. */
 function editedSlides(s: EditorState): (Slide | undefined)[] {
-  return s.sharedCast ? s.slides : [s.slides[s.currentSlideIndex]];
+  return [s.slides[s.currentSlideIndex]];
 }
 
 /** Keep `base.z` aligned with the id order after any structural change. */
@@ -546,32 +474,21 @@ function gatherMembers(
   ];
 }
 
-/** One item on the board — an object or an attack — and where it is drawn. */
+/** One item on the board, and where it is drawn. */
 interface StackItem {
-  kind: "object" | "attack";
   id: string;
   z: number;
 }
 
-/**
- * The board in draw order, objects and attacks together (plan §18.12).
- *
- * They share one stacking scale, which is what lets a token stand on top of a
- * void zone — before this, attacks were simply drawn after every object and so
- * took every click, whatever the order said.
- */
+/** The board in draw order (plan §18.12). */
 export function boardStack(s: {
   objects: Record<string, PlanObject>;
   objectIds: string[];
-  attacks: AttackInstance[];
 }): StackItem[] {
   const items: StackItem[] = s.objectIds.flatMap((id) => {
     const object = s.objects[id];
-    return object ? [{ kind: "object" as const, id, z: object.base.z }] : [];
+    return object ? [{ id, z: object.base.z }] : [];
   });
-  for (const attack of s.attacks) {
-    items.push({ kind: "attack", id: attack.id, z: attackZ(attack) });
-  }
   return items.sort((a, b) => a.z - b.z);
 }
 
@@ -674,27 +591,18 @@ export const useEditorStore = create<EditorState>()(
       title: "Untitled plan",
       raid: "",
       encounterId: undefined,
-      attacks: [],
-      attackDefs: {},
       background: DEFAULT_BACKGROUND,
       objects: {},
       objectIds: [],
       groups: {},
       slides: [makeFirstSlide()],
       selectedIds: [],
-      selectedAttackIds: [],
       view: INITIAL_VIEW,
       stageSize: INITIAL_STAGE_SIZE,
       snapEnabled: false,
       gridSize: DEFAULT_GRID_SIZE,
       clipboard: [],
       currentSlideIndex: 0,
-      sharedCast: false,
-
-      setSharedCast: (shared) =>
-        set((s) => {
-          s.sharedCast = shared;
-        }),
 
       addIcon: (iconId, native) => {
         const state = get();
@@ -710,7 +618,6 @@ export const useEditorStore = create<EditorState>()(
           s.objectIds.push(object.id);
           putOnCurrentSlide(s, object.id, seedState(object));
           s.selectedIds = [object.id];
-          s.selectedAttackIds = [];
         });
         return object.id;
       },
@@ -730,7 +637,6 @@ export const useEditorStore = create<EditorState>()(
           s.objectIds.push(object.id);
           putOnCurrentSlide(s, object.id, seedState(object));
           s.selectedIds = [object.id];
-          s.selectedAttackIds = [];
         });
         return object.id;
       },
@@ -752,7 +658,6 @@ export const useEditorStore = create<EditorState>()(
           s.objectIds.push(object.id);
           putOnCurrentSlide(s, object.id, seedState(object));
           s.selectedIds = [object.id];
-          s.selectedAttackIds = [];
         });
         return object.id;
       },
@@ -894,32 +799,13 @@ export const useEditorStore = create<EditorState>()(
               (a) => !orphaned.has(a.objectId),
             );
           }
-          // An attack argument can name plan objects (§18.4 `objectRefs`), so a
-          // deleted object must drop out of those too or it dangles.
-          for (const attack of s.attacks) {
-            for (const [key, value] of Object.entries(attack.args)) {
-              if (
-                Array.isArray(value) &&
-                value.some((id) => orphaned.has(id))
-              ) {
-                attack.args[key] = value.filter((id) => !orphaned.has(id));
-              }
-            }
-          }
           // Deleting members can wear a group down to one, which is not a group.
           pruneGroups(s);
           reindexZ(s);
         }),
 
       deleteSelected: () => {
-        const { selectedIds, selectedAttackIds } = get();
-        // Delete removes whichever kind is selected — they're never both.
-        for (const id of selectedAttackIds) get().removeAttack(id);
-        if (selectedAttackIds.length > 0) {
-          set((s) => {
-            s.selectedAttackIds = [];
-          });
-        }
+        const { selectedIds } = get();
         if (selectedIds.length > 0) get().deleteObjects(selectedIds);
       },
 
@@ -971,7 +857,6 @@ export const useEditorStore = create<EditorState>()(
               s.slides,
               s.currentSlideIndex,
             ).filter((id) => rejoined.includes(id));
-            s.selectedAttackIds = [];
           });
         }
         const copies = clipboard.filter(
@@ -1007,7 +892,6 @@ export const useEditorStore = create<EditorState>()(
             putOnCurrentSlide(s, clone.id, seedState(clone));
           }
           s.selectedIds = clones.map((c) => c.id);
-          s.selectedAttackIds = [];
           reindexZ(s);
         });
         return clones.map((c) => c.id);
@@ -1044,7 +928,6 @@ export const useEditorStore = create<EditorState>()(
             s.currentSlideIndex,
           );
           s.selectedIds = withGroupMembers(s.objects, here, ids);
-          s.selectedAttackIds = [];
         }),
 
       selectOnly: (ids) =>
@@ -1055,14 +938,8 @@ export const useEditorStore = create<EditorState>()(
           s.selectedIds = s.objectIds.filter(
             (id) => here.has(id) && ids.includes(id),
           );
-          s.selectedAttackIds = [];
         }),
 
-      selectAttack: (ids) =>
-        set((s) => {
-          s.selectedAttackIds = ids;
-          s.selectedIds = [];
-        }),
       toggleSelect: (id) =>
         set((s) => {
           if (!s.objects[id]) return;
@@ -1088,12 +965,10 @@ export const useEditorStore = create<EditorState>()(
             s.slides,
             s.currentSlideIndex,
           );
-          s.selectedAttackIds = [];
         }),
       clearSelection: () =>
         set((s) => {
           s.selectedIds = [];
-          s.selectedAttackIds = [];
         }),
 
       groupSelected: () => {
@@ -1145,7 +1020,6 @@ export const useEditorStore = create<EditorState>()(
             s.slides,
             s.currentSlideIndex,
           ).filter((id) => s.objects[id]?.groupId === groupId);
-          s.selectedAttackIds = [];
         }),
 
       renameGroup: (groupId, name) =>
@@ -1191,7 +1065,6 @@ export const useEditorStore = create<EditorState>()(
           s.currentSlideIndex = s.slides.length - 1;
           // Nothing on the new slide, so nothing on it can be selected.
           s.selectedIds = [];
-          s.selectedAttackIds = [];
         });
         return slide.id;
       },
@@ -1252,18 +1125,8 @@ export const useEditorStore = create<EditorState>()(
             ? { autoAdvanceMs: source.autoAdvanceMs }
             : {}),
         };
-        // The attacks this slide fires come along too — a duplicated slide that
-        // dropped them would only look like a copy.
-        const copiedAttacks = get()
-          .attacks.filter((a) => a.slideId === source.id)
-          .map((a) => ({
-            ...structuredClone(a),
-            id: nextAttackId(),
-            slideId: copy.id,
-          }));
         set((s) => {
           s.slides.splice(index + 1, 0, copy);
-          s.attacks.push(...copiedAttacks);
           s.currentSlideIndex = index + 1;
         });
       },
@@ -1275,9 +1138,6 @@ export const useEditorStore = create<EditorState>()(
           // no layout to draw and nowhere to put the cursor.
           if (!doomed || s.slides.length <= 1) return;
           s.slides.splice(index, 1);
-          // An attack fires on exactly one slide; without it there is no moment
-          // for it to happen, so it goes too (undo brings both back).
-          s.attacks = s.attacks.filter((a) => a.slideId !== doomed.id);
           s.currentSlideIndex = Math.min(
             s.currentSlideIndex,
             s.slides.length - 1,
@@ -1497,94 +1357,6 @@ export const useEditorStore = create<EditorState>()(
           slide.animations = slide.animations.filter((a) => !doomed.has(a.id));
         }),
 
-      setAttackDefs: (defs) =>
-        set((s) => {
-          s.attackDefs = defs;
-        }),
-
-      addAttack: (attackId, at, slideId) => {
-        const state = get();
-        const def = state.attackDefs[attackId];
-
-        // Fill the definition's holes from the selection, in document order.
-        const slots: Record<string, string> = {};
-        const holes = def ? attackSlots(def) : [];
-        if (holes.length > 0) {
-          const chosen = state.objectIds.filter((id) =>
-            state.selectedIds.includes(id),
-          );
-          if (chosen.length < holes.length) return undefined;
-          holes.forEach((hole, index) => {
-            slots[hole.id] = chosen[index]!;
-          });
-        }
-        // An attack fires on the slide you're editing — there is always one, so
-        // there is nothing to create and no "laid out but never happens" case.
-        const firesOn =
-          slideId ??
-          state.slides[state.currentSlideIndex]?.id ??
-          state.slides[0]!.id;
-        // The def's default size is the size it was drawn at; centre it on the
-        // drop point so the attack lands where you aimed (plan §18.2).
-        const size = def?.defaultSize ?? { w: 400, h: 400 };
-        const instance: AttackInstance = {
-          id: nextAttackId(),
-          attackId,
-          slideId: firesOn,
-          // On top of what's there, like every other newly added thing.
-          z: boardStack(state).length,
-          x: at.x - size.w / 2,
-          y: at.y - size.h / 2,
-          w: size.w,
-          h: size.h,
-          rotation: 0,
-          startMs: 0,
-          slots,
-          args: {},
-        };
-        set((s) => {
-          s.attacks.push(instance);
-          s.selectedAttackIds = [instance.id];
-          s.selectedIds = [];
-        });
-        return instance.id;
-      },
-
-      updateAttack: (instanceId, patch) =>
-        set((s) => {
-          const instance = s.attacks.find((a) => a.id === instanceId);
-          if (instance) Object.assign(instance, patch);
-        }),
-
-      removeAttack: (instanceId) =>
-        set((s) => {
-          s.attacks = s.attacks.filter((a) => a.id !== instanceId);
-        }),
-
-      reorderAttack: (instanceId, delta) =>
-        set((s) => {
-          const instance = s.attacks.find((a) => a.id === instanceId);
-          if (!instance) return;
-
-          // Everything on the board, in the order it is drawn. Objects hold
-          // integers 0..n-1 and renumber themselves as they come and go, so the
-          // attack takes a value *between* two of them and stays put.
-          const stack = boardStack(s).filter((item) => item.id !== instanceId);
-          const from = boardStack(s).findIndex(
-            (item) => item.id === instanceId,
-          );
-          const to = Math.max(0, Math.min(stack.length, from + delta));
-
-          const below = stack[to - 1]?.z;
-          const above = stack[to]?.z;
-          instance.z =
-            below === undefined
-              ? (above ?? 0) - 1
-              : above === undefined
-                ? below + 1
-                : (below + above) / 2;
-        }),
-
       setTitle: (title) =>
         set((s) => {
           s.title = title;
@@ -1604,11 +1376,9 @@ export const useEditorStore = create<EditorState>()(
           s.background = doc.background;
           s.objects = doc.objects;
           s.objectIds = doc.objectIds;
-          s.attacks = doc.attacks;
           s.groups = doc.groups;
           s.slides = doc.slides;
           s.selectedIds = [];
-          s.selectedAttackIds = [];
           s.currentSlideIndex = 0;
         }),
 
@@ -1618,10 +1388,8 @@ export const useEditorStore = create<EditorState>()(
         set((s) => {
           s.objects = {};
           s.objectIds = [];
-          s.attacks = [];
           s.groups = {};
           s.selectedIds = [];
-          s.selectedAttackIds = [];
           s.title = "Untitled plan";
           s.background = DEFAULT_BACKGROUND;
           s.slides = [makeFirstSlide()];

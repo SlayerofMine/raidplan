@@ -4,7 +4,7 @@ import { api, isUnauthorized } from "./client";
 export interface Session {
   userId: string;
   roles: Record<string, "viewer" | "editor" | "owner">;
-  /** Site admin — may author encounters and attacks (plan §17). */
+  /** Site admin — may author encounters (plan §17). */
   isAdmin: boolean;
 }
 

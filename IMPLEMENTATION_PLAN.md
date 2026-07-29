@@ -467,6 +467,8 @@ Deliver Phase 1's acceptance criteria by end of week 1; you now have a spine to 
 
 ## 17. Encounter Presets & Attack Designer (epic)
 
+> **Removed in §20.** Kept as the record of a decision that was reverted; the code is gone.
+
 An **admin panel** with two jobs, plus the matching planner-side flow. Decisions
 taken with the maintainer; see the memory note `encounter-attack-designer`.
 
@@ -630,6 +632,8 @@ underneath, with rename, ungroup, lock, hide and delete on the header.
 
 ### 18.2 Attacks in unit space; instances as rects
 
+> **Removed in §20.** Kept as the record of a decision that was reverted; the code is gone.
+
 - Definition content — object positions **and** sizes, plus animation `toX`/`toY` and paths — is
   authored in **-1..1 centred** unit space. Nothing absolute.
 - An instance becomes a **rect**: `{ x, y, w, h, rotation, startMs, args }`. `scale` and `anchor`
@@ -641,12 +645,16 @@ underneath, with rename, ungroup, lock, hide and delete on the header.
 
 ### 18.3 Attacks as canvas citizens
 
+> **Removed in §20.** Kept as the record of a decision that was reverted; the code is gone.
+
 Each instance renders as a Konva `Group` (id = instance id, draggable) whose expanded children are
 drawn read-only through `ObjectVisual`. It joins selection and the transformer, so it is moved,
 scaled and rotated like any object — but never entered, because it is indivisible. This **removes
 the numeric `AttacksPanel`**; only timing and parameters remain in a properties panel.
 
 ### 18.4 Parameters
+
+> **Removed in §20.** Kept as the record of a decision that was reverted; the code is gone.
 
 A definition declares `params: [{ key, label, type, default }]` over
 `objectRefs | number | color | text | boolean`; an instance supplies `args`. Internals bind through
@@ -697,6 +705,8 @@ definition asked the plan for.
 
 ### 18.7 Corrections after first real use
 
+> **Removed in §20.** Kept as the record of a decision that was reverted; the code is gone.
+
 Three things the first hands-on pass found, each a hole in §18.2–18.3 rather than a slip:
 
 1. **Attacks were invisible during playback.** Parts are materialised hidden (that's what keeps
@@ -730,6 +740,8 @@ Three things the first hands-on pass found, each a hole in §18.2–18.3 rather 
 *End of plan. Suggested next actions: (a) confirm the three key decisions in §2, then (b) scaffold Phase 0–1, or (c) turn this document into a checklist/issue tracker.*
 
 ### 18.8 Parameters, made legible and reusable
+
+> **Removed in §20.** Kept as the record of a decision that was reverted; the code is gone.
 
 The mechanism worked; nothing explained it, so it read as a dead end. A parameter has **two**
 halves — declare it, then point it at something inside the attack — and only the first was
@@ -811,6 +823,8 @@ they do there ("fade out", "fly in"), and changing family carries the effect wit
 
 ### 18.12 A placed attack is a selection like any other
 
+> **Removed in §20.** Kept as the record of a decision that was reverted; the code is gone.
+
 Selecting one gave no properties panel at all, which made the canvas the only way to place it —
 fine for roughly, useless for exactly. It now gets the same panel objects get, with the fields a
 plan actually owns: the rectangle (x/y/w/h/rotation), a **name** for *this copy* ("north cone" —
@@ -840,6 +854,8 @@ top, which is where an attack with no opinion belongs — and where they all wer
 
 ### 18.14 Placeholders: a hole the plan fills
 
+> **Removed in §20.** Kept as the record of a decision that was reverted; the code is gone.
+
 A definition could not refer to anything outside itself — every internal id is namespaced to the
 instance, so a tether had to have both ends inside the attack. "Leash the boss to a player" was
 unsayable.
@@ -863,6 +879,8 @@ would make the rectangle meaningless. [DONE]
 
 ### 18.15 Anchored attacks: following the board per frame
 
+> **Removed in §20.** Kept as the record of a decision that was reverted; the code is gone.
+
 A definition can now **hang off** one of its placeholders and **face** another: a frontal from the
 boss aimed at a player. Both are things only the plan knows, so both are placeholders, and the
 definition just says which is which.
@@ -883,6 +901,8 @@ to grab, and a frame that swallowed clicks would sit between you and the very to
 Select it from the attacks panel. [DONE]
 
 ### 18.16 Look-at: one part keeps facing another
+
+> **Removed in §20.** Kept as the record of a decision that was reverted; the code is gone.
 
 Distinct from anchoring, and the difference is what moves. An **anchor** follows the *plan* — a
 token dragged, a boss animated — and moves the whole attack. A **look-at** follows the attack
@@ -951,6 +971,8 @@ hit-test reads the same three numbers it always did. [DONE]
 ---
 
 ## 19. Attacks after slides: anyone may author one, a plan may keep its own
+
+> **Removed in §20.** Kept as the record of a decision that was reverted; the code is gone.
 
 §17 and §18 built the attack library for a world with two properties it no longer has. Steps
 became **slides**, and objects learned to be **grouped**. Both changes landed underneath attacks
@@ -1234,3 +1256,35 @@ and the test's objects vanished. `planReady` waits for the save indicator to rea
 signed-in spec now uses it.
 
 *Still red, and untouched:* `editor-groups` in the hermetic suite, failing at `31ccaed` too.
+
+## 20. Attacks removed
+
+The reusable-attack system — §17, most of §18, and all of §19 — is **gone**. A definition
+library, the designer, unit-space definitions, placed instances, parameters, placeholders and
+the two-section palette: all removed, along with the `attacks` table, `Plan.attacks`, the
+`placeholder` object type and the `attack` tRPC router.
+
+**Why.** The coordinate model did not hold up. Unit space is the attack's own shrink-wrapped
+extent, mapped onto the instance's rectangle by scaling x and y **independently** — and the
+geometry layered on top of it does not survive that. `pinTo` mixes the axes through a
+transform's rotation; `aimAt` reads an *angle between two points*, which a non-uniform scale does
+not preserve at all. So the bounding box normalisation was measured against was never the box
+the stored coordinates occupied: `defaultSize` came out wrong, a saved definition no longer
+spanned -1..1, and every save-reopen-save compounded the error until a 600px bar arrived 6000px
+long. Solving the follow once, before normalising, fixes pinning outright but cannot fix aiming:
+the aspect ratio determines the angle and the angle determines the footprint, a loop with no
+fixed point while unit space stays anisotropic. Closing it properly meant changing what
+`defaultSize` means — a redesign of the feature's central idea, on a feature that had already
+been rebuilt twice (§18 around groups, §19 around slides).
+
+**What survives, and why it was never really about attacks.** Grouping (§18.1), the properties
+column inspecting the selection (§18.9), the trigger and `scale` fixes in the player (§18.10,
+§18.11), one stacking order for the board (§18.13), and — most of all — **origins, directions
+and following** (§18.17). `follow: { pin, aim }` reached its final shape by being made a property
+of an *object* rather than of an attack, so "this cone starts at the boss and points at the tank"
+is still a thing a planner can say. It simply no longer needs a definition to say it in.
+
+**Where it went.** Tag `archive/attack-system`, on the branch of the same name — the full system
+at its furthest point, including the unfinished `bakeFollows` work on the bounds bug. Schema
+bumped to **6**: a document written at 5 still opens, and its `attacks` array is dropped on the
+way in.

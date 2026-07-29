@@ -4,11 +4,9 @@ import type { Follow } from "@raidplan/shared";
 /**
  * Origin, direction and what a thing follows (plan §18.17).
  *
- * One control, used in three places — an ordinary object in the plan editor, a
- * part inside the attack designer, and a placed attack instance — because after
- * §18.17 those are the same question. It used to be three: an anchor panel that
- * needed a slot before it would talk to you, a look-at table with its own rows,
- * and nothing at all for plain objects.
+ * One control for what used to be three questions: an anchor panel that needed
+ * a slot before it would talk to you, a look-at table with its own rows, and
+ * nothing at all for plain objects. After §18.17 they are the same question.
  *
  * The origin is shown as a **percentage of the object's own box**, because that
  * is what it is, and because a planner reaching for it is thinking "a bit left

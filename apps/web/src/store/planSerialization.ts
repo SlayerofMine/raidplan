@@ -1,7 +1,6 @@
 import {
   normalizeSlides,
   SCHEMA_VERSION,
-  type AttackInstance,
   type Background,
   type Plan,
   type PlanObject,
@@ -22,17 +21,12 @@ export interface PlanDoc {
   id: string;
   title: string;
   raid: string;
-  /** Which encounter seeded this plan (plan §17) — drives the attack palette. */
+  /** Which encounter seeded this plan (plan §17). */
   encounterId?: string | undefined;
   background: Background;
   objects: Record<string, PlanObject>;
   /** Render/stacking order — also the array order in the serialized Plan. */
   objectIds: string[];
-  /**
-   * Placed attacks (plan §18.3). Like objects they belong to the plan rather
-   * than to a slide; each names the slide it fires on.
-   */
-  attacks: AttackInstance[];
   /**
    * What each group is called, by `groupId` (plan §18.1). Membership lives on
    * the objects; this holds only the name, so an entry with no members left is
@@ -47,8 +41,8 @@ export interface PlanDoc {
  *
  * Three separate things need to answer *"did the document change?"* — local
  * autosave, remote autosave and undo — and each used to carry its own
- * hand-written list of fields. Adding `attacks` to the document quietly missed
- * all three, so a plan whose only content was an attack never saved at all.
+ * hand-written list of fields — so a field added to the document could miss all
+ * three, leaving a plan whose only content was that field never saving at all.
  *
  * Typing this as a **total** record over `PlanDoc` means the next field added to
  * the document is a compile error here rather than a plan that silently stops
@@ -62,7 +56,6 @@ const DOC_SLICES: Record<keyof PlanDoc, true> = {
   background: true,
   objects: true,
   objectIds: true,
-  attacks: true,
   groups: true,
   slides: true,
 };
@@ -128,7 +121,6 @@ export function toPlan(doc: PlanDoc): Plan {
     objects: doc.objectIds
       .map((id) => doc.objects[id])
       .filter((o): o is PlanObject => o !== undefined),
-    attacks: doc.attacks,
     groups: doc.groups,
     slides: doc.slides,
     schemaVersion: SCHEMA_VERSION,
@@ -158,7 +150,6 @@ export function fromPlan(plan: Plan): PlanDoc {
     background: plan.background,
     objects,
     objectIds,
-    attacks: plan.attacks,
     groups: { ...plan.groups },
     slides: normalizeSlides(plan.objects, plan.slides),
   };

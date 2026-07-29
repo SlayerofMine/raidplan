@@ -35,7 +35,6 @@ const plan = (objects: PlanObject[]): Plan => ({
   raid: "",
   background: { assetId: "arena", width: 1600, height: 900 },
   objects,
-  attacks: [],
   slides: [],
   groups: {},
   schemaVersion: SCHEMA_VERSION,

@@ -5,7 +5,6 @@ import {
   LuChevronsUp,
   LuChevronUp,
 } from "react-icons/lu";
-import { attackFollow } from "@raidplan/shared";
 import type { MechFillStyle, ObjectStyle, PlanObject } from "@raidplan/shared";
 import { useEditorStore } from "../store/editorStore";
 import { useSoleSelection } from "../store/useSoleSelection";
@@ -20,15 +19,8 @@ const round = (n: number) => Math.round(n * 100) / 100;
  * Properties panel (plan §2.3): x/y, size, rotation, opacity, tint, label,
  * lock, and z-order for the selection. Edits go straight to the store, so each
  * one is a single undo entry (plan §2.7).
- *
- * A placed **attack** is a selection like any other, so it gets the same panel —
- * the canvas is for placing things roughly, and this is where you say exactly.
- * It has fewer fields because there is less of it: an attack's looks belong to
- * its definition, so only its rectangle, its name, and whether it is locked or
- * switched off are the plan's to decide.
  */
 export function PropertiesPanel() {
-  const selectedAttackIds = useEditorStore((s) => s.selectedAttackIds);
   const selectedIds = useEditorStore((s) => s.selectedIds);
   // `state` is what's on the canvas — the base with the current slide's
   // overrides applied — not the raw base. Editing a value writes it back to
@@ -46,17 +38,10 @@ export function PropertiesPanel() {
 
   return (
     <CollapsiblePanel id="properties" title="Properties">
-      {selectedAttackIds.length > 0 ? (
-        <AttackProperties instanceId={selectedAttackIds[0]!} />
-      ) : (
-        selectedIds.length === 0 && (
-          <p
-            data-testid="no-selection"
-            className="px-3 text-sm text-neutral-500"
-          >
-            No selection.
-          </p>
-        )
+      {selectedIds.length === 0 && (
+        <p data-testid="no-selection" className="px-3 text-sm text-neutral-500">
+          No selection.
+        </p>
       )}
 
       {selectedIds.length > 1 && (
@@ -221,153 +206,6 @@ export function PropertiesPanel() {
         </div>
       )}
     </CollapsiblePanel>
-  );
-}
-
-/**
- * The plan's say over a placed attack: where it is, how big, what to call this
- * copy, and whether it happens at all. Everything else about it — what it looks
- * like, what it does — belongs to the definition and isn't editable here by
- * design (plan §18.2).
- */
-function AttackProperties({ instanceId }: { instanceId: string }) {
-  const instance = useEditorStore((s) =>
-    s.attacks.find((a) => a.id === instanceId),
-  );
-  const defName = useEditorStore((s) =>
-    instance ? s.attackDefs[instance.attackId]?.name : undefined,
-  );
-  const updateAttack = useEditorStore((s) => s.updateAttack);
-  const reorderAttack = useEditorStore((s) => s.reorderAttack);
-  const attackCount = useEditorStore((s) => s.attacks.length);
-  const def = useEditorStore((s) =>
-    instance ? s.attackDefs[instance.attackId] : undefined,
-  );
-  const followChoices = useFollowChoices();
-
-  if (!instance) return null;
-  const patch = (p: Parameters<typeof updateAttack>[1]) =>
-    updateAttack(instance.id, p);
-
-  return (
-    <div
-      data-testid="attack-properties"
-      className="flex flex-col gap-2 px-3 pb-4"
-    >
-      <p className="text-xs text-neutral-500">{defName ?? "Attack"}</p>
-
-      <NumberField
-        label="X"
-        testId="attack-prop-x"
-        value={round(instance.x)}
-        onChange={(x) => patch({ x })}
-      />
-      <NumberField
-        label="Y"
-        testId="attack-prop-y"
-        value={round(instance.y)}
-        onChange={(y) => patch({ y })}
-      />
-      <NumberField
-        label="Width"
-        testId="attack-prop-w"
-        min={1}
-        value={round(instance.w)}
-        onChange={(w) => patch({ w: Math.max(1, w) })}
-      />
-      <NumberField
-        label="Height"
-        testId="attack-prop-h"
-        min={1}
-        value={round(instance.h)}
-        onChange={(h) => patch({ h: Math.max(1, h) })}
-      />
-      <NumberField
-        label="Rotation"
-        testId="attack-prop-rotation"
-        step={15}
-        value={round(instance.rotation)}
-        onChange={(rotation) => patch({ rotation })}
-      />
-
-      {/*
-        Blank fields fall back to the definition's, because that is what this
-        copy is actually using until the planner says otherwise — showing empty
-        boxes would suggest a frontal has no origin.
-      */}
-      <FollowFields
-        ox={instance.ox ?? def?.ox}
-        oy={instance.oy ?? def?.oy}
-        dir={instance.dir ?? def?.dir}
-        follow={def ? attackFollow(def, instance) : instance.follow}
-        choices={followChoices}
-        testIdPrefix="attack-prop-follow"
-        onOrigin={(p) => patch(p)}
-        onFollow={(follow) => patch({ follow })}
-      />
-
-      <label className="flex items-center justify-between gap-2 text-sm">
-        <span className="text-neutral-500">Name</span>
-        <input
-          type="text"
-          data-testid="attack-prop-name"
-          // Which copy this is, not what it is — the definition says that.
-          placeholder={defName ? `e.g. north ${defName}` : "e.g. north cone"}
-          className="w-28 rounded border border-panelborder bg-neutral-900 px-2 py-1"
-          value={instance.name ?? ""}
-          onChange={(e) => patch({ name: e.target.value })}
-        />
-      </label>
-
-      <label className="flex items-center justify-between gap-2 text-sm">
-        <span className="text-neutral-500">Visible</span>
-        <input
-          type="checkbox"
-          data-testid="attack-prop-visible"
-          title="Off keeps the placement but stops the attack happening"
-          checked={instance.visible !== false}
-          onChange={(e) => patch({ visible: e.target.checked })}
-        />
-      </label>
-
-      <label className="flex items-center justify-between gap-2 text-sm">
-        <span className="text-neutral-500">Locked</span>
-        <input
-          type="checkbox"
-          data-testid="attack-prop-locked"
-          checked={instance.locked ?? false}
-          onChange={(e) => patch({ locked: e.target.checked })}
-        />
-      </label>
-
-      <div className="mt-1">
-        <span className="text-sm text-neutral-500">Order</span>
-        {/* Attacks draw above the plan's objects, so this orders them among
-            themselves. */}
-        <div className="mt-1 grid grid-cols-4 gap-1">
-          <OrderButton
-            icon={<LuChevronsUp aria-hidden />}
-            title="Bring to front"
-            onClick={() => reorderAttack(instance.id, attackCount)}
-          />
-          <OrderButton
-            icon={<LuChevronUp aria-hidden />}
-            title="Bring forward"
-            onClick={() => reorderAttack(instance.id, 1)}
-          />
-          <OrderButton
-            icon={<LuChevronDown aria-hidden />}
-            title="Send backward"
-            onClick={() => reorderAttack(instance.id, -1)}
-          />
-          <OrderButton
-            icon={<LuChevronsDown aria-hidden />}
-            title="Send to back"
-            onClick={() => reorderAttack(instance.id, -attackCount)}
-          />
-        </div>
-      </div>
-    </div>
   );
 }
 

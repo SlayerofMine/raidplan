@@ -411,7 +411,6 @@ export function buildDemoPlan(): Plan {
     raid: "Feature demo",
     background: { ...BOARD },
     objects,
-    attacks: [],
     groups: {},
     slides: slidesFrom(objects, [
       {

@@ -46,7 +46,6 @@ function plan(): Plan {
         },
       },
     ],
-    attacks: [],
     // A plan always has at least one slide; this one holds both objects.
     slides: [
       {
@@ -157,8 +156,8 @@ describe("plan serialization", () => {
 
 /**
  * Autosave, remote save and undo all ask "did the document change?". They used
- * to each carry their own list of fields, and `attacks` was missed by all
- * three — so a plan whose only content was an attack never saved at all.
+ * to each carry their own list of fields, so a field could be missed by all
+ * three — leaving a plan whose only content was that field never saving at all.
  */
 describe("sameDocument", () => {
   const doc = (): PlanDoc => fromPlan(plan());
@@ -171,7 +170,7 @@ describe("sameDocument", () => {
     );
   });
 
-  it("sees an edit to any slice, attacks included", () => {
+  it("sees an edit to any slice", () => {
     // A fresh value for one slice at a time; reference inequality is the
     // signal, exactly as immer produces it for a touched slice.
     const edited = (value: unknown) =>

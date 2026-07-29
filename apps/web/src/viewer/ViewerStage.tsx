@@ -1,8 +1,8 @@
 import { useEffect, useMemo, type RefObject } from "react";
-import { Group, Layer, Image as KonvaImage, Stage } from "react-konva";
+import { Layer, Image as KonvaImage, Stage } from "react-konva";
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
 import type { Stage as StageNode } from "konva/lib/Stage";
-import { attackGroupId, getBackgroundSrc } from "@raidplan/shared";
+import { getBackgroundSrc } from "@raidplan/shared";
 import { fitView } from "../editor/canvas/coords";
 import { ObjectNode } from "../editor/canvas/ObjectNode";
 import { SyncedIconResolver } from "../editor/SyncedIconResolver";
@@ -35,10 +35,6 @@ export function ViewerStage({
   const [containerRef, size] = useContainerSize<HTMLDivElement>();
   const background = useEditorStore((s) => s.background);
   const objectIds = useEditorStore((s) => s.objectIds);
-  const objects = useEditorStore((s) => s.objects);
-  // Kept alongside the expansion (see `expandForViewing`), and what tells an
-  // attack's parts apart from an author's own group.
-  const attacks = useEditorStore((s) => s.attacks);
   const bgImage = useImageElement(getBackgroundSrc(background.assetId));
 
   // Hit-testing costs real work, so only switch it on when this slide actually
@@ -59,32 +55,6 @@ export function ViewerStage({
       node = node.getParent();
     }
   };
-
-  /**
-   * Objects in draw order, with each attack's parts collected into one run.
-   * They arrive contiguous — `expandPlan` sorts by z and an attack's parts share
-   * its place in the stack — so this is a single pass.
-   *
-   * `groupId` says which attack an expanded part came from — and, since plan
-   * §18.1, *also* says that the author tied some of their own objects together.
-   * Only the first kind gets a node here: an author's group is an editing
-   * convenience with no runtime meaning, and wrapping one in a node named after
-   * an attack instance would leave the follow runtime a lookup that resolves to
-   * something that isn't an attack. So the id has to name a real instance.
-   */
-  const runs = useMemo(() => {
-    const instanceIds = new Set(attacks.map((a) => a.id));
-    const out: { attackId: string | undefined; ids: string[] }[] = [];
-    for (const id of objectIds) {
-      const groupId = objects[id]?.groupId;
-      const attackId =
-        groupId && instanceIds.has(groupId) ? groupId : undefined;
-      const last = out.at(-1);
-      if (last && last.attackId === attackId) last.ids.push(id);
-      else out.push({ attackId, ids: [id] });
-    }
-    return out;
-  }, [objectIds, objects, attacks]);
 
   // The viewer has no camera of its own: always fit the plan to the container.
   const view = useMemo(() => fitView(background, size, 0), [background, size]);
@@ -126,21 +96,9 @@ export function ViewerStage({
           onClick={handleClick}
           onTap={handleClick}
         >
-          {/* An attack's parts are drawn inside one node, so an anchored
-              attack can be carried about by moving that node (§18.15). */}
-          {runs.map((run) =>
-            run.attackId === undefined ? (
-              run.ids.map((id) => (
-                <ObjectNode key={id} objectId={id} draggable={false} />
-              ))
-            ) : (
-              <Group key={run.attackId} id={attackGroupId(run.attackId)}>
-                {run.ids.map((id) => (
-                  <ObjectNode key={id} objectId={id} draggable={false} />
-                ))}
-              </Group>
-            ),
-          )}
+          {objectIds.map((id) => (
+            <ObjectNode key={id} objectId={id} draggable={false} />
+          ))}
         </Layer>
       </Stage>
     </div>

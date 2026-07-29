@@ -35,7 +35,7 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
 });
 
 /**
- * Requires a **site admin** (plan §17) — for authoring encounters and attacks.
+ * Requires a **site admin** (plan §17) — for authoring encounters.
  * Signed-in-but-not-admin is `FORBIDDEN`, distinct from anonymous `UNAUTHORIZED`.
  */
 export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {

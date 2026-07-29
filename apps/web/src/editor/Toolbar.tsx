@@ -3,7 +3,6 @@ import { LuMinus, LuPlus } from "react-icons/lu";
 import { Link } from "react-router-dom";
 import {
   BACKGROUNDS,
-  expandPlan,
   isUploadedAsset,
   objectsOnSlide,
   toBackground,
@@ -27,7 +26,6 @@ import {
   videoFileName,
 } from "./videoExport";
 import { uploadBackground } from "./uploadBackground";
-import { SaveAsAttackButton } from "./SaveAsAttackButton";
 import { TetherButton } from "./TetherButton";
 import { Btn, Divider } from "./ToolbarButton";
 import { useToast } from "../ui/toastContext";
@@ -46,13 +44,10 @@ export function Toolbar({
   /** Where "Play" goes, or null while a server plan's slug is still loading. */
   viewHref?: string | null;
 }) {
-  // What's on the board *now*: the current slide's cast, plus placed attacks,
-  // which are things on the board like any other. Counting every object the
-  // plan knows about would report tokens from scenes you aren't looking at.
+  // What's on the board *now*: the current slide's cast. Counting every object
+  // the plan knows about would report tokens from scenes you aren't looking at.
   const objectCount = useEditorStore(
-    (s) =>
-      objectsOnSlide(s.objectIds, s.slides, s.currentSlideIndex).length +
-      s.attacks.length,
+    (s) => objectsOnSlide(s.objectIds, s.slides, s.currentSlideIndex).length,
   );
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const hasSelection = selectedIds.length > 0;
@@ -133,15 +128,12 @@ export function Toolbar({
 
     s.clearSelection();
     setExportingVideo(true);
-    // Stamp placed attacks into concrete objects and animations (plan §17) so
-    // the clip animates them exactly as the viewer does — the canvas already
-    // draws these nodes, which is what makes them capturable.
-    const expanded = expandPlan(s.getPlan(), s.attackDefs);
+    const doc = s.getPlan();
     const renderer = createFrameRenderer({
       stage,
-      slides: expanded.slides,
-      objects: Object.fromEntries(expanded.objects.map((o) => [o.id, o])),
-      objectIds: expanded.objects.map((o) => o.id),
+      slides: doc.slides,
+      objects: Object.fromEntries(doc.objects.map((o) => [o.id, o])),
+      objectIds: doc.objects.map((o) => o.id),
       background: s.background,
       view: s.view,
     });
@@ -151,7 +143,7 @@ export function Toolbar({
       await new Promise(requestAnimationFrame);
       const filename = videoFileName(s.title);
       await encodePlanVideo({
-        frames: planFrames(expanded.slides),
+        frames: planFrames(doc.slides),
         renderFrame: renderer.renderFrame,
         size: renderer.size,
         filename,
@@ -231,8 +223,6 @@ export function Toolbar({
         title="Dissolve the selected group (Ctrl+Shift+G)"
       />
       <TetherButton />
-      {/* The assembly you just grouped is already an attack (§19.3). */}
-      <SaveAsAttackButton />
 
       <Divider />
 

@@ -4,8 +4,8 @@ import { LuChevronDown, LuChevronRight } from "react-icons/lu";
 /**
  * A titled, collapsible section of the properties sidebar (plan §1.1).
  *
- * The right rail stacks four panels in one scroller, so a plan with a dozen
- * objects and a handful of attacks pushes Animations below the fold — the panel
+ * The right rail stacks its panels in one scroller, so a plan with a dozen
+ * objects pushes Animations below the fold — the panel
  * you are working in is the one you have to scroll to find. Collapsing the ones
  * you aren't using is the cheapest fix: the headers stay put as landmarks, so
  * what is left on screen is still legible as a sidebar rather than a stack of

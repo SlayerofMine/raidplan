@@ -6,8 +6,8 @@ import { findPlanRow, toAcl } from "../plans/planRepo.js";
 /**
  * "May this viewer see / change this plan?", as procedures ask it.
  *
- * Extracted from `planRouter` when attacks learned to belong to a plan
- * (§19.1): a plan-scoped attack is readable by whoever may view its plan and
+ * Extracted from `planRouter` when a second router needed the same decision
+ * (§19.1): a plan-scoped resource is readable by whoever may view its plan and
  * writable by whoever may edit it, and that must be the *same* decision the
  * plan's own procedures make, not a second implementation of it that can drift.
  *

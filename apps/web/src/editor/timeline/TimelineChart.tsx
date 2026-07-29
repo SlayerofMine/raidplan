@@ -1,10 +1,5 @@
 import { useMemo, type PointerEvent as ReactPointerEvent } from "react";
-import {
-  attackNaturalMs,
-  layoutStepTimeline,
-  type AnimKind,
-  type AttackInstance,
-} from "@raidplan/shared";
+import { layoutStepTimeline, type AnimKind } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { objectDisplayName } from "../objectName";
 import { useContainerSize } from "../canvas/useContainerSize";
@@ -84,29 +79,6 @@ export function TimelineChart({ slideIndex }: { slideIndex: number }) {
     [slide?.animations],
   );
 
-  // Placed attacks get a row each: they occupy the slide from `startMs` for as
-  // long as their definition runs — the same `layoutStepTimeline` the player
-  // uses, so a bar means the same thing whether it's an animation or an attack.
-  const attackDefs = useEditorStore((s) => s.attackDefs);
-  const attacks = useEditorStore((s) => s.attacks);
-  const attackRows = useMemo(
-    () =>
-      // Attacks live on the plan; a slide's chart shows the ones it fires.
-      attacks
-        .filter((instance) => instance.slideId === slide?.id)
-        .map((instance) => {
-          const def = attackDefs[instance.attackId];
-          const naturalMs = def ? attackNaturalMs(def) : 0;
-          return {
-            instance,
-            name: instance.name?.trim() || def?.name || "Attack",
-            naturalMs,
-            spanMs: instance.durationMs ?? naturalMs,
-          };
-        }),
-    [attacks, slide?.id, attackDefs],
-  );
-
   const groupNames = useEditorStore((s) => s.groups);
 
   // A group is a group at two members or more (plan §18.1); a `groupId` left on
@@ -137,13 +109,7 @@ export function TimelineChart({ slideIndex }: { slideIndex: number }) {
   // The track column is the measured width minus the fixed label column (there
   // is no column gap), so the scale is known even before the first row exists.
   const trackWidth = Math.max(0, measured.width - LABEL_W);
-  // An attack can outlast the slide's own animations, so the ruler has to cover
-  // it or its bar would run off the end.
-  const contentMs = attackRows.reduce(
-    (longest, row) => Math.max(longest, row.instance.startMs + row.spanMs),
-    timeline.totalMs,
-  );
-  const scale = timelineScale(trackWidth, contentMs);
+  const scale = timelineScale(trackWidth, timeline.totalMs);
 
   return (
     <section
@@ -180,7 +146,7 @@ export function TimelineChart({ slideIndex }: { slideIndex: number }) {
         {/* Only the slide being edited has a playhead — it is the only one the
             canvas can be showing a frame of. */}
         {active && <Playhead pxPerMs={scale.pxPerMs} />}
-        {rows.length === 0 && attackRows.length === 0 ? (
+        {rows.length === 0 ? (
           <p
             data-testid={`timeline-empty-${slideIndex}`}
             className="py-1 text-xs text-neutral-600"
@@ -210,18 +176,6 @@ export function TimelineChart({ slideIndex }: { slideIndex: number }) {
                     ? groupNames[row.id]?.trim() || "Group"
                     : objectDisplayName(objects[row.id])
                 }
-                pxPerMs={scale.pxPerMs}
-                locked={locked}
-              />
-            ))}
-
-            {attackRows.map((row) => (
-              <AttackRow
-                key={row.instance.id}
-                instance={row.instance}
-                name={row.name}
-                spanMs={row.spanMs}
-                naturalMs={row.naturalMs}
                 pxPerMs={scale.pxPerMs}
                 locked={locked}
               />
@@ -349,141 +303,6 @@ function Playhead({ pxPerMs }: { pxPerMs: number }) {
       {/* A downward triangle, so the head reads as a grip in the ruler. */}
       <span className="absolute -left-[3px] top-0 border-x-[3px] border-t-[5px] border-x-transparent border-t-neutral-100" />
     </div>
-  );
-}
-
-/**
- * A placed attack's bar, with the same two grips every animation bar has:
- *
- *  - the **body** moves the whole attack within the slide (`startMs`);
- *  - the **handle** stretches it in time — the attack still plays exactly as
- *    authored, just slower or faster, because the whole bundle is scaled rather
- *    than re-timed part by part.
- *
- * Until the handle is touched an attack has no duration of its own and follows
- * its definition's, so improving the definition still reaches this plan.
- */
-function AttackRow({
-  instance,
-  name,
-  spanMs,
-  naturalMs,
-  pxPerMs,
-  locked,
-}: {
-  instance: AttackInstance;
-  name: string;
-  /** How long it runs here — stretched if this plan said so. */
-  spanMs: number;
-  /** How long the definition runs on its own. */
-  naturalMs: number;
-  pxPerMs: number;
-  /** The playhead is off zero: show the bar, but don't let it be retimed. */
-  locked: boolean;
-}) {
-  const updateAttack = useEditorStore((s) => s.updateAttack);
-  const selectAttack = useEditorStore((s) => s.selectAttack);
-  const selected = useEditorStore((s) =>
-    s.selectedAttackIds.includes(instance.id),
-  );
-
-  const setStart = (startMs: number) => updateAttack(instance.id, { startMs });
-  const setDuration = (durationMs: number) =>
-    updateAttack(instance.id, { durationMs });
-
-  const stretched = instance.durationMs !== undefined && naturalMs > 0;
-  const speed = stretched ? naturalMs / spanMs : 1;
-  const describe =
-    `${name} · starts ${Math.round(instance.startMs)}ms · ${Math.round(spanMs)}ms` +
-    (stretched ? ` · ${speed.toFixed(2)}× speed` : "");
-
-  const beginDrag = (
-    e: ReactPointerEvent,
-    from: number,
-    min: number,
-    apply: (ms: number) => void,
-  ) => {
-    if (locked) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const startX = e.clientX;
-    const move = (ev: PointerEvent) =>
-      apply(dragValueMs(from, ev.clientX - startX, pxPerMs, min));
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  };
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => selectAttack([instance.id])}
-        data-testid={`timeline-attack-row-${instance.id}`}
-        className="min-w-0 truncate pr-2 text-right text-xs text-neutral-300 hover:text-accent"
-        title={`Select ${name}`}
-        style={{ height: LANE_H }}
-      >
-        {name}
-      </button>
-      <div className="relative" style={{ height: LANE_H }}>
-        <button
-          type="button"
-          data-testid={`timeline-attack-${instance.id}`}
-          aria-label={describe}
-          title={describe}
-          onPointerDown={(e) => beginDrag(e, instance.startMs, 0, setStart)}
-          onClick={() => selectAttack([instance.id])}
-          onKeyDown={(e) => {
-            const dir =
-              e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-            if (!dir || locked) return;
-            e.preventDefault();
-            setStart(
-              nudgeValueMs(instance.startMs, dir * (e.shiftKey ? 5 : 1)),
-            );
-          }}
-          className={`absolute flex h-full min-w-[6px] items-center overflow-hidden rounded-sm bg-violet-500/80 text-[10px] text-black/80 ${
-            selected ? "ring-1 ring-inset ring-white/70" : ""
-          }`}
-          style={{
-            left: msToPx(instance.startMs, pxPerMs),
-            width: Math.max(msToPx(spanMs, pxPerMs), 6),
-          }}
-        >
-          <span className="pointer-events-none truncate px-1">{name}</span>
-          {/* Handle: stretch the whole attack in time. */}
-          <span
-            role="button"
-            tabIndex={0}
-            data-testid={`timeline-attack-handle-${instance.id}`}
-            aria-label={`Stretch ${name}`}
-            title="Drag to make the whole attack run slower or faster"
-            onPointerDown={(e) =>
-              beginDrag(e, spanMs, DURATION_MIN_MS, setDuration)
-            }
-            onKeyDown={(e) => {
-              const dir =
-                e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-              if (!dir || locked) return;
-              e.preventDefault();
-              e.stopPropagation();
-              setDuration(
-                nudgeValueMs(
-                  spanMs,
-                  dir * (e.shiftKey ? 5 : 1),
-                  DURATION_MIN_MS,
-                ),
-              );
-            }}
-            className="absolute right-0 top-0 h-full w-1.5 cursor-ew-resize bg-black/30 hover:bg-black/50"
-          />
-        </button>
-      </div>
-    </>
   );
 }
 

@@ -46,20 +46,20 @@ describe("CollapsiblePanel", () => {
     const { unmount } = render(
       <>
         {panel("objects")}
-        {panel("attacks")}
+        {panel("animations")}
       </>,
     );
-    fireEvent.click(toggle("attacks"));
+    fireEvent.click(toggle("animations"));
     unmount();
 
     render(
       <>
         {panel("objects")}
-        {panel("attacks")}
+        {panel("animations")}
       </>,
     );
     expect(toggle("objects")).toHaveAttribute("aria-expanded", "true");
-    expect(toggle("attacks")).toHaveAttribute("aria-expanded", "false");
+    expect(toggle("animations")).toHaveAttribute("aria-expanded", "false");
   });
 
   it("opens when the remembered state is missing, corrupt or not a boolean", () => {

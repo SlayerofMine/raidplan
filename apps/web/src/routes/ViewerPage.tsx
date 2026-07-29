@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { Stage as StageNode } from "konva/lib/Stage";
+import type { Plan } from "@raidplan/shared";
 import { api } from "../api/client";
 import { useFps } from "../anim/useFps";
 import { usePlayback } from "../anim/usePlayback";
@@ -9,7 +10,6 @@ import { isEditableTarget } from "../editor/isEditableTarget";
 import { isLocalPlan, LOCAL_PLAN_ID } from "../editor/planScope";
 import { clearHistory, useEditorStore } from "../store/editorStore";
 import { loadPlan } from "../store/persistence";
-import { expandForViewing } from "../viewer/expandForViewing";
 import { PlaybackControls } from "../viewer/PlaybackControls";
 import { ViewerStage } from "../viewer/ViewerStage";
 
@@ -35,29 +35,26 @@ export function ViewerPage() {
   const title = useEditorStore((s) => s.title);
   const slides = useEditorStore((s) => s.slides);
   const playback = usePlayback(stageRef);
-  // Whatever follows something else — a whole attack tracking the boss, one of
-  // its parts tracking the orb — is re-placed every frame, after the tweens
-  // rather than alongside them (§18.17).
+  // Whatever follows something else — a cone tracking the boss, an indicator
+  // tracking the orb — is re-placed every frame, after the tweens rather than
+  // alongside them (§18.17).
   useFollowing(stageRef);
   const fps = useFps(playback.isPlaying);
 
-  // Load once, before playback builds its first timeline. Attacks are stamped
-  // in (`expandForViewing`) before the store is hydrated, so playback treats
-  // them as ordinary objects.
+  // Load once, before playback builds its first timeline.
   useEffect(() => {
     let cancelled = false;
 
-    const hydrate = (doc: Parameters<typeof expandForViewing>[0]) =>
-      expandForViewing(doc).then((expanded) => {
-        if (cancelled) return;
-        useEditorStore.getState().loadPlan(expanded);
-        clearHistory();
-        setLoad("ready");
-      });
+    const hydrate = (doc: Plan) => {
+      if (cancelled) return;
+      useEditorStore.getState().loadPlan(doc);
+      clearHistory();
+      setLoad("ready");
+    };
 
     if (isLocalPlan(slug)) {
       const saved = loadPlan();
-      if (saved) void hydrate(saved);
+      if (saved) hydrate(saved);
       else setLoad("missing");
       return () => {
         cancelled = true;

@@ -9,7 +9,6 @@ import { RequireAdmin } from "./RequireAdmin";
  * Encounter admin (plan §17, stage 2). Backgrounds reuse the existing upload
  * pipeline (`uploadBackground`): the admin uploads their own battlemap and the
  * encounter references the stored path, so no Blizzard art is involved (§11).
- * Each encounter links to its attacks (stage 4's designer).
  */
 type EncounterRow = Awaited<
   ReturnType<typeof api.encounter.list.query>
@@ -264,13 +263,6 @@ function EncounterRow({
         onChange={(e) => setRaid(e.target.value)}
         className={`${inputClass} w-40`}
       />
-      <Link
-        to={`/admin/encounters/${encounter.id}/attacks`}
-        aria-label={`Attacks for ${encounter.name}`}
-        className="rounded border border-panelborder px-2 py-1 text-xs hover:border-accent"
-      >
-        Attacks →
-      </Link>
       <button
         type="button"
         onClick={() =>

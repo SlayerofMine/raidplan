@@ -239,7 +239,7 @@ export function renderPlanSvg(
   // states (not just its own) when it draws.
   //
   // The *settled* state: a slide opens before anything has played, and a still
-  // frozen there would show an attack that hasn't gone off and a token that
+  // frozen there would show an effect that hasn't gone off and a token that
   // hasn't set out. A preview is a picture of the slide, so it shows the slide
   // as it ends.
   const settled = resolveSettledStates(plan, slideIndex);

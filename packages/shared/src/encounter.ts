@@ -88,7 +88,7 @@ export function makePlanFromPreset(params: {
   id: string;
   title?: string;
   raid?: string;
-  /** Which encounter seeded this plan — drives the attack palette (plan §17). */
+  /** Which encounter seeded this plan (plan §17). */
   encounterId?: string;
   preset: EncounterPreset;
 }): Plan {

@@ -1,7 +1,7 @@
 // Public surface of @raidplan/shared — the contract imported by web and api.
 export * from "./transform.js";
 // Following: an origin pinned to one object and a direction aimed at another
-// (plan §18.17). One solver for plan objects, attack parts and whole attacks.
+// (plan §18.17). One solver, for any object on the board.
 export * from "./follow.js";
 export * from "./effects.js";
 export * from "./plan.js";
@@ -21,9 +21,6 @@ export * from "./mechanics.js";
 export * from "./assets/svg.js";
 export * from "./assets/icons.js";
 export * from "./assets/backgrounds.js";
-// Reusable attacks (plan §17): the reference/instance model and `expandPlan`,
-// which stamps attack instances into an ordinary Plan the renderers understand.
-export * from "./attack.js";
 // Encounter presets (plan §17): admin-authored starting points (background +
 // pre-placed objects) that seed a new plan. Shared so web offers the selector
 // and api resolves the preset into a document.

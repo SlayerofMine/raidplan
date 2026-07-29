@@ -68,7 +68,6 @@ function seedOfflinePlan() {
     raid: "",
     background: { assetId: "arena", width: 1600, height: 900 },
     objects: [],
-    attacks: [],
     slides: [{ id: "s1", states: {}, animations: [] }],
     groups: {},
     schemaVersion: SCHEMA_VERSION,

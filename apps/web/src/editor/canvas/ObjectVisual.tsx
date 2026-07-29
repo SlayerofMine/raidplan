@@ -19,8 +19,7 @@ import { useImageElement } from "./useImageElement";
  *
  * Split out of `ObjectNode` (which owns selection and dragging) so the same
  * drawing can render objects that aren't in the store at all — specifically the
- * **expanded objects of a placed attack** (plan §17), which are materialised
- * from an `AttackDef` at render time and deliberately never enter the document.
+ * objects that are materialised at render time and never enter the document.
  * One definition of "what a soak looks like" for both.
  */
 export const DEFAULT_TINT = "#4f9dff";
@@ -39,8 +38,7 @@ export function ObjectVisual({
 }) {
   const icon = useImageElement(useIconSrc(object.iconId));
 
-  // A tether is drawn from wherever its endpoints are right now — which, inside
-  // an attack, can be one of the *plan's* objects (§18.14). It needs no
+  // A tether is drawn from wherever its endpoints are right now. It needs no
   // transform of its own, so it doesn't go in the group below.
   if (object.type === "tether") {
     return object.fromId && object.toId ? (
@@ -200,22 +198,6 @@ function ObjectArtwork({
   icon: HTMLImageElement | undefined;
 }) {
   switch (type) {
-    // A hole in a definition: dashed, so it reads as "something goes here".
-    case "placeholder":
-      return (
-        <>
-          <Circle
-            x={w / 2}
-            y={h / 2}
-            radius={Math.min(w, h) / 2}
-            stroke={colour}
-            strokeWidth={2}
-            dash={[6, 5]}
-            fill={`${colour}14`}
-          />
-        </>
-      );
-
     case "arrow":
       return (
         <Arrow

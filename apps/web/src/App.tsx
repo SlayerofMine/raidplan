@@ -14,16 +14,6 @@ const ViewerPage = lazy(() =>
 const AdminPage = lazy(() =>
   import("./routes/AdminPage").then((m) => ({ default: m.AdminPage })),
 );
-const AttackListPage = lazy(() =>
-  import("./routes/AttackListPage").then((m) => ({
-    default: m.AttackListPage,
-  })),
-);
-const AttackDesignerPage = lazy(() =>
-  import("./routes/AttackDesignerPage").then((m) => ({
-    default: m.AttackDesignerPage,
-  })),
-);
 
 /**
  * App routes (plan §3): landing, the editor, and the public viewer `/p/:slug`
@@ -40,16 +30,6 @@ export function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/plan/:id/edit" element={<EditorPage />} />
-            {/* Authoring an attack of your own, inside your own plan (§19.3).
-                No admin gate: the plan's ACL is the whole permission. */}
-            <Route
-              path="/plan/:planId/attacks/new"
-              element={<AttackDesignerPage />}
-            />
-            <Route
-              path="/plan/:planId/attacks/:attackId"
-              element={<AttackDesignerPage />}
-            />
             {/*
             The viewer lives at /view/:slug, not /p/:slug: `/p/*` is the public
             *share link*, served by the API so Discord's crawler gets real Open
@@ -60,18 +40,6 @@ export function App() {
             <Route path="/view/:slug" element={<ViewerPage />} />
             {/* Admin-gated on the server; the pages turn non-admins away too. */}
             <Route path="/admin" element={<AdminPage />} />
-            <Route
-              path="/admin/encounters/:encounterId/attacks"
-              element={<AttackListPage />}
-            />
-            <Route
-              path="/admin/encounters/:encounterId/attacks/new"
-              element={<AttackDesignerPage />}
-            />
-            <Route
-              path="/admin/attacks/:attackId"
-              element={<AttackDesignerPage />}
-            />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

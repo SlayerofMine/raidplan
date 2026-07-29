@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
 import { AnimationPanel } from "./AnimationPanel";
-import { AttackDefResolver } from "./AttackDefResolver";
-import { AttacksPanel } from "./AttacksPanel";
 import { CanvasStage } from "./canvas/CanvasStage";
 import { EmptySlideHint } from "./EmptySlideHint";
 import { IconPalette } from "./IconPalette";
@@ -84,9 +82,6 @@ export function EditorLayout({ planId }: { planId: string }) {
       </div>
       {/* Fetches URLs for synced WoW tokens a reopened plan references. */}
       <SyncedIconResolver />
-      {/* Loads the attack definitions this plan may use — the encounter's and
-          its own (§19.4) — for the preview and the export. */}
-      <AttackDefResolver planId={planId} />
       <Locked
         disabled={locked}
         style={{ gridArea: "props" }}
@@ -95,7 +90,6 @@ export function EditorLayout({ planId }: { planId: string }) {
         <ObjectsPanel />
         <PropertiesPanel />
         <AnimationPanel />
-        <AttacksPanel />
       </Locked>
       <div style={{ gridArea: "slides" }} className="flex min-h-0 flex-col">
         {/* The strip locks with everything else; the dock below it never does,

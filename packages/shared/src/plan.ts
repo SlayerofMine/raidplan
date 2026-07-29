@@ -30,14 +30,22 @@ import { ObjectStyleSchema } from "./mechanics.js";
  * document written before it listed every object on every slide, which still
  * says exactly what it always did: they are all in every scene.
  *
- * **5** finished that job for attacks (plan §19.2). An
- * {@link ./attack.js AttackDef} carried the pre-slides model — a base state plus
- * a sparse `overrides` map — for one release longer than a plan did, which left
- * two state models in the codebase and one of them with a single user. A def now
- * carries `slides: [Slide]` like everything else. Plan documents are unaffected
- * in shape; stored attack definitions written at 4 do not parse.
+ * **5** finished that job for attacks (plan §19.2), giving an attack definition
+ * the same `slides: [Slide]` model as everything else. Plan documents were
+ * unaffected in shape.
+ *
+ * **6** removed reusable attacks altogether (plan §17-§19). The `attacks` array
+ * and the `placeholder` object type — a hole in a definition for the using plan
+ * to fill — went with them. A document written at 5 still opens: {@link
+ * PlanSchema} is not strict, so an `attacks` array left over from one is dropped
+ * on the way in rather than rejected, and no migration step is needed. What that
+ * plan loses is the attacks themselves, which no longer have anything to draw
+ * them. The geometry attacks were built on — `follow`, origins and `dir`
+ * (§18.17) — stays,
+ * because it never needed them: pinning one object to another and aiming it at a
+ * third is a property of objects, not of attacks.
  */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /** Opacity is always normalised to 0..1. */
 const OpacitySchema = z.number().min(0).max(1);
@@ -56,9 +64,8 @@ const OpacitySchema = z.number().min(0).max(1);
  *    when a new slide entry is minted, and are otherwise stale. Read the slide,
  *    never the seed.
  *
- * They stay on one schema because an {@link ./attack.js AttackDef} is genuinely
- * two-state — a start shape, and the one slide its animations reach — and reads
- * `base` as that start.
+ * They stay on one schema because a new object needs somewhere to be born
+ * before any slide has an opinion about it.
  */
 export const ObjectBaseSchema = TransformSchema.extend({
   opacity: OpacitySchema,
@@ -111,9 +118,8 @@ export const PlanObjectSchema = z.object({
    * What this object follows (plan §18.17): its origin pinned to one object,
    * its direction aimed at another. Absent means it stays where it's put.
    *
-   * On an ordinary object, not just an attack, because "this cone starts at the
-   * boss and points at the tank" is a thing a planner wants to say about a shape
-   * they drew, without authoring a definition to say it in.
+   * "This cone starts at the boss and points at the tank" is a thing a planner
+   * wants to say about a shape they drew, and this is where they say it.
    */
   follow: FollowSchema.optional(),
 });
@@ -191,111 +197,6 @@ export const AnimSchema = z.object({
 export type Anim = z.infer<typeof AnimSchema>;
 
 /**
- * A placed instance of a reusable **attack** (plan §17). The plan stores only
- * this reference and a transform; the attack's own objects and animations live
- * in its {@link ./attack.ts AttackDef} and are stamped in at render time by
- * `expandPlan`. That's what makes an attack indivisible — there's nothing in the
- * document to take apart. The planner tunes only placement and timing.
- */
-export const AttackInstanceSchema = z.object({
-  id: z.string().min(1),
-  /** Which attack definition to expand (resolved to the current version). */
-  attackId: z.string().min(1),
-  /**
-   * The slide this attack fires on. *Where* an attack sits is a property of the
-   * board and belongs to the plan; *when* it goes off is a property of one slide
-   * — so an attack is placed like any other object, and carries the id of the
-   * slide that plays it. By id, not index, so reordering slides can't shuffle
-   * the encounter's timing.
-   */
-  slideId: z.string().min(1),
-  /**
-   * The rectangle the attack is drawn into, in the plan's native pixels —
-   * top-left plus size, like every other object. The def's unit space (-1..1) is
-   * mapped onto it, so this *is* the placement: a Transformer handle edits it
-   * directly (plan §18.2).
-   */
-  x: z.number().finite(),
-  y: z.number().finite(),
-  w: z.number().finite().positive(),
-  h: z.number().finite().positive(),
-  /** Degrees clockwise, about the rectangle's origin. */
-  rotation: z.number().finite().default(0),
-  /**
-   * This copy's own origin and direction, overriding the definition's (plan
-   * §18.17). Absent — the normal case — means the definition's, because where an
-   * attack hangs from is a property of the ability, not of one placement of it.
-   * Present when a planner has nudged this particular copy.
-   */
-  ox: z.number().finite().optional(),
-  oy: z.number().finite().optional(),
-  dir: z.number().finite().optional(),
-  /**
-   * What this copy follows, overriding the definition's (plan §18.17).
-   *
-   * The definition says what the attack *is* — a frontal is always cast from
-   * someone — and names its own placeholders. This says which of *this plan's*
-   * objects this copy hangs off, named directly, so a shape can be pinned to the
-   * boss without the definition having declared a hole for him first.
-   */
-  follow: FollowSchema.optional(),
-  /**
-   * What this copy is called, for the author's benefit. The definition's name is
-   * what it *is*; this is which one it is — "north cone" against "south cone" —
-   * so three copies of one attack can be told apart in a list.
-   */
-  name: z.string().optional(),
-  /** Locked instances can't be dragged or resized, exactly like a locked object. */
-  locked: z.boolean().optional(),
-  /**
-   * Where this attack sits in the board's stacking order — the same scale as an
-   * object's `base.z`, so the two interleave. Fractional on purpose: objects
-   * renumber themselves 0..n-1 as they come and go, and an attack parked at 2.5
-   * stays between them without having to be renumbered too.
-   *
-   * Absent means **on top of everything**, which is where an attack with no
-   * opinion belongs and is where they all sat before they had one.
-   */
-  z: z.number().finite().optional(),
-  /**
-   * Absent or `true` means it happens. `false` switches the whole attack off
-   * without deleting it — trying a plan without one mechanic is a normal thing
-   * to want, and losing its placement to do so isn't.
-   */
-  visible: z.boolean().optional(),
-  /** Delay from the slide's start before the attack begins. */
-  startMs: z.number().finite().nonnegative().default(0),
-  /**
-   * How long the whole attack takes, in ms. Absent means "however long the
-   * definition runs" — which is the default, so improving a definition's timing
-   * still reaches every plan using it.
-   *
-   * Setting it **stretches time inside the attack** rather than editing it: an
-   * attack that naturally runs 1000ms, placed at 2000ms, plays every part of
-   * itself at half speed, in the same order and the same proportions.
-   */
-  durationMs: z.number().finite().positive().optional(),
-  /**
-   * Which of *this plan's* objects fill the definition's placeholders (plan
-   * §18.14), keyed by the placeholder's id. A definition with placeholders can't
-   * be placed until they're all filled — it has holes in it.
-   */
-  slots: z.record(z.string().min(1), z.string().min(1)).default({}),
-  /**
-   * Arguments for the definition's declared parameters (plan §18.4), keyed by
-   * parameter. This is how a plan tells an attack things only it knows — such as
-   * which of *its* objects can set a collision off.
-   */
-  args: z
-    .record(
-      z.string().min(1),
-      z.union([z.array(z.string()), z.number(), z.string(), z.boolean()]),
-    )
-    .default({}),
-});
-export type AttackInstance = z.infer<typeof AttackInstanceSchema>;
-
-/**
  * One object's **complete** visual state on one slide.
  *
  * Every field is required: an entry is whole or it is absent, never partial.
@@ -355,8 +256,7 @@ export const PlanSchema = z.object({
   raid: z.string(),
   /**
    * The encounter this plan was seeded from (plan §17). Optional — plans that
-   * started on a bare map have none. It's what lets the editor offer *this
-   * encounter's* pre-designed attacks in the palette.
+   * started on a bare map have none.
    */
   encounterId: z.string().min(1).optional(),
   background: BackgroundSchema,
@@ -370,12 +270,6 @@ export const PlanSchema = z.object({
    * possible: the same id on two slides is what says "this token, then there".
    */
   objects: z.array(PlanObjectSchema),
-  /**
-   * Pre-designed attacks placed on the board (plan §17). Like objects they live
-   * on the plan, not inside a slide; each names the slide it fires on.
-   * `expandPlan` stamps them into concrete objects and animations at render time.
-   */
-  attacks: z.array(AttackInstanceSchema).default([]),
   /**
    * Ordered slides — **always at least one**. A plan with no slides has no
    * layout to show, and the old "base layout, plus zero or more slides" split is
@@ -421,7 +315,6 @@ export function makeEmptyPlan(params: {
     ...(params.encounterId ? { encounterId: params.encounterId } : {}),
     background: params.background,
     objects: [],
-    attacks: [],
     groups: {},
     // Never empty: `PlanSchema` requires a slide, because a plan with no layout
     // is not a thing the editor can put a cursor in.
