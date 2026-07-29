@@ -240,6 +240,39 @@ describe("editing a placement", () => {
     expect(destination().toX).not.toBe(was.toX);
   });
 
+  it("dragging the whole placement moves its recipe, so its motion paths come too", () => {
+    const members = owned(id);
+    const before = { ...state().slides[0]!.states[members[0]!]! };
+    const wasDestination = state().slides[0]!.animations.find(
+      (a) => a.effect === "move",
+    )!.params!.toX!;
+    const wasTx = instances()[id]!.transform.tx;
+
+    state().moveObjects(
+      members.map((oid) => {
+        const s = state().slides[0]!.states[oid]!;
+        return { id: oid, x: s.x + 40, y: s.y + 25 };
+      }),
+    );
+
+    expect(instances()[id]!.transform.tx).toBeCloseTo(wasTx + 40, 6);
+    expect(state().slides[0]!.states[members[0]!]!.x).toBeCloseTo(
+      before.x + 40,
+      6,
+    );
+    const now = state().slides[0]!.animations.find((a) => a.effect === "move")!
+      .params!.toX!;
+    expect(now).toBeCloseTo(wasDestination + 40, 6);
+  });
+
+  it("dragging one member out of a placement is not the placement moving", () => {
+    const [first] = owned(id);
+    const wasTx = instances()[id]!.transform.tx;
+    const s = state().slides[0]!.states[first!]!;
+    state().moveObjects([{ id: first!, x: s.x + 40, y: s.y }]);
+    expect(instances()[id]!.transform.tx).toBe(wasTx);
+  });
+
   it("slides the whole attack when its start moves", () => {
     state().setAttackTiming(id, { anchorDelayMs: 400 });
     const spans = layoutStepTimeline(state().slides[0]!.animations).spans;

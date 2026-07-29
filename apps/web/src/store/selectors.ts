@@ -1,4 +1,8 @@
-import { resolveObjectState, type ObjectState } from "@raidplan/shared";
+import {
+  resolveObjectState,
+  type ObjectState,
+  type PlanObject,
+} from "@raidplan/shared";
 import type { EditorState } from "./editorStore";
 
 /**
@@ -48,4 +52,28 @@ export function selectSelectionSizes(s: EditorState): string {
       return state ? `${id}:${state.w}x${state.h}` : id;
     })
     .join(" ");
+}
+
+/**
+ * The attack placement the selection *is*, if it is exactly one (plan §21).
+ *
+ * Exactly: every selected object belongs to the instance, and every object the
+ * instance owns is selected. Half an attack under the handles is not the attack
+ * being transformed, and settles the ordinary way.
+ */
+export function selectSoleAttackId(s: {
+  selectedIds: readonly string[];
+  objectIds: readonly string[];
+  objects: Record<string, PlanObject>;
+}): string | undefined {
+  const first = s.selectedIds[0];
+  const instanceId = first && s.objects[first]?.attackId;
+  if (!instanceId) return undefined;
+  if (s.selectedIds.some((id) => s.objects[id]?.attackId !== instanceId)) {
+    return undefined;
+  }
+  const owned = s.objectIds.filter(
+    (id) => s.objects[id]?.attackId === instanceId,
+  );
+  return owned.length === s.selectedIds.length ? instanceId : undefined;
 }

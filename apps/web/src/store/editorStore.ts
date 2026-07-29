@@ -226,6 +226,24 @@ export interface EditorState extends PlanDoc {
    * the objects and leave their motion paths behind.
    */
   setAttackTransform: (instanceId: string, transform: AttackTransform) => void;
+  /**
+   * Compose a finished transformer gesture onto the placement.
+   *
+   * `scale` is **uniform** on purpose: `R(r+Δ)·(k·S)` is another rotation and
+   * scale, so a uniform gesture composes onto an existing placement exactly,
+   * while a non-uniform one would be a shear the transform cannot say. The
+   * handles offer uniform scaling; the Attack card sets `sx`/`sy` outright.
+   */
+  nudgeAttackTransform: (
+    instanceId: string,
+    gesture: {
+      rotationDeltaDeg: number;
+      scale: number;
+      /** One of the instance's own objects, and where the gesture left it. */
+      referenceId: string;
+      referenceCentre: Point;
+    },
+  ) => void;
   /** When the placement starts on its slide, and how far its timings stretch. */
   setAttackTiming: (
     instanceId: string,
@@ -626,6 +644,35 @@ function restampAttack(s: EditorState, instanceId: string): boolean {
   return true;
 }
 
+/**
+ * Is this move a whole placement being dragged, and by how much?
+ *
+ * Only when *every* object moving belongs to one instance and none of it is
+ * being left behind — dragging one member out of an attack is not a thing the
+ * attack should follow, and dragging a token that merely fills a slot is the
+ * token's own business.
+ */
+function attackBeingMoved(
+  s: EditorState,
+  moves: readonly { id: string; x: number; y: number }[],
+): { instanceId: string; dx: number; dy: number } | undefined {
+  const first = moves[0];
+  const instanceId = first && s.objects[first.id]?.attackId;
+  if (!first || !instanceId) return undefined;
+  if (moves.some(({ id }) => s.objects[id]?.attackId !== instanceId)) {
+    return undefined;
+  }
+  const owned = s.objectIds.filter(
+    (id) => s.objects[id]?.attackId === instanceId,
+  );
+  if (owned.length !== moves.length) return undefined;
+
+  const slide = s.slides[s.currentSlideIndex];
+  const before = slide?.states[first.id];
+  if (!before) return undefined;
+  return { instanceId, dx: first.x - before.x, dy: first.y - before.y };
+}
+
 /** Read a placement's recipe from whichever slide it lives on. */
 function findInstance(
   s: EditorState,
@@ -860,6 +907,24 @@ export const useEditorStore = create<EditorState>()(
       moveObjects: (moves) =>
         set((s) => {
           const grid = s.snapEnabled ? s.gridSize : 0;
+          // A placement moves by its recipe, not by its objects: writing the
+          // objects would be undone by the next re-derivation, and would leave
+          // the attack's motion paths behind where it used to be (plan §21).
+          // Every drag path in the editor comes through here, so this is the one
+          // place that has to know.
+          const dragged = attackBeingMoved(s, moves);
+          if (dragged) {
+            const instance = findInstance(s, dragged.instanceId);
+            if (instance) {
+              instance.transform = {
+                ...instance.transform,
+                tx: instance.transform.tx + dragged.dx,
+                ty: instance.transform.ty + dragged.dy,
+              };
+              restampAttack(s, dragged.instanceId);
+            }
+            return;
+          }
           for (const { id, x, y } of moves) {
             const object = s.objects[id];
             if (!object || object.locked) continue;
@@ -868,6 +933,40 @@ export const useEditorStore = create<EditorState>()(
               y: snapValue(y, grid),
             });
           }
+        }),
+
+      nudgeAttackTransform: (instanceId, gesture) =>
+        set((s) => {
+          const instance = findInstance(s, instanceId);
+          const def = s.attacks.find((a) => a.id === instance?.defId);
+          if (!instance || !def) return;
+
+          const defObjectId = Object.entries(instance.objectMap).find(
+            ([, planId]) => planId === gesture.referenceId,
+          )?.[0];
+          const authored = defObjectId
+            ? def.slide.states[defObjectId]
+            : undefined;
+          if (!authored) return;
+
+          // A **uniform** gesture composes onto an existing placement exactly:
+          // scaling by k and turning by Δ gives `R(r+Δ)·(k·S)`, which is another
+          // rotation-and-scale. A non-uniform one would not — it would be a
+          // shear, which the transform cannot say — so the handles offer only
+          // uniform scaling and the card's own fields set sx/sy outright.
+          const rotationDeg =
+            instance.transform.rotationDeg + gesture.rotationDeltaDeg;
+          const sx = instance.transform.sx * gesture.scale;
+          const sy = instance.transform.sy * gesture.scale;
+          instance.transform = placementTransform({
+            anchor: attackAnchor(def.slide.states),
+            align: centrePoint(authored),
+            at: gesture.referenceCentre,
+            rotationDeg,
+            sx,
+            sy,
+          });
+          restampAttack(s, instanceId);
         }),
 
       nudgeSelected: (dx, dy, big = false) =>

@@ -1344,7 +1344,7 @@ repeated drags accumulate no rounding error.
 2. **The pure core.** `attackTransform.ts` and `attackStamp.ts`, plus the load-time repair pass. [DONE]
 3. **Placement.** Store actions, the palette's Attacks tab, the drop path, the slot rule, Detach. [DONE]
 4. **Instance editing.** The Attack card: parameters, slot re-binding, and the transformer routed
-   through the recipe.
+   through the recipe. [DONE]
 5. **Timeline.** One row, one bar, dragging the whole attack and scaling its durations.
 6. **The designer.** The editor in a sandbox on one slide, with slots, parameters and save.
 7. **Preset attacks.** `EncounterPreset.attacks`, `encounter.setAttacks`, publishing from the designer.

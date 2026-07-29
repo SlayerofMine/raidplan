@@ -7,6 +7,7 @@ import {
   isInstantEffect,
 } from "../anim/effectChoices";
 import { useEditorStore } from "../store/editorStore";
+import { AttackCard } from "./AttackCard";
 import { finishMoveDraft, useMoveDraft } from "./canvas/useMoveDraft";
 import { CollapsiblePanel } from "./CollapsiblePanel";
 import { objectDisplayName } from "./objectName";
@@ -50,6 +51,16 @@ export function AnimationPanel() {
   const drawing = useMoveDraft((s) => s.objectId !== null);
   const cancelDraw = useMoveDraft((s) => s.cancel);
   const drawMove = useEditorStore((s) => s.drawMove);
+  /**
+   * The placement the selection is inside, if it is all inside one. Selecting
+   * across two attacks, or an attack and something else, is not a thing this
+   * panel can speak for — so it falls back to the ordinary rows.
+   */
+  const attackId = useEditorStore((s) => {
+    const ids = new Set(s.selectedIds.map((id) => s.objects[id]?.attackId));
+    const only = ids.size === 1 ? [...ids][0] : undefined;
+    return only ?? undefined;
+  });
 
   if (!slide) return null;
 
@@ -58,6 +69,17 @@ export function AnimationPanel() {
   const routable = count === 1 ? selectedIds[0]! : null;
   const mine = slide.animations.filter((a) => selectedIds.includes(a.objectId));
   const elsewhere = slide.animations.length - mine.length;
+
+  // A placement's animations are derived, so they are not offered as rows: an
+  // edit here would be overwritten the next time the attack moved. The card
+  // says what *can* be said about it — and Detach is right there for the rest.
+  if (attackId) {
+    return (
+      <Section>
+        <AttackCard instanceId={attackId} />
+      </Section>
+    );
+  }
   const rows = groupAnimations(mine);
 
   return (

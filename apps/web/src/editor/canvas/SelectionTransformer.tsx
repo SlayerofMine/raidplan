@@ -2,12 +2,16 @@ import { useEffect, useRef } from "react";
 import { Transformer } from "react-konva";
 import type { Node as KonvaNode } from "konva/lib/Node";
 import type { Transformer as TransformerNode } from "konva/lib/shapes/Transformer";
+import { centrePoint } from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
-import { selectObjectState } from "../../store/selectors";
+import { selectObjectState, selectSoleAttackId } from "../../store/selectors";
 import { carryBox, MIN_OBJECT_SIZE } from "./coords";
 
 /** Rotation handles snap to 45° increments (plan §2.2). */
 const ROTATION_SNAPS = [0, 45, 90, 135, 180, 225, 270, 315];
+
+/** The only anchors offered for a placement — corners scale it uniformly. */
+const CORNERS = ["top-left", "top-right", "bottom-left", "bottom-right"];
 
 /**
  * Resize/rotate handles for the current selection (plan §2.2). Konva's
@@ -34,12 +38,20 @@ export function SelectionTransformer({
   selectedIds,
   objectIds,
   selectionSizes,
+  isAttack,
 }: {
   selectedIds: readonly string[];
   /** Not read — a dependency, so added or removed nodes force a re-attach. */
   objectIds: readonly string[];
   /** Not read — a dependency; see `selectSelectionSizes` and the effect below. */
   selectionSizes: string;
+  /**
+   * The selection is exactly one attack placement (plan §21), so the handles
+   * scale it uniformly and the gesture settles into its recipe. A prop like
+   * everything else here — subscribing in this component attaches the
+   * transformer before the nodes exist; see above.
+   */
+  isAttack: boolean;
 }) {
   const ref = useRef<TransformerNode>(null);
 
@@ -117,6 +129,34 @@ export function SelectionTransformer({
     if (store.selectedIds.length < 2) return;
 
     const held = ref.current?.nodes() ?? [];
+
+    // A placement settles into its **recipe** and is re-derived from the
+    // definition (plan §21). Settling its objects instead would move them and
+    // leave the attack's motion paths where they were, and the next re-stamp
+    // would undo the whole gesture anyway.
+    const instanceId = selectSoleAttackId(store);
+    if (instanceId) {
+      const node = held[0];
+      const before = node ? selectObjectState(store, node.id()) : undefined;
+      if (!node || !before) return;
+      const after = {
+        x: node.x(),
+        y: node.y(),
+        w: before.w * node.scaleX(),
+        h: before.h * node.scaleY(),
+        rotation: node.rotation(),
+      };
+      store.nudgeAttackTransform(instanceId, {
+        rotationDeltaDeg: after.rotation - before.rotation,
+        // Uniform by construction — `keepRatio` below is what makes reading one
+        // axis enough, and what makes the composition exact.
+        scale: before.w === 0 ? 1 : after.w / before.w,
+        referenceId: node.id(),
+        referenceCentre: centrePoint(after),
+      });
+      return;
+    }
+
     // Where each node the handles moved has ended up.
     const settled = held.flatMap((node) => {
       const before = selectObjectState(store, node.id());
@@ -151,6 +191,11 @@ export function SelectionTransformer({
       ref={ref}
       rotationSnaps={ROTATION_SNAPS}
       rotationSnapTolerance={6}
+      // A placement scales uniformly under the handles, because that is the
+      // gesture that composes onto it exactly (plan §21). Squashing one is
+      // still possible — the Attack card sets the two factors outright.
+      keepRatio={isAttack}
+      enabledAnchors={isAttack ? CORNERS : undefined}
       ignoreStroke
       padding={2}
       anchorSize={8}
