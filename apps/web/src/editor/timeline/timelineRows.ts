@@ -26,10 +26,13 @@ export interface TimelineBar {
   objectCount: number;
 }
 
-/** One labelled line of the chart: an object, or a group standing for its members. */
+/**
+ * One labelled line of the chart: an object, a group standing for its members,
+ * or an attack standing for the whole of what it does.
+ */
 export interface TimelineRow {
-  kind: "object" | "group";
-  /** Object id, or group id — whichever the row stands for. */
+  kind: "object" | "group" | "attack";
+  /** Object id, group id, or attack instance id — whichever the row stands for. */
   id: string;
   /** What clicking the row's label selects, in first-appearance order. */
   objectIds: string[];
@@ -71,6 +74,7 @@ function signatureOf(span: AnimSpan): string {
 export function buildTimelineRows(
   spans: readonly AnimSpan[],
   groupOf: (objectId: string) => string | undefined,
+  attackOf: (objectId: string) => string | undefined = () => undefined,
 ): TimelineRow[] {
   const rows: TimelineRow[] = [];
   const byKey = new Map<string, TimelineRow>();
@@ -83,13 +87,16 @@ export function buildTimelineRows(
   >();
 
   for (const span of spans) {
-    const groupId = groupOf(span.objectId);
-    const rowKey = groupId ?? span.objectId;
+    // An attack is asked about first: its objects are usually a group as well,
+    // and being one attack is the more specific claim.
+    const attackId = attackOf(span.objectId);
+    const groupId = attackId ? undefined : groupOf(span.objectId);
+    const rowKey = attackId ?? groupId ?? span.objectId;
 
     let row = byKey.get(rowKey);
     if (!row) {
       row = {
-        kind: groupId ? "group" : "object",
+        kind: attackId ? "attack" : groupId ? "group" : "object",
         id: rowKey,
         objectIds: [],
         bars: [],
@@ -123,5 +130,50 @@ export function buildTimelineRows(
     }
   }
 
-  return rows;
+  return rows.map((row) => (row.kind === "attack" ? collapse(row) : row));
+}
+
+/**
+ * An attack is **one bar**, however many animations it took to say it.
+ *
+ * The whole point of packaging a mechanic is that it is one thing the planner
+ * decided on, and a timeline showing its six internal legs would be showing the
+ * inside of a decision nobody made leg by leg. The bar spans everything the
+ * attack does, from the first thing to start to the last thing to end.
+ *
+ * Deferred animations are left out of the extent, exactly as they are left out
+ * of the slide's own length: a collision has no time, so letting one stretch the
+ * bar would draw a length the attack never takes.
+ */
+function collapse(row: TimelineRow): TimelineRow {
+  const auto = row.bars.filter((bar) => !bar.span.deferred);
+  const timed = auto.length > 0 ? auto : row.bars;
+  const first = timed[0];
+  if (!first || row.bars.length === 1) return row;
+
+  const startMs = Math.min(...timed.map((bar) => bar.span.startMs));
+  const endMs = Math.max(...timed.map((bar) => bar.span.endMs));
+  // Drawn from zero rather than from a trigger anchor: the block's own head is
+  // `onEnter`, so its start *is* absolute, and the bar's lead-in dash is the
+  // attack's delay — the very thing dragging the bar changes.
+  const span: AnimSpan = {
+    ...first.span,
+    triggerMs: 0,
+    delayMs: startMs,
+    startMs,
+    durationMs: endMs - startMs,
+    spanMs: endMs - startMs,
+    endMs,
+    deferred: false,
+  };
+  return {
+    ...row,
+    bars: [
+      {
+        span,
+        animIds: row.bars.flatMap((bar) => bar.animIds),
+        objectCount: row.objectIds.length,
+      },
+    ],
+  };
 }

@@ -1,5 +1,9 @@
-import { useMemo, type PointerEvent as ReactPointerEvent } from "react";
-import { layoutStepTimeline, type AnimKind } from "@raidplan/shared";
+import { useMemo, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  layoutStepTimeline,
+  slideAttacks,
+  type AnimKind,
+} from "@raidplan/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { objectDisplayName } from "../objectName";
 import { useContainerSize } from "../canvas/useContainerSize";
@@ -96,11 +100,25 @@ export function TimelineChart({ slideIndex }: { slideIndex: number }) {
     };
   }, [objects]);
 
+  // An attack is one row and one bar (plan §21): what the planner decided on
+  // was the mechanic, not its six internal legs.
+  //
+  // Memoised on the slide's own record rather than on a fresh `{}` — immer keeps
+  // it referentially stable, so the rows below recompute exactly when a
+  // placement can actually have changed rather than on every render.
+  const instances = useMemo(() => (slide ? slideAttacks(slide) : {}), [slide]);
+  const attackOf = useMemo(() => {
+    return (objectId: string) => {
+      const attackId = objects[objectId]?.attackId;
+      return attackId && instances[attackId] ? attackId : undefined;
+    };
+  }, [objects, instances]);
+
   // Rows in first-appearance order, so the chart reads top-to-bottom the way the
   // animation list does.
   const rows = useMemo(
-    () => buildTimelineRows(timeline.spans, groupOf),
-    [timeline, groupOf],
+    () => buildTimelineRows(timeline.spans, groupOf, attackOf),
+    [timeline, groupOf, attackOf],
   );
 
   if (!slide) return null;
@@ -172,9 +190,11 @@ export function TimelineChart({ slideIndex }: { slideIndex: number }) {
                 slideIndex={slideIndex}
                 row={row}
                 label={
-                  row.kind === "group"
-                    ? groupNames[row.id]?.trim() || "Group"
-                    : objectDisplayName(objects[row.id])
+                  row.kind === "attack"
+                    ? (instances[row.id]?.name ?? "Attack")
+                    : row.kind === "group"
+                      ? groupNames[row.id]?.trim() || "Group"
+                      : objectDisplayName(objects[row.id])
                 }
                 pxPerMs={scale.pxPerMs}
                 locked={locked}
@@ -329,6 +349,7 @@ function Row({
   const select = useEditorStore((s) => s.select);
   const selectGroup = useEditorStore((s) => s.selectGroup);
   const grouped = row.kind === "group";
+  const attack = row.kind === "attack";
 
   // Concurrent animations in one row (e.g. move + fade `withPrevious`) get their
   // own lane so they never draw on top of each other; sequential ones share a
@@ -340,14 +361,32 @@ function Row({
     <>
       <button
         type="button"
-        onClick={() => (grouped ? selectGroup(row.id) : select([row.id]))}
+        onClick={() =>
+          attack
+            ? select(row.objectIds)
+            : grouped
+              ? selectGroup(row.id)
+              : select([row.id])
+        }
         data-testid={
-          grouped ? `timeline-row-group-${row.id}` : `timeline-row-${row.id}`
+          attack
+            ? `timeline-row-attack-${row.id}`
+            : grouped
+              ? `timeline-row-group-${row.id}`
+              : `timeline-row-${row.id}`
         }
         className={`min-w-0 truncate pr-2 text-right text-xs hover:text-accent ${
-          grouped ? "font-medium text-neutral-200" : "text-neutral-300"
+          grouped || attack
+            ? "font-medium text-neutral-200"
+            : "text-neutral-300"
         }`}
-        title={grouped ? `Select the group ${label}` : `Select ${label}`}
+        title={
+          attack
+            ? `Select the attack ${label}`
+            : grouped
+              ? `Select the group ${label}`
+              : `Select ${label}`
+        }
         style={{ height: LANE_H }}
       >
         {label}
@@ -364,6 +403,7 @@ function Row({
             pxPerMs={pxPerMs}
             top={(lane.get(bar.span.animId) ?? 0) * (LANE_H + LANE_GAP)}
             locked={locked}
+            {...(attack ? { attackId: row.id } : {})}
           />
         ))}
       </div>
@@ -383,22 +423,61 @@ function Bar({
   pxPerMs,
   top,
   locked,
+  attackId,
 }: {
   slideIndex: number;
   bar: TimelineBar;
   pxPerMs: number;
   top: number;
   locked: boolean;
+  /**
+   * The placement this bar *is* (plan §21). Its animations are derived, so the
+   * bar edits the recipe instead: the body moves the attack's start, and the
+   * handle stretches its authored timings.
+   */
+  attackId?: string;
 }) {
   const updateAnimations = useEditorStore((s) => s.updateAnimations);
+  const setAttackTiming = useEditorStore((s) => s.setAttackTiming);
   const select = useEditorStore((s) => s.select);
 
   const { span, animIds, objectCount } = bar;
 
+  /**
+   * What the bar was when the gesture began — its drawn extent and the
+   * placement's scale at that moment.
+   *
+   * Held still for the whole drag, because the handle sets a **ratio**: reading
+   * the extent back after each frame would measure a length this drag had just
+   * written, and the rounding would compound exactly the way §20's coordinates
+   * did. Held this way, dragging out and back lands on the authored timings to
+   * the millisecond.
+   */
+  const gesture = useRef<{ extentMs: number; timeScale: number } | null>(null);
+  const liveBase = () => {
+    const store = useEditorStore.getState();
+    const slide = store.slides[slideIndex];
+    const instance =
+      attackId && slide ? slideAttacks(slide)[attackId] : undefined;
+    return { extentMs: span.durationMs, timeScale: instance?.timeScale ?? 1 };
+  };
+
   const setDelay = (delayMs: number) =>
-    updateAnimations(slideIndex, animIds, { delayMs });
-  const setDuration = (durationMs: number) =>
-    updateAnimations(slideIndex, animIds, { durationMs });
+    attackId
+      ? setAttackTiming(attackId, { anchorDelayMs: delayMs })
+      : updateAnimations(slideIndex, animIds, { delayMs });
+
+  const setDuration = (durationMs: number) => {
+    if (!attackId) {
+      updateAnimations(slideIndex, animIds, { durationMs });
+      return;
+    }
+    const base = gesture.current ?? liveBase();
+    if (base.extentMs <= 0) return;
+    setAttackTiming(attackId, {
+      timeScale: base.timeScale * (durationMs / base.extentMs),
+    });
+  };
 
   const delayW = msToPx(span.delayMs, pxPerMs);
   const bodyW = msToPx(span.spanMs, pxPerMs);
@@ -432,9 +511,11 @@ function Bar({
     e.preventDefault();
     e.stopPropagation();
     const startX = e.clientX;
+    gesture.current = liveBase();
     const move = (ev: PointerEvent) =>
       commit(dragValueMs(start, ev.clientX - startX, pxPerMs, min));
     const up = () => {
+      gesture.current = null;
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
     };

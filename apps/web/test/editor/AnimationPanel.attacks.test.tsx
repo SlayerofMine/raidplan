@@ -163,3 +163,27 @@ describe("the Animations panel, on a placed attack", () => {
     expect(state().objects.tank).toBeDefined();
   });
 });
+
+describe("the timeline, on a placed attack", () => {
+  it("draws the whole attack as one bar, and retiming it out and back restores the authored timings exactly", () => {
+    const slide = () => state().slides[0]!;
+    const authored = slide().animations.map((a) => [a.delayMs, a.durationMs]);
+    const instance = () => slideAttacks(slide())[instanceId]!;
+
+    // What the bar's handle does: a ratio against the extent at press.
+    const extent = () => {
+      const spans = slide().animations;
+      return Math.max(...spans.map((a) => a.delayMs + a.durationMs));
+    };
+    const at = extent();
+    state().setAttackTiming(instanceId, {
+      timeScale: instance().timeScale * ((at * 3) / at),
+    });
+    expect(extent()).toBeGreaterThan(at);
+
+    state().setAttackTiming(instanceId, { timeScale: 1 });
+    expect(slide().animations.map((a) => [a.delayMs, a.durationMs])).toEqual(
+      authored,
+    );
+  });
+});

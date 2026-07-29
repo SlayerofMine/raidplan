@@ -1345,7 +1345,7 @@ repeated drags accumulate no rounding error.
 3. **Placement.** Store actions, the palette's Attacks tab, the drop path, the slot rule, Detach. [DONE]
 4. **Instance editing.** The Attack card: parameters, slot re-binding, and the transformer routed
    through the recipe. [DONE]
-5. **Timeline.** One row, one bar, dragging the whole attack and scaling its durations.
+5. **Timeline.** One row, one bar, dragging the whole attack and scaling its durations. [DONE]
 6. **The designer.** The editor in a sandbox on one slide, with slots, parameters and save.
 7. **Preset attacks.** `EncounterPreset.attacks`, `encounter.setAttacks`, publishing from the designer.
 8. **End-to-end tests.**
