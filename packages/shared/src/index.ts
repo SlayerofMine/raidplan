@@ -9,6 +9,12 @@ export * from "./effects.js";
 // schemas it is mutually recursive with.
 export * from "./attack.js";
 export * from "./plan.js";
+// How a placement moves an attack's authored geometry, and the derivation of a
+// placement into ordinary objects and animations (plan §21). Pure, so the
+// editor, the designer's lint and the tests all agree about where an attack
+// lands.
+export * from "./attackTransform.js";
+export * from "./attackStamp.js";
 export * from "./resolve.js";
 // The route a `move` follows (plan §7). Pure geometry, so the editor overlay,
 // the player, the frame exporter and the server-side SVG all draw one curve.

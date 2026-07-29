@@ -293,14 +293,21 @@ export function normalizeSlides(
   slides: readonly Slide[],
 ): Slide[] {
   const known = new Set(objects.map((object) => object.id));
+  const owners = new Map<string, number>();
+  for (const object of objects) {
+    if (object.attackId)
+      owners.set(object.attackId, (owners.get(object.attackId) ?? 0) + 1);
+  }
   return slides.map((slide) => {
     const entries = Object.entries(slide.states).filter(([id]) =>
       known.has(id),
     );
     const animations = slide.animations.filter((a) => known.has(a.objectId));
+    const instances = repairInstances(slide, known, owners);
     if (
       entries.length === Object.keys(slide.states).length &&
-      animations.length === slide.animations.length
+      animations.length === slide.animations.length &&
+      instances === slide.attackInstances
     ) {
       return slide;
     }
@@ -308,6 +315,69 @@ export function normalizeSlides(
       ...slide,
       states: Object.fromEntries(entries) as Record<string, SlideState>,
       animations,
+      ...(instances === undefined ? {} : { attackInstances: instances }),
     };
   });
+}
+
+/** Keep only the entries of a map whose value names something the plan still has. */
+function pruneMap(
+  map: Record<string, string>,
+  known: ReadonlySet<string>,
+): { map: Record<string, string>; changed: boolean } {
+  const entries = Object.entries(map).filter(([, planId]) => known.has(planId));
+  return {
+    map: Object.fromEntries(entries),
+    changed: entries.length !== Object.keys(map).length,
+  };
+}
+
+/**
+ * Bring a slide's attack instances back into agreement with its objects
+ * (plan §21).
+ *
+ * An instance exists precisely while it still **owns** an object — the same rule
+ * groups follow, and for the same reason: membership lives on the objects, so
+ * deleting the last one cannot leave a placement behind with nothing to draw.
+ * Ids in its maps that name objects the plan no longer has go too, so a re-stamp
+ * can never write through a stale reference.
+ *
+ * Returns the slide's own record unchanged when nothing was wrong, so an
+ * already-clean document keeps its references and the store's `sameDocument`
+ * check stays honest.
+ */
+function repairInstances(
+  slide: Slide,
+  known: ReadonlySet<string>,
+  owners: ReadonlyMap<string, number>,
+): Slide["attackInstances"] {
+  const instances = slide.attackInstances;
+  if (!instances) return instances;
+
+  const animIds = new Set(slide.animations.map((a) => a.id));
+  const repaired: NonNullable<Slide["attackInstances"]> = {};
+  let changed = false;
+
+  for (const [id, instance] of Object.entries(instances)) {
+    if (!owners.has(id)) {
+      changed = true;
+      continue;
+    }
+    const slots = pruneMap(instance.slots, known);
+    const objectMap = pruneMap(instance.objectMap, known);
+    const animMap = pruneMap(instance.animMap, animIds);
+    if (slots.changed || objectMap.changed || animMap.changed) {
+      changed = true;
+      repaired[id] = {
+        ...instance,
+        slots: slots.map,
+        objectMap: objectMap.map,
+        animMap: animMap.map,
+      };
+    } else {
+      repaired[id] = instance;
+    }
+  }
+
+  return changed ? repaired : instances;
 }

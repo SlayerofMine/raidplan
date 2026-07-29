@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { AttackInstance } from "../src/attack.js";
 import {
   SCHEMA_VERSION,
   type Plan,
@@ -381,6 +382,93 @@ describe("normalizeSlides", () => {
       slide("s1", {}),
     ]);
     expect(normalizeSlides(objects, once)).toEqual(once);
+  });
+
+  describe("attack instances (plan §21)", () => {
+    const recipe = (over: Partial<AttackInstance> = {}): AttackInstance => ({
+      id: "atk_1",
+      defId: "def_1",
+      name: "Fireball",
+      transform: { tx: 0, ty: 0, rotationDeg: 0, sx: 1, sy: 1 },
+      timeScale: 1,
+      anchorDelayMs: 0,
+      values: {},
+      slots: { slot_1: "a" },
+      objectMap: { def_puddle: "a" },
+      animMap: { def_move: "anim_a" },
+      ...over,
+    });
+
+    /** An object the instance owns — membership is what keeps the instance alive. */
+    const owned = (id: string, attackId: string): PlanObject => ({
+      ...obj(id),
+      attackId,
+    });
+
+    it("keeps an instance that still owns an object", () => {
+      const fixed = normalizeSlides(
+        [owned("a", "atk_1")],
+        [
+          {
+            id: "s0",
+            states: { a: state() },
+            animations: [anim("a")],
+            attackInstances: { atk_1: recipe() },
+          },
+        ],
+      );
+      expect(Object.keys(fixed[0]!.attackInstances ?? {})).toEqual(["atk_1"]);
+    });
+
+    it("drops an instance whose last object has gone, exactly as a group dissolves", () => {
+      const fixed = normalizeSlides(
+        [obj("a")], // 'a' is no longer owned by the attack
+        [
+          {
+            id: "s0",
+            states: { a: state() },
+            animations: [],
+            attackInstances: { atk_1: recipe() },
+          },
+        ],
+      );
+      expect(fixed[0]!.attackInstances).toEqual({});
+    });
+
+    it("prunes ids that name objects and animations the plan no longer has, so a re-stamp cannot write through a stale reference", () => {
+      const fixed = normalizeSlides(
+        [owned("a", "atk_1")],
+        [
+          {
+            id: "s0",
+            states: { a: state() },
+            animations: [anim("a")],
+            attackInstances: {
+              atk_1: recipe({
+                slots: { slot_1: "a", slot_2: "ghost" },
+                objectMap: { def_puddle: "a", def_bolt: "ghost" },
+                animMap: { def_move: "anim_a", def_gone: "anim_ghost" },
+              }),
+            },
+          },
+        ],
+      );
+      const instance = fixed[0]!.attackInstances!.atk_1!;
+      expect(instance.slots).toEqual({ slot_1: "a" });
+      expect(instance.objectMap).toEqual({ def_puddle: "a" });
+      expect(instance.animMap).toEqual({ def_move: "anim_a" });
+    });
+
+    it("leaves a clean slide's instances referentially untouched", () => {
+      const original: Slide = {
+        id: "s0",
+        states: { a: state() },
+        animations: [anim("a")],
+        attackInstances: { atk_1: recipe() },
+      };
+      const fixed = normalizeSlides([owned("a", "atk_1")], [original]);
+      expect(fixed[0]).toBe(original);
+    });
   });
 
   it("leaves an already-clean slide referentially untouched", () => {

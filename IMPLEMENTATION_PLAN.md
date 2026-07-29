@@ -1341,7 +1341,7 @@ repeated drags accumulate no rounding error.
    `AttackDefSchema` alongside the document schemas it is mutually recursive with, `slotName` and
    `attackId` on objects, `attackInstances` on slides, `attacks` on plans and encounter presets.
    Schema **7** — every addition is optional or defaulted, so a 6 opens unchanged. [DONE]
-2. **The pure core.** `attackTransform.ts` and `attackStamp.ts`, plus the load-time repair pass.
+2. **The pure core.** `attackTransform.ts` and `attackStamp.ts`, plus the load-time repair pass. [DONE]
 3. **Placement.** Store actions, the palette's Attacks tab, the drop path, the slot rule, Detach.
 4. **Instance editing.** The Attack card: parameters, slot re-binding, and the transformer routed
    through the recipe.
