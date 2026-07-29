@@ -1,6 +1,7 @@
 import {
   attackParamValue,
   attackSlots,
+  type AttackField,
   type AttackInstance,
   type AttackParam,
   type AttackParamValue,
@@ -133,96 +134,121 @@ function applyParams(
     const value = attackParamValue(param, instance.values);
     for (const target of param.targets) {
       if (target.on === "object") {
-        const object = byId.get(target.targetId);
-        const state = states[target.targetId];
-        switch (target.field) {
-          case "tint":
-            if (object && typeof value === "string") object.base.tint = value;
-            break;
-          case "label":
-            if (object && typeof value === "string") object.base.label = value;
-            break;
-          case "name":
-            if (object && typeof value === "string") object.base.name = value;
-            break;
-          case "locked":
-            if (object && typeof value === "boolean") object.locked = value;
-            break;
-          case "fill":
-            if (object && isFill(value))
-              object.style = { ...object.style, fill: value };
-            break;
-          case "opacity": {
-            const n = num(value);
-            if (state && n !== undefined)
-              state.opacity = Math.min(1, Math.max(0, n));
-            break;
-          }
-          case "w": {
-            const n = num(value);
-            if (state && n !== undefined) state.w = Math.max(0, n);
-            break;
-          }
-          case "h": {
-            const n = num(value);
-            if (state && n !== undefined) state.h = Math.max(0, n);
-            break;
-          }
-          default:
-            break;
-        }
+        writeObjectField(
+          target.field,
+          value,
+          byId.get(target.targetId),
+          states[target.targetId],
+        );
         continue;
       }
-
       const anim = animById.get(target.targetId);
-      if (!anim) continue;
-      switch (target.field) {
-        case "delayMs": {
-          const n = num(value);
-          if (n !== undefined) anim.delayMs = Math.max(0, n);
-          break;
-        }
-        case "durationMs": {
-          const n = num(value);
-          if (n !== undefined) anim.durationMs = Math.max(0, n);
-          break;
-        }
-        case "easing":
-          if (typeof value === "string" && value.length > 0)
-            anim.easing = value;
-          break;
-        case "effect":
-          if (isEffect(value)) anim.effect = value;
-          break;
-        case "scale": {
-          const n = num(value);
-          if (n !== undefined && n > 0)
-            anim.params = { ...anim.params, scale: n };
-          break;
-        }
-        case "curve": {
-          const n = num(value);
-          if (n !== undefined)
-            anim.params = {
-              ...anim.params,
-              curve: Math.min(1, Math.max(0, n)),
-            };
-          break;
-        }
-        case "collideWith":
-          if (Array.isArray(value)) {
-            anim.collideWith = [...value];
-            planSpaceColliders.add(anim.id);
-          }
-          break;
-        default:
-          break;
+      if (anim && writeAnimField(target.field, value, anim)) {
+        planSpaceColliders.add(anim.id);
       }
     }
   }
 
   return { objects, states, animations, planSpaceColliders };
 }
+
+/**
+ * Write one parameter value onto an object, or onto its state on the attack's
+ * slide — whichever half of the document that field lives in.
+ *
+ * A value that is somehow still the wrong shape is skipped rather than written:
+ * the schema has already checked that the parameter's kind matches every field
+ * it drives, so getting here with a mismatch means a hand-edited document, and
+ * rendering the attack as authored beats rendering it wrong.
+ */
+function writeObjectField(
+  field: AttackField,
+  value: AttackParamValue,
+  object: PlanObject | undefined,
+  state: SlideState | undefined,
+): void {
+  const text = typeof value === "string" ? value : undefined;
+  const n = num(value);
+
+  switch (field) {
+    case "tint":
+      if (object && text !== undefined) object.base.tint = text;
+      return;
+    case "label":
+      if (object && text !== undefined) object.base.label = text;
+      return;
+    case "name":
+      if (object && text !== undefined) object.base.name = text;
+      return;
+    case "locked":
+      if (object && typeof value === "boolean") object.locked = value;
+      return;
+    case "fill":
+      if (object && isFill(value))
+        object.style = { ...object.style, fill: value };
+      return;
+    case "opacity":
+      if (state && n !== undefined) state.opacity = clamp(n, 0, 1);
+      return;
+    case "w":
+      if (state && n !== undefined) state.w = Math.max(0, n);
+      return;
+    case "h":
+      if (state && n !== undefined) state.h = Math.max(0, n);
+      return;
+    default:
+      // An animation-side field, which cannot reach here: the binding schema
+      // rejects a field bound to the wrong side.
+      return;
+  }
+}
+
+/**
+ * Write one parameter value onto an animation.
+ *
+ * Returns whether the write was a `collideWith`, because those ids arrive in
+ * the **plan's** namespace and the caller must know to leave them out of the
+ * definition-to-plan id remap.
+ */
+function writeAnimField(
+  field: AttackField,
+  value: AttackParamValue,
+  anim: Anim,
+): boolean {
+  const n = num(value);
+
+  switch (field) {
+    case "delayMs":
+      if (n !== undefined) anim.delayMs = Math.max(0, n);
+      return false;
+    case "durationMs":
+      if (n !== undefined) anim.durationMs = Math.max(0, n);
+      return false;
+    case "easing":
+      if (typeof value === "string" && value.length > 0) anim.easing = value;
+      return false;
+    case "effect":
+      if (isEffect(value)) anim.effect = value;
+      return false;
+    case "scale":
+      if (n !== undefined && n > 0) anim.params = { ...anim.params, scale: n };
+      return false;
+    case "curve":
+      if (n !== undefined)
+        anim.params = { ...anim.params, curve: clamp(n, 0, 1) };
+      return false;
+    case "collideWith":
+      if (!Array.isArray(value)) return false;
+      anim.collideWith = [...value];
+      return true;
+    default:
+      // An object-side field, which the binding schema has already refused.
+      return false;
+  }
+}
+
+const clamp = (n: number, low: number, high: number): number =>
+  Math.min(high, Math.max(low, n));
 
 /* -------------------------------------------------------------------------- */
 /* The stamp                                                                   */

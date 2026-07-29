@@ -1348,4 +1348,29 @@ repeated drags accumulate no rounding error.
 5. **Timeline.** One row, one bar, dragging the whole attack and scaling its durations. [DONE]
 6. **The designer.** The editor in a sandbox on one slide, with slots, parameters and save. [DONE]
 7. **Preset attacks.** `EncounterPreset.attacks`, `encounter.publishAttack`, publishing from the designer. [DONE]
-8. **End-to-end tests.**
+8. **End-to-end tests.** [DONE]
+
+**Three red-to-green end-to-end tests**, on the three things the design is actually a bet on
+(`apps/web/e2e/attacks.spec.ts`): an attack authored in the designer places onto a token and
+*plays* — proving it really did resolve into ordinary objects and animations, since nothing in the
+player knows otherwise; retiming a placement out and back restores the authored timings **exactly**,
+which is the drift invariant checked through the UI rather than only in a unit test; and deleting an
+attack takes the attack and nothing else, leaving the token its slot was bound to.
+
+*Still red, and untouched:* `editor-groups`, which fails identically at `7bf2bbf` — verified against
+a worktree at that commit rather than assumed from §19.6's note.
+
+**What was left deliberately.** Exposing a parameter is done from a list in the designer's panel
+rather than from a button beside every bindable field in the properties and animation columns; the
+binding table is the same either way, and the second is a lot of surface to add to two panels that
+already carry their own scars. Non-uniform scaling of a placement is typed into the Attack card
+rather than dragged, because only a **uniform** gesture composes onto an existing placement exactly
+(`R(r+Δ)·(k·S)` is another rotation and scale; a non-uniform one is a shear the transform cannot
+say) — the handles do uniform, the card does the rest, and both are exact.
+
+**Two bugs the work turned up, neither about attacks.** `loadPlan` wrote the document's fields by
+hand and had silently stopped loading one, which is precisely what `DOC_SLICES` prevents on the way
+*out* and nothing prevented on the way in; it now assigns the whole `PlanDoc`. And the designer takes
+its parent plan from the store rather than from storage, because autosave is debounced a second and
+reading storage would have loaded a document missing the last edit and then written that back over
+the top.
