@@ -33,6 +33,7 @@ const plan = (objects: PlanObject[]): Plan => ({
   id: "p",
   title: "T",
   raid: "",
+  attacks: [],
   background: { assetId: "arena", width: 1600, height: 900 },
   objects,
   slides: [],

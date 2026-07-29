@@ -12,6 +12,7 @@ function validPlan(): Plan {
     id: "plan_1",
     title: "Mythic Test Boss",
     raid: "test-raid",
+    attacks: [],
     background: { assetId: "bg_arena", width: 1920, height: 1080 },
     objects: [
       {

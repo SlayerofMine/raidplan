@@ -595,6 +595,7 @@ export const useEditorStore = create<EditorState>()(
       objects: {},
       objectIds: [],
       groups: {},
+      attacks: [],
       slides: [makeFirstSlide()],
       selectedIds: [],
       view: INITIAL_VIEW,

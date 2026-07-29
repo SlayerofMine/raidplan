@@ -9,6 +9,12 @@ import {
   ShapeKindSchema,
 } from "./effects.js";
 import { ObjectStyleSchema } from "./mechanics.js";
+import {
+  AttackInstanceSchema,
+  AttackParamSchema,
+  AttackSourceSchema,
+  type AttackInstance,
+} from "./attack.js";
 
 /**
  * The Plan document (plan §5) — the single source of truth for a raid plan.
@@ -44,8 +50,15 @@ import { ObjectStyleSchema } from "./mechanics.js";
  * (§18.17) — stays,
  * because it never needed them: pinning one object to another and aiming it at a
  * third is a property of objects, not of attacks.
+ *
+ * **7** brought attacks back on a different footing (plan §21): a plan carries
+ * its own `attacks` — definitions, not references — a slide carries the
+ * `attackInstances` placed on it, and an object may be a slot (`slotName`) or
+ * belong to an instance (`attackId`). All four are optional or defaulted, so a
+ * document written at 6 opens unchanged and needs no migration step; what it
+ * gains is an empty attack library.
  */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 /** Opacity is always normalised to 0..1. */
 const OpacitySchema = z.number().min(0).max(1);
@@ -122,6 +135,27 @@ export const PlanObjectSchema = z.object({
    * wants to say about a shape they drew, and this is where they say it.
    */
   follow: FollowSchema.optional(),
+  /**
+   * This object is a **slot**: a stand-in for something the using plan supplies
+   * (plan §21). Only meaningful inside an {@link AttackDefSchema} — the same way
+   * `shape` is only meaningful when `type` is `"shape"` — and the value is the
+   * label the planner is asked for ("the tank"). Presence *is* the declaration,
+   * so there is no separate list of slots to fall out of step with the objects.
+   *
+   * A slot is never stamped into a plan. Every reference to it — an animation's
+   * `objectId` or `collideWith`, a tether's `fromId`/`toId`, a `follow` — is
+   * rewritten to the plan object bound to it.
+   */
+  slotName: z.string().min(1).optional(),
+  /**
+   * Which attack instance stamped this object (plan §21). Set only on objects
+   * the instance **owns**, never on a plan object merely bound to one of its
+   * slots — so deleting an attack can never delete a planner's token.
+   *
+   * Like `groupId`, membership lives here rather than in a list on the instance,
+   * so deleting an object can never strand a reference to it.
+   */
+  attackId: z.string().min(1).optional(),
 });
 export type PlanObject = z.infer<typeof PlanObjectSchema>;
 
@@ -235,10 +269,57 @@ export const SlideSchema = z.object({
    */
   states: z.record(z.string().min(1), SlideStateSchema),
   animations: z.array(AnimSchema),
+  /**
+   * The attacks placed on this slide, by instance id (plan §21). Here rather
+   * than on the plan because an attack lives on exactly one slide: its objects
+   * are in this scene and its animations are in this list.
+   *
+   * A **recipe**, not a record of what was stamped — see
+   * {@link AttackInstanceSchema}. The objects and animations it produced are
+   * ordinary members of `states` and `animations` above, which is why nothing
+   * that plays a slide has to know attacks exist.
+   *
+   * Optional, like `name` and `autoAdvanceMs`: a slide with no attacks on it has
+   * nothing to say here, so every document written before §21 is already valid.
+   * Read it through {@link slideAttacks}, never directly.
+   */
+  attackInstances: z.record(z.string().min(1), AttackInstanceSchema).optional(),
   /** Optional autoplay dwell before advancing to the next slide. */
   autoAdvanceMs: z.number().finite().nonnegative().optional(),
 });
 export type Slide = z.infer<typeof SlideSchema>;
+
+/**
+ * The attacks placed on a slide — `{}` when it has none.
+ *
+ * The one reader of `slide.attackInstances`, so "absent" and "empty" are the
+ * same thing everywhere rather than at each call site's discretion.
+ */
+export function slideAttacks(slide: Slide): Record<string, AttackInstance> {
+  return slide.attackInstances ?? {};
+}
+
+/**
+ * An attack definition: objects, one slide, and the parameters it exposes
+ * (plan §21).
+ *
+ * **One slide, by construction** — not `slides: [Slide]`. An attack is a thing
+ * that happens, and a thing that happens has one scene; making the singular
+ * shape the only representable one is cheaper than checking for it everywhere.
+ *
+ * Here rather than in `attack.ts` because a plan carries attacks and an attack
+ * carries plan objects — mutually recursive, so one file has to hold both ends.
+ */
+export const AttackDefSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Where it came from, for the palette's badge. */
+  source: AttackSourceSchema,
+  objects: z.array(PlanObjectSchema),
+  slide: SlideSchema,
+  params: z.array(AttackParamSchema).default([]),
+});
+export type AttackDef = z.infer<typeof AttackDefSchema>;
 
 /** The background map the plan is drawn on, in native pixel dimensions. */
 export const BackgroundSchema = z.object({
@@ -288,6 +369,14 @@ export const PlanSchema = z.object({
    * ask a second question, and the two answers could then disagree.
    */
   groups: z.record(z.string().min(1), z.string()).default({}),
+  /**
+   * The attacks this plan can place (plan §21) — **definitions, not
+   * references**. Ones seeded from the plan's encounter were copied in when the
+   * plan was created, so a plan is self-contained: it exports, imports and
+   * duplicates whole, and an admin editing an encounter can never reach into
+   * work someone has already saved.
+   */
+  attacks: z.array(AttackDefSchema).default([]),
   schemaVersion: z.number().int().positive(),
 });
 export type Plan = z.infer<typeof PlanSchema>;
@@ -316,6 +405,7 @@ export function makeEmptyPlan(params: {
     background: params.background,
     objects: [],
     groups: {},
+    attacks: [],
     // Never empty: `PlanSchema` requires a slide, because a plan with no layout
     // is not a thing the editor can put a cursor in.
     slides: [makeFirstSlide()],

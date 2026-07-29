@@ -89,6 +89,7 @@ const plan: Plan = {
   id: "p",
   title: "t",
   raid: "",
+  attacks: [],
   background: { assetId: "arena", width: 1000, height: 1000 },
   objects: [],
   slides: [{ id: "s0", states: {}, animations: [] }],

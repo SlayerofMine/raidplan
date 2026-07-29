@@ -409,6 +409,7 @@ export function buildDemoPlan(): Plan {
     id: "demo",
     title: "RaidPlans feature demo",
     raid: "Feature demo",
+    attacks: [],
     background: { ...BOARD },
     objects,
     groups: {},

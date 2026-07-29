@@ -66,6 +66,7 @@ function seedOfflinePlan() {
     id: LOCAL_PLAN_ID,
     title: "Scratch",
     raid: "",
+    attacks: [],
     background: { assetId: "arena", width: 1600, height: 900 },
     objects: [],
     slides: [{ id: "s1", states: {}, animations: [] }],

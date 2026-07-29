@@ -1288,3 +1288,64 @@ is still a thing a planner can say. It simply no longer needs a definition to sa
 at its furthest point, including the unfinished `bakeFollows` work on the bounds bug. Schema
 bumped to **6**: a document written at 5 still opens, and its `attacks` array is dropped on the
 way in.
+
+## 21. Attacks, from the ground up
+
+A raid plan is authored one object at a time, but real encounters are made of **mechanics**: a set
+of objects that appear, move, collide and vanish together, on one slide, over and over across every
+plan for that fight. §17–§19 tried to package that and §20 records why the attempt came apart. This
+is the rebuild, and it is built around one invariant chosen specifically to make that class of
+failure impossible.
+
+**The invariant: recompute from source, never accumulate.** A placement is a **recipe, not a
+result**. `slide.attackInstances[id]` holds the definition id, the placement transform, the
+parameter values, the slot bindings and the id map; the objects and animations in the document are a
+pure function of that recipe plus the definition. Every edit — move, rotate, scale, retime,
+re-parameterise — changes the recipe and re-derives the whole stamp from the authored definition
+with the same ids. Geometry is always `transform(authored)`, never `transform(current)`, so ten
+drags of a handle produce the same document as one drag to the same place. §20's 600px bar arriving
+6000px long was compounding error; there is nowhere here for it to compound.
+
+**Attacks resolve at drop, not at playback.** Placing one writes ordinary `PlanObject`s, ordinary
+`SlideState`s and ordinary `Anim`s. `compileStep`, `layoutStepTimeline`, `slideScrubber`, collision,
+the exporters and the viewer are untouched and never learn attacks exist — everything an attack does
+is something the plan model could already say. That is also what makes the previous system's
+expansion-at-playback machinery unnecessary rather than merely rewritten.
+
+**Slots and parameters** are the two ways a packaged mechanic meets a plan it knows nothing about. A
+slot is an object carrying `slotName` — a stand-in for something the plan supplies, authored like
+any other object and never stamped; every reference to it (`objectId`, `collideWith`, a tether's
+`fromId`/`toId`, a `follow`) is rewritten to the plan object bound to it. An attack with N slots may
+only be placed while exactly N objects are selected. A parameter is a named, typed value bound to a
+**closed** set of fields (`ATTACK_FIELDS`), whose default is whatever the document already held —
+so exposing one never changes what the attack looks like.
+
+**Scope, and what an attack is not.** A definition lives in the plan document (`plan.attacks`) and
+nowhere else at runtime: an encounter's attacks are **copied** into a plan at creation, not
+referenced. A plan therefore exports, imports and duplicates whole, there is no versioning or
+upgrade problem, and an admin editing an encounter can never reach into work someone has already
+saved. The cost — a fixed preset attack only reaches new plans — is the price of that guarantee.
+
+**Decisions taken (user):** copy at creation with no propagation; place with defaults and tune in the
+right rail rather than behind a placement dialog (the codebase has no modal component, deliberately);
+the timeline bar both slides the attack and, on its right handle, scales its durations; and the
+placement transform is a full translate/rotate/scale, not the translation-only version proposed. The
+last two are the riskier calls and are paid for by the invariant above: scaling is exact wherever
+`SlideState` can hold the result and degrades to uniform — never to a sheared shape — for a rotated
+member under a non-uniform scale, and retiming recomputes durations from the authored values so
+repeated drags accumulate no rounding error.
+
+**Stages** (each independently shippable, green per commit)
+
+1. **Schema.** `attack.ts` (parameters, bindings, the placement transform, the instance recipe),
+   `AttackDefSchema` alongside the document schemas it is mutually recursive with, `slotName` and
+   `attackId` on objects, `attackInstances` on slides, `attacks` on plans and encounter presets.
+   Schema **7** — every addition is optional or defaulted, so a 6 opens unchanged. [DONE]
+2. **The pure core.** `attackTransform.ts` and `attackStamp.ts`, plus the load-time repair pass.
+3. **Placement.** Store actions, the palette's Attacks tab, the drop path, the slot rule, Detach.
+4. **Instance editing.** The Attack card: parameters, slot re-binding, and the transformer routed
+   through the recipe.
+5. **Timeline.** One row, one bar, dragging the whole attack and scaling its durations.
+6. **The designer.** The editor in a sandbox on one slide, with slots, parameters and save.
+7. **Preset attacks.** `EncounterPreset.attacks`, `encounter.setAttacks`, publishing from the designer.
+8. **End-to-end tests.**

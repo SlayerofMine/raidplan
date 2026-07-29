@@ -69,6 +69,7 @@ function planDoc(over: Partial<Plan> = {}): Plan {
     id: "p",
     title: "Test",
     raid: "",
+    attacks: [],
     background: BACKGROUND,
     groups: {},
     // A slide's `states` is its cast list, so the fixture's objects have to be

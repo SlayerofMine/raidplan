@@ -1,6 +1,7 @@
 import {
   normalizeSlides,
   SCHEMA_VERSION,
+  type AttackDef,
   type Background,
   type Plan,
   type PlanObject,
@@ -33,6 +34,12 @@ export interface PlanDoc {
    * merely litter rather than a broken group — see the store's `pruneGroups`.
    */
   groups: Record<string, string>;
+  /**
+   * The attacks this plan can place (plan §21) — definitions, not references,
+   * so a plan is self-contained. Ones seeded from the encounter were copied in
+   * at creation; the rest the planner authored here.
+   */
+  attacks: AttackDef[];
   slides: Slide[];
 }
 
@@ -57,6 +64,7 @@ const DOC_SLICES: Record<keyof PlanDoc, true> = {
   objects: true,
   objectIds: true,
   groups: true,
+  attacks: true,
   slides: true,
 };
 
@@ -122,6 +130,7 @@ export function toPlan(doc: PlanDoc): Plan {
       .map((id) => doc.objects[id])
       .filter((o): o is PlanObject => o !== undefined),
     groups: doc.groups,
+    attacks: doc.attacks,
     slides: doc.slides,
     schemaVersion: SCHEMA_VERSION,
   };
@@ -151,6 +160,7 @@ export function fromPlan(plan: Plan): PlanDoc {
     objects,
     objectIds,
     groups: { ...plan.groups },
+    attacks: plan.attacks,
     slides: normalizeSlides(plan.objects, plan.slides),
   };
   // The same load-time repair `normalizeSlides` does for the slides: a document

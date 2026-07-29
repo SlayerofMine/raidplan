@@ -66,6 +66,9 @@ export const planRouter = router({
           background: encounter.preset.background,
           objects: encounter.preset.objects,
           slides: encounter.preset.slides,
+          // Copied into the new plan, not referenced (plan §21): the plan owns
+          // them from here, so later edits to the encounter leave it alone.
+          attacks: encounter.preset.attacks,
           raid: encounter.raid,
           // Remembered so a plan knows which encounter seeded it (§17).
           encounterId: encounter.id,

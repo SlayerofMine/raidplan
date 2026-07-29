@@ -171,14 +171,21 @@ export function createEncounter(
     slug: uniqueSlug(db, slugifyName(input.name)),
     raid: input.raid,
     name: input.name,
-    preset: { background: input.background, objects: [], slides: [] },
+    preset: {
+      background: input.background,
+      objects: [],
+      slides: [],
+      attacks: [],
+    },
   });
 }
 
 /**
- * Patch an encounter's editable fields. **Objects and slides are preserved** —
- * the admin panel only edits name/raid/background, so an update must never wipe
- * pre-placed content it doesn't manage. Returns `undefined` if no such row.
+ * Patch an encounter's editable fields. **Objects, slides and attacks are
+ * preserved** — the admin panel only edits name/raid/background, so an update
+ * must never wipe pre-placed content it doesn't manage. That is what the spread
+ * of `existing.preset` below is for, and why anything added to the preset is
+ * safe here by default. Returns `undefined` if no such row.
  */
 export function updateEncounter(
   db: Db,

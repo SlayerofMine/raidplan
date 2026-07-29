@@ -43,7 +43,7 @@ describe("encountersRepo", () => {
       slug: seeded.slug,
       raid: "My Raid",
       name: "Renamed by admin",
-      preset: { background, objects: [], slides: [] },
+      preset: { background, objects: [], slides: [], attacks: [] },
     });
 
     seedDefaultEncounters(db); // a later boot
@@ -58,13 +58,13 @@ describe("encountersRepo", () => {
       slug: "raid-boss",
       raid: "Raid",
       name: "Boss",
-      preset: { background, objects: [], slides: [] },
+      preset: { background, objects: [], slides: [], attacks: [] },
     });
     const second = upsertEncounter(db, {
       slug: "raid-boss",
       raid: "Raid",
       name: "Boss (v2)",
-      preset: { background, objects: [], slides: [] },
+      preset: { background, objects: [], slides: [], attacks: [] },
     });
 
     expect(second.id).toBe(first.id);
@@ -79,6 +79,7 @@ describe("encountersRepo", () => {
       name: "Has a token",
       preset: {
         background,
+        attacks: [],
         objects: [
           {
             id: "boss",
@@ -108,13 +109,13 @@ describe("encountersRepo", () => {
       slug: "b",
       raid: "Zephyr",
       name: "Alpha",
-      preset: { background, objects: [], slides: [] },
+      preset: { background, objects: [], slides: [], attacks: [] },
     });
     upsertEncounter(db, {
       slug: "a",
       raid: "Amirdrassil",
       name: "Beta",
-      preset: { background, objects: [], slides: [] },
+      preset: { background, objects: [], slides: [], attacks: [] },
     });
 
     const list = listEncounters(db);
@@ -140,7 +141,7 @@ describe("encountersRepo", () => {
       slug: "ok",
       raid: "Raid",
       name: "Fine",
-      preset: { background, objects: [], slides: [] },
+      preset: { background, objects: [], slides: [], attacks: [] },
     });
     // Simulate a row written by an older/broken build.
     db.update(encounters)

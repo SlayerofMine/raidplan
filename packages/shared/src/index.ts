@@ -4,6 +4,10 @@ export * from "./transform.js";
 // (plan §18.17). One solver, for any object on the board.
 export * from "./follow.js";
 export * from "./effects.js";
+// Attacks (plan §21): the parameters, bindings, placement transform and
+// instance recipe. The definition itself lives in `plan.js` with the document
+// schemas it is mutually recursive with.
+export * from "./attack.js";
 export * from "./plan.js";
 export * from "./resolve.js";
 // The route a `move` follows (plan §7). Pure geometry, so the editor overlay,

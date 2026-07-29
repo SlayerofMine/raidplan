@@ -76,6 +76,7 @@ function plan(objects: PlanObject[], slides: Slide[]): Plan {
     id: "plan_resolve",
     title: "Resolve fixture",
     raid: "test",
+    attacks: [],
     background: { assetId: "bg", width: 1000, height: 1000 },
     objects,
     groups: {},

@@ -13,6 +13,7 @@ function plan(): Plan {
     id: "plan_1",
     title: "Test",
     raid: "test-raid",
+    attacks: [],
     background: { assetId: "arena", width: 1600, height: 900 },
     objects: [
       {

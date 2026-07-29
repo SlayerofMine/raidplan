@@ -83,6 +83,8 @@ export function createPlan(
     /** Pre-placed content when seeding from an encounter preset (plan §17). */
     objects?: Plan["objects"];
     slides?: Plan["slides"];
+    /** The attacks the encounter ships with, copied into the plan (plan §21). */
+    attacks?: Plan["attacks"];
   },
 ): PlanWithDoc {
   const id = randomUUID();
@@ -104,6 +106,7 @@ export function createPlan(
       background: params.background,
       objects: params.objects ?? [],
       slides: params.slides ?? [],
+      attacks: params.attacks ?? [],
     },
   });
   const at = nowSeconds();

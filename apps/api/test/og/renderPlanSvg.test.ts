@@ -54,6 +54,7 @@ const plan = (objects: PlanObject[]): Plan => ({
   id: "p",
   title: "T",
   raid: "",
+  attacks: [],
   background: { assetId: "no-such-bg", width: 400, height: 300 },
   objects,
   groups: {},

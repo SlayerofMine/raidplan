@@ -62,6 +62,7 @@ describe("plan.create from an encounter", () => {
       name: "Fyrakk",
       preset: {
         background: BACKGROUND,
+        attacks: [],
         objects: [
           {
             id: "boss",
@@ -166,6 +167,7 @@ describe("encounter authoring (admin only)", () => {
       name: "Old name",
       preset: {
         background: BACKGROUND,
+        attacks: [],
         objects: [
           {
             id: "boss",

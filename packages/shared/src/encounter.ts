@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  AttackDefSchema,
   BackgroundSchema,
   makeEmptyPlan,
   PlanObjectSchema,
@@ -34,6 +35,12 @@ export const EncounterPresetSchema = z.object({
    * slide instead, so an encounter is free to be nothing but a background.
    */
   slides: z.array(SlideSchema).default([]),
+  /**
+   * The attacks this encounter ships with (plan §21). Copied into every plan
+   * seeded from it, so the mechanics of a fight are on the palette the moment a
+   * planner opens the map — and stay as they were the day that plan was made.
+   */
+  attacks: z.array(AttackDefSchema).default([]),
 });
 export type EncounterPreset = z.infer<typeof EncounterPresetSchema>;
 
@@ -121,7 +128,14 @@ export function makePlanFromPreset(params: {
       };
     }
   }
-  return { ...base, objects: params.preset.objects, slides };
+  return {
+    ...base,
+    objects: params.preset.objects,
+    slides,
+    // Copied, not referenced (plan §21): the new plan owns these definitions
+    // from here on, so later edits to the encounter leave it alone.
+    attacks: params.preset.attacks,
+  };
 }
 
 /**
@@ -135,6 +149,11 @@ export const DEFAULT_ENCOUNTERS: readonly DefaultEncounter[] = BACKGROUNDS.map(
     slug: `sandbox-${bg.assetId}`,
     raid: "Sandbox",
     name: bg.name,
-    preset: { background: toBackground(bg), objects: [], slides: [] },
+    preset: {
+      background: toBackground(bg),
+      objects: [],
+      slides: [],
+      attacks: [],
+    },
   }),
 );

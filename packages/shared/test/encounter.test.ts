@@ -41,7 +41,7 @@ describe("makePlanFromPreset", () => {
       id: "plan-1",
       title: "Pull 1",
       raid: "Sandbox",
-      preset: { background, objects: [object], slides: [] },
+      preset: { background, objects: [object], slides: [], attacks: [] },
     });
 
     // A round-trip through the document schema proves it's a real, valid plan.
@@ -56,7 +56,7 @@ describe("makePlanFromPreset", () => {
   it("falls back to the empty-plan defaults when title/raid are omitted", () => {
     const plan = makePlanFromPreset({
       id: "plan-2",
-      preset: { background, objects: [], slides: [] },
+      preset: { background, objects: [], slides: [], attacks: [] },
     });
     expect(plan.title).toBe("Untitled plan");
     expect(plan.raid).toBe("");
